@@ -39,27 +39,7 @@ cd 4all-release-pass-qa
 
 ---
 
-### Step 2: Install Core Dependencies
-
-```bash
-# Install Prisma (database ORM)
-npm install prisma @prisma/client
-
-# Install Supabase client libraries
-npm install @supabase/supabase-js @supabase/auth-helpers-nextjs
-
-# Initialize Prisma
-npx prisma init
-```
-
-**What this does:**
-- Installs Prisma for database management
-- Installs Supabase libraries for auth and storage
-- Creates `prisma/schema.prisma` and `.env` files
-
----
-
-### Step 3: Set Up Supabase Project
+### Step 2: Set Up Supabase Project
 
 1. **Go to [supabase.com](https://supabase.com/)** and sign in
 2. **Click "New Project"**
@@ -72,14 +52,35 @@ npx prisma init
 4. **Wait for project to initialize** (takes ~2 minutes)
 
 5. **Collect your credentials:**
-   - Go to **Project Settings → API**
-   - Copy these values:
-     - `Project URL`
-     - `anon public` key
-     - `service_role` key (click "Reveal" to see it)
-   - Go to **Project Settings → Database → Connection String**
-     - Copy the `URI` (Node.js format)
-     - Replace `[YOUR-PASSWORD]` with your database password
+
+   **API Keys** (Go to **Project Settings → API**):
+   - Copy `Project URL`
+   - Copy `anon public` key (may be listed under "Legacy anon, service_role API keys" - this is correct)
+   - Copy `service_role` key (click "Reveal" to see it - also under Legacy keys section)
+
+   **Database Connection String** (Go to **Project Settings → Database**):
+   - Scroll down to the "Connection String" section
+   - Select the **URI** tab (for Node.js/Prisma)
+   - Copy the connection string
+   - Replace `[YOUR-PASSWORD]` with your database password from step 3
+
+---
+
+### Step 3: Install Core Dependencies
+
+```bash
+# Install Prisma (database ORM)
+npm install prisma @prisma/client
+
+# Install Supabase client libraries
+npm install @supabase/supabase-js @supabase/auth-helpers-nextjs
+```
+
+**What this does:**
+- Installs Prisma for database management
+- Installs Supabase libraries for auth and storage
+
+**Note:** We'll initialize Prisma in the next step after configuring environment variables
 
 ---
 
@@ -177,9 +178,17 @@ Click **Run** to execute.
 
 ## Phase 1.2: Database & Prisma Setup
 
-### Step 1: Copy Prisma Schema
+### Step 1: Initialize Prisma and Copy Schema
 
-Open `prisma/schema.prisma` and **replace all contents** with the schema from:
+First, initialize Prisma (now that we have DATABASE_URL configured):
+
+```bash
+npx prisma init
+```
+
+This creates the `prisma/` directory with a `schema.prisma` file.
+
+Now open `prisma/schema.prisma` and **replace all contents** with the schema from:
 
 `Documentation/platform-technical-setup.md` (section 3)
 

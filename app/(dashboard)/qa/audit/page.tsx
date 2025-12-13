@@ -11,12 +11,12 @@ export default function SiteAuditPage() {
 
       <TwoColumnGrid>
         <Card title="Project">
-          <p className="text-sm text-black/60">Select or create a project to run Site Audit tests.</p>
+          <p className="text-black/60">Select or create a project to run Site Audit tests.</p>
           {/* Project selector will go here in Phase 3 */}
         </Card>
 
         <Card title="Latest Results">
-          <p className="text-sm text-black/60">No tests have been run yet.</p>
+          <p className="text-black/60">No tests have been run yet.</p>
           {/* Test results will go here in Phase 6 */}
         </Card>
       </TwoColumnGrid>

@@ -11,12 +11,12 @@ export default function PerformancePage() {
 
       <TwoColumnGrid>
         <Card title="Project">
-          <p className="text-sm text-black/60">Select or create a project to run Performance tests.</p>
+          <p className="text-black/60">Select or create a project to run Performance tests.</p>
           {/* Project selector and URL input will go here in Phase 3 & 6 */}
         </Card>
 
         <Card title="Latest Results">
-          <p className="text-sm text-black/60">No tests have been run yet.</p>
+          <p className="text-black/60">No tests have been run yet.</p>
           {/* Test results will go here in Phase 6 */}
         </Card>
       </TwoColumnGrid>

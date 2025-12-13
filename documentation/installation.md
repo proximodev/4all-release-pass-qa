@@ -860,7 +860,7 @@ export default async function DashboardPage() {
         <h1 className="text-3xl font-bold mb-4">Dashboard</h1>
         <div className="bg-white p-6 rounded-lg shadow">
           <p className="text-lg">Welcome, {dbUser.email}</p>
-          <p className="text-sm text-gray-600 mt-2">Role: {dbUser.role}</p>
+          <p className="text-gray-600 mt-2">Role: {dbUser.role}</p>
           <form action="/api/auth/signout" method="POST" className="mt-4">
             <button
               type="submit"

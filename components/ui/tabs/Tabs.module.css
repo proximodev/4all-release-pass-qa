@@ -2,13 +2,15 @@
 
 /* Tab Navigation Container */
 .container {
-  @apply flex gap-8;
+  @apply flex gap-0;
   margin-bottom: 0px;
 }
 
 /* Individual Tab Link - Base Styles */
 .tabLink {
-  @apply pb-2 pt-2 -mb-px border-b-4 border-transparent transition-colors;
+  @apply pb-2 pt-2 -mb-px text-center border-b-4 border-transparent transition-colors;
+  font-size: clamp(var(--text-l-min), calc(.8vw + 0.9rem), var(--text-l-max));
+  width: 220px;
 }
 
 /* Active Tab State */
@@ -26,3 +28,8 @@
   @apply text-black;
   border-color: rgb(34 29 35 / 0.2);
 }
+
+@media screen and (max-width: 500px) {
+
+}
+

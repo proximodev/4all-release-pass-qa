@@ -84,7 +84,7 @@ export default function Header() {
             <button
               onClick={handleSignOut}
               disabled={isLoggingOut}
-              className="px-4 py-2 bg-white text-black rounded hover:bg-white/90 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-white text-black hover:bg-white/90 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoggingOut ? 'Logging out...' : 'Logout'}
             </button>

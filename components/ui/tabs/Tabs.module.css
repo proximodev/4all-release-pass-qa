@@ -1,0 +1,28 @@
+@reference "tailwindcss";
+
+/* Tab Navigation Container */
+.container {
+  @apply flex gap-8;
+  margin-bottom: 0px;
+}
+
+/* Individual Tab Link - Base Styles */
+.tabLink {
+  @apply pb-2 pt-2 -mb-px border-b-4 border-transparent transition-colors;
+}
+
+/* Active Tab State */
+.tabLinkActive {
+  @apply text-black font-medium;
+  border-color: var(--color-brand-yellow);
+}
+
+/* Inactive Tab State */
+.tabLinkInactive {
+  @apply text-black/60;
+}
+
+.tabLinkInactive:hover {
+  @apply text-black;
+  border-color: rgb(34 29 35 / 0.2);
+}

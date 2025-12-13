@@ -23,19 +23,19 @@ export default function Breadcrumb() {
 
   // Generate breadcrumb based on route
   const getBreadcrumb = () => {
-    if (pathname.startsWith('/dashboard/qa')) {
+    if (pathname.startsWith('/qa')) {
       if (projectName) {
         return `QA Tools / ${projectName}`
       }
       return 'QA Tools'
     }
-    if (pathname.startsWith('/dashboard/projects')) {
+    if (pathname.startsWith('/projects')) {
       return 'Projects'
     }
-    if (pathname.startsWith('/dashboard/settings')) {
+    if (pathname.startsWith('/settings')) {
       return 'Settings'
     }
-    if (pathname.startsWith('/dashboard/utilities')) {
+    if (pathname.startsWith('/utilities')) {
       return 'Utilities'
     }
     return 'Dashboard'

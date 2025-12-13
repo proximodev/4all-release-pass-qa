@@ -10,7 +10,19 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+
+  // TEMPORARY: Binary engine mode for Windows ARM64 compatibility
+  // Prisma doesn't ship native ARM64 binaries for Windows, so we use binary mode
+  // which runs the query engine as a separate process (works via Windows translation)
+  //
+  // TO REVERT (when ARM64 support no longer needed):
+  //   1. Remove the line below (engineType = "binary")
+  //   2. Run: npx prisma generate
+  //   3. Restart dev server
+  //
+  // More info: https://github.com/prisma/prisma/issues/25206
+  engineType = "binary"
 }
 
 /// ---- ENUMS ----

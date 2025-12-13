@@ -11,7 +11,7 @@ export default function Button({
   className = '',
   ...props
 }: ButtonProps) {
-  const baseStyles = 'px-6 py-2 rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+  const baseStyles = 'px-6 py-2 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
 
   const variantStyles = {
     primary: 'bg-dark-gray text-white hover:bg-charcol',

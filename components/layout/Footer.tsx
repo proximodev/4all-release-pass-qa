@@ -4,11 +4,11 @@ export default function Footer() {
   const currentYear = new Date().getFullYear()
 
   return (
-    <footer className="bg-dark-gray border-t border-charcol mt-auto">
+    <footer className="bg-black border-t border-charcol mt-auto">
       <div className="container mx-auto px-6 py-6">
         <div className="flex items-center justify-between">
           <Image
-            src="/logo.svg"
+            src="/img/logo-4all.svg"
             alt="4All Digital"
             width={120}
             height={40}

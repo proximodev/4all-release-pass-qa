@@ -6,7 +6,15 @@
       "Bash(git add:*)",
       "Bash(git check-ignore:*)",
       "Bash(mv:*)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(npm install:*)",
+      "Bash(tree:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

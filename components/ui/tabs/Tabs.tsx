@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
+import styles from './Tabs.module.css'
 
 interface Tab {
   label: string
@@ -26,22 +27,19 @@ export default function Tabs({ tabs }: TabsProps) {
   }
 
   return (
-    <div className="border-b border-medium-gray bg-white">
-      <div className="flex space-x-8">
-        {tabs.map((tab) => (
+    <div className={styles.container}>
+      {tabs.map((tab) => {
+        const active = isActive(tab.href)
+        return (
           <Link
             key={tab.href}
             href={getHref(tab.href)}
-            className={`pb-4 pt-2 border-b-4 transition-colors ${
-              isActive(tab.href)
-                ? 'border-brand-yellow text-black font-medium'
-                : 'border-transparent text-black/60 hover:text-black hover:border-black/20'
-            }`}
+            className={`${styles.tabLink} ${active ? styles.tabLinkActive : styles.tabLinkInactive}`}
           >
             {tab.label}
           </Link>
-        ))}
-      </div>
+        )
+      })}
     </div>
   )
 }

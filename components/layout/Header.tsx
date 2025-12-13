@@ -3,25 +3,38 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import Image from 'next/image'
+import { signOutAction } from '@/lib/actions/auth'
+import { useState } from 'react'
 
 export default function Header() {
   const pathname = usePathname()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const isActive = (path: string) => {
-    if (path === '/dashboard/qa') {
-      return pathname.startsWith('/dashboard/qa')
+    if (path === '/qa') {
+      return pathname.startsWith('/qa')
     }
     return pathname.startsWith(path)
   }
 
+  const handleSignOut = async () => {
+    setIsLoggingOut(true)
+    try {
+      await signOutAction()
+    } catch (error) {
+      console.error('Logout error:', error)
+      setIsLoggingOut(false)
+    }
+  }
+
   return (
-    <header className="bg-dark-gray border-b border-charcol">
+    <header className="bg-black border-b border-charcol">
       <div className="container mx-auto px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center">
             <Image
-              src="/logo.svg"
+              src="/img/logo-4all.svg"
               alt="4All Digital"
               width={120}
               height={40}
@@ -32,23 +45,23 @@ export default function Header() {
           {/* Main Navigation */}
           <nav className="flex items-center space-x-8">
             <Link
-              href="/dashboard/qa/audit"
+              href="/qa/audit"
               className={`text-white hover:text-brand-yellow transition-colors ${
-                isActive('/dashboard/qa') ? 'text-brand-yellow' : ''
+                isActive('/qa') ? 'text-brand-yellow' : ''
               }`}
             >
               QA Tools
             </Link>
             <Link
-              href="/dashboard/projects"
+              href="/projects"
               className={`text-white hover:text-brand-yellow transition-colors ${
-                isActive('/dashboard/projects') ? 'text-brand-yellow' : ''
+                isActive('/projects') ? 'text-brand-yellow' : ''
               }`}
             >
               Projects
             </Link>
             <Link
-              href="/dashboard/utilities"
+              href="/utilities"
               className="text-white/50 hover:text-white/70 transition-colors cursor-not-allowed"
               aria-disabled="true"
             >
@@ -59,7 +72,7 @@ export default function Header() {
           {/* Right Side Actions */}
           <div className="flex items-center space-x-4">
             <Link
-              href="/dashboard/settings"
+              href="/settings"
               className="text-white hover:text-brand-yellow transition-colors"
               aria-label="Settings"
             >
@@ -68,14 +81,13 @@ export default function Header() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </Link>
-            <form action="/api/auth/signout" method="POST">
-              <button
-                type="submit"
-                className="px-4 py-2 bg-white text-black rounded hover:bg-white/90 transition-colors text-sm font-medium"
-              >
-                Logout
-              </button>
-            </form>
+            <button
+              onClick={handleSignOut}
+              disabled={isLoggingOut}
+              className="px-4 py-2 bg-white text-black rounded hover:bg-white/90 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoggingOut ? 'Logging out...' : 'Logout'}
+            </button>
           </div>
         </div>
       </div>

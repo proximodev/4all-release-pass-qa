@@ -192,6 +192,11 @@ Now open `prisma/schema.prisma` and **replace all contents** with the schema fro
 
 `Documentation/platform-technical-setup.md` (section 3)
 
+> **Note for Windows ARM64 Users:**
+> The schema includes `engineType = "binary"` in the generator block for ARM64 Windows compatibility.
+> This setting works on all platforms (x64, ARM64, Mac, Linux) with negligible performance impact.
+> See the comment in the schema for details on reverting when ARM64 support is no longer needed.
+
 Or copy from here:
 
 ```prisma
@@ -201,7 +206,8 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "binary"  // For Windows ARM64 compatibility - see note above
 }
 
 /// ---- ENUMS ----
@@ -556,6 +562,17 @@ Before moving to Phase 1.3, verify:
 - Check for errors in `.env.local`
 - Run `npm run dev` to see error messages
 
+### "Prisma engines do not seem to be compatible with your system" (Windows ARM64)
+- **Error**: `query_engine-windows.dll.node is not a valid Win32 application`
+- **Cause**: You're on Windows ARM64, and Prisma doesn't ship native ARM64 binaries
+- **Solution**: Already handled! The schema includes `engineType = "binary"` which fixes this
+- **If you removed it by accident**:
+  1. Add `engineType = "binary"` to the generator block in `prisma/schema.prisma`
+  2. Run `npx prisma generate`
+  3. Delete `.next` folder: `rm -rf .next`
+  4. Restart dev server
+- **More info**: https://github.com/prisma/prisma/issues/25206
+
 ---
 
 ## Phase 1.3: Authentication Setup
@@ -905,7 +922,7 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
         <h1 className="text-4xl font-bold mb-4">ReleasePass QA Platform</h1>
         <p className="text-gray-600 mb-8">Automated pre- and post-deployment QA</p>

@@ -1,11 +1,12 @@
-import Card from '@/components/ui/Card'
-import Button from '@/components/ui/Button'
-import Input from '@/components/ui/Input'
-import Textarea from '@/components/ui/Textarea'
+import Card from '@/components/ui/card/Card'
+import Button from '@/components/ui/button/Button'
+import Input from '@/components/ui/input/Input'
+import Textarea from '@/components/ui/textarea/Textarea'
+import FormContainer from '@/components/layout/FormContainer'
 
 export default function NewProjectPage() {
   return (
-    <div className="max-w-2xl">
+    <FormContainer>
       <Card title="Add New Project">
         <form className="space-y-4">
           <Input
@@ -43,6 +44,6 @@ export default function NewProjectPage() {
           </div>
         </form>
       </Card>
-    </div>
+    </FormContainer>
   )
 }

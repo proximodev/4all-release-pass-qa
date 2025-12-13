@@ -1,8 +1,62 @@
 @import "tailwindcss";
 
 /*--------------------------*/
-/* Fonts - TODO: Add @font-face declarations for Forma DJR Display and Gibson */
+/* Fonts                    */
 /*--------------------------*/
+
+@font-face {
+  font-family: 'Forma DJR Display';
+  src: url('/fonts/FormaDJRDisplay-Regular.woff2') format('woff2'),
+  url('/fonts/FormaDJRDisplay-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Forma DJR Display';
+  src: url('/fonts/FormaDJRDisplay-Bold.woff2') format('woff2'),
+  url('/fonts/FormaDJRDisplay-Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gibson';
+  src: url('/fonts/Gibson-Italic.woff2') format('woff2'),
+  url('/fonts/Gibson-Italic.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gibson';
+  src: url('/fonts/Gibson.woff2') format('woff2'),
+  url('/fonts/Gibson.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gibson';
+  src: url('/fonts/Gibson-BoldItalic.woff2') format('woff2'),
+  url('/fonts/Gibson-BoldItalic.woff') format('woff');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gibson';
+  src: url('/fonts/Gibson-Bold.woff2') format('woff2'),
+  url('/fonts/Gibson-Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 @theme {
   /* Fonts */
@@ -21,10 +75,71 @@
   --color-red: #dc2626;
   --color-text-white: #FFFFFF;
   --color-text-black: #221D23;
+
+  /* Body text */
+  --text-s: 0.875rem;   /* 14px */
+  --text-m: 1rem;       /* 16px  (base) */
+  --text-l-min: 1.1rem;
+  --text-l-max: 1.25rem;   /* 20px */
+  --text-lh: 1.6;       /* 160% line-height */
+  --text-weight: 400;   /* Gibson Regular */
 }
 
-body {
-  font-family: var(--font-body);
-  background: var(--color-light-gray);
-  color: var(--color-text-black);
+/*--------------------------*/
+/* Typography               */
+/*--------------------------*/
+
+@layer base {
+
+  body {
+    font-family: var(--font-body);
+    color: var(--color-text-black);
+  }
+
+  /** Heading **/
+  h1, h2, h3, h4, h5 {
+    font-family: var(--font-heading, sans-serif);
+  }
+
+  p, ul, ol, dl, blockquote, pre {
+    font-size: clamp(var(--text-l-min), 1.4vw, var(--text-l-max));
+    margin: 0 0 1em;
+  }
+
+  p.small, .text-s {
+    font-size: var(--text-s);
+    line-height: var(--text-lh);
+  }
+
+  p.medium, .text-m  {
+    font-size: var(--text-m);
+    line-height: var(--text-lh);
+  }
+
+  p.large, .text-l   {
+    font-size: clamp(var(--text-l-min), calc(.8vw + 0.9rem), var(--text-l-max));
+  }
+
+  p.xlarge, .text-xl, .hero__description p, .intro-text  {
+    font-size: clamp(var(--text-xl-min), calc(1.2vw + 0.9rem), var(--text-xl-max));
+  }
+
+  input, textarea, select, button {
+    font: inherit;
+    line-height: var(--text-lh);
+  }
+
+  .text-cyan {
+    color: var(--color-brand-cyan);
+  }
+
+  .text-yellow {
+    color: var(--color-brand-yellow);
+  }
+
+  .text-white {
+    color: var(--color-text-white);
+  }
+
 }
+

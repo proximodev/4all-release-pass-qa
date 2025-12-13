@@ -299,7 +299,7 @@ model User {
   firstName       String?
   lastName        String?
   role            UserRole           @default(ADMIN)
-  supabaseUserId  String             @db.Uuid
+  supabaseUserId  String             @unique @db.Uuid
 
   manualTestStatuses ManualTestStatus[] @relation("ManualStatusUpdatedBy")
 
@@ -465,6 +465,17 @@ npx prisma migrate dev --name init_core_schema
 ✔ Applied migration init_core_schema
 ```
 
+**Alternative: If migration fails (non-interactive environment)**
+
+If `prisma migrate dev` fails with a non-interactive error, use:
+
+```bash
+# Push schema directly to database (no migration files)
+npx prisma db push
+```
+
+This achieves the same result but doesn't create migration files. It's simpler and works in all environments.
+
 ---
 
 ### Step 3: Create Prisma Client Helper
@@ -547,11 +558,496 @@ Before moving to Phase 1.3, verify:
 
 ---
 
+## Phase 1.3: Authentication Setup
+
+### Step 1: Create Supabase Client Utilities
+
+Create `lib/supabase/client.ts` for client-side auth:
+
+```bash
+# Create supabase directory
+mkdir -p lib/supabase
+
+# Create client utility file
+touch lib/supabase/client.ts
+```
+
+**Add this code to `lib/supabase/client.ts`:**
+
+```typescript
+import { createBrowserClient } from '@supabase/ssr'
+
+export function createClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
+```
+
+---
+
+Create `lib/supabase/server.ts` for server-side auth:
+
+```bash
+touch lib/supabase/server.ts
+```
+
+**Add this code to `lib/supabase/server.ts`:**
+
+```typescript
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+
+export async function createClient() {
+  const cookieStore = await cookies()
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // Server Component - cookies can only be set in Server Actions or Route Handlers
+          }
+        },
+      },
+    }
+  )
+}
+```
+
+---
+
+### Step 2: Install Required Dependencies
+
+```bash
+npm install @supabase/ssr
+```
+
+---
+
+### Step 3: Create Authentication Pages
+
+Create the login page at `app/login/page.tsx`:
+
+```bash
+# Create login directory
+mkdir -p app/login
+
+# Create login page
+touch app/login/page.tsx
+```
+
+**Add this code to `app/login/page.tsx`:**
+
+```typescript
+'use client'
+
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+
+export default function LoginPage() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
+  const supabase = createClient()
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) throw error
+
+      router.push('/dashboard')
+      router.refresh()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
+        <div>
+          <h2 className="text-3xl font-bold text-center">Sign in to ReleasePass</h2>
+        </div>
+        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+          {error && (
+            <div className="bg-red-50 text-red-600 p-3 rounded">
+              {error}
+            </div>
+          )}
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? 'Signing in...' : 'Sign in'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+### Step 4: Create User Upsert API Route
+
+Create an API route to upsert user records at `app/api/auth/user/route.ts`:
+
+```bash
+# Create auth API directory
+mkdir -p app/api/auth/user
+
+# Create user route
+touch app/api/auth/user/route.ts
+```
+
+**Add this code to `app/api/auth/user/route.ts`:**
+
+```typescript
+import { createClient } from '@/lib/supabase/server'
+import { prisma } from '@/lib/prisma'
+import { NextResponse } from 'next/server'
+
+export async function POST() {
+  try {
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    // Upsert user in our database
+    const dbUser = await prisma.user.upsert({
+      where: { supabaseUserId: user.id },
+      update: {
+        email: user.email!,
+        updatedAt: new Date(),
+      },
+      create: {
+        supabaseUserId: user.id,
+        email: user.email!,
+        role: 'ADMIN', // MVP: all users are admins
+      },
+    })
+
+    return NextResponse.json({ user: dbUser })
+  } catch (error: any) {
+    console.error('User upsert error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+```
+
+---
+
+### Step 5: Create Protected Dashboard Page
+
+Create a simple dashboard at `app/dashboard/page.tsx`:
+
+```bash
+# Create dashboard directory
+mkdir -p app/dashboard
+
+# Create dashboard page
+touch app/dashboard/page.tsx
+```
+
+**Add this code to `app/dashboard/page.tsx`:**
+
+```typescript
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { prisma } from '@/lib/prisma'
+
+export default async function DashboardPage() {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  // Upsert user in database
+  const dbUser = await prisma.user.upsert({
+    where: { supabaseUserId: user.id },
+    update: {
+      email: user.email!,
+      updatedAt: new Date(),
+    },
+    create: {
+      supabaseUserId: user.id,
+      email: user.email!,
+      role: 'ADMIN',
+    },
+  })
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold mb-4">Dashboard</h1>
+        <div className="bg-white p-6 rounded-lg shadow">
+          <p className="text-lg">Welcome, {dbUser.email}</p>
+          <p className="text-sm text-gray-600 mt-2">Role: {dbUser.role}</p>
+          <form action="/api/auth/signout" method="POST" className="mt-4">
+            <button
+              type="submit"
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Sign Out
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+### Step 6: Create Sign Out API Route
+
+Create `app/api/auth/signout/route.ts`:
+
+```bash
+# Create signout directory
+mkdir -p app/api/auth/signout
+
+# Create signout route
+touch app/api/auth/signout/route.ts
+```
+
+**Add this code to `app/api/auth/signout/route.ts`:**
+
+```typescript
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+
+export async function POST() {
+  const supabase = await createClient()
+  await supabase.auth.signOut()
+  redirect('/login')
+}
+```
+
+---
+
+### Step 7: Update Root Page
+
+Update `app/page.tsx` to redirect to dashboard if authenticated:
+
+```typescript
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+
+export default async function Home() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (user) {
+    redirect('/dashboard')
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold mb-4">ReleasePass QA Platform</h1>
+        <p className="text-gray-600 mb-8">Automated pre- and post-deployment QA</p>
+        <a
+          href="/login"
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          Sign In
+        </a>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+### Step 8: Create Initial Test User
+
+In your **Supabase Dashboard**, create a test user:
+
+1. Go to **Authentication → Users**
+2. Click **Add User**
+3. Choose **Create new user**
+4. Enter email: `admin@example.com`
+5. Enter password: Choose a secure password
+6. Click **Create User**
+
+---
+
+### Step 9: Test Authentication Flow
+
+```bash
+# Start the dev server
+npm run dev
+```
+
+**Test the flow:**
+
+1. Visit `http://localhost:3000`
+2. Click "Sign In" (should redirect to `/login`)
+3. Enter the test user credentials you created
+4. Click "Sign in"
+5. You should be redirected to `/dashboard`
+6. Verify your email is displayed
+7. Click "Sign Out" to test logout
+
+**Verify database:**
+
+```bash
+# Open Prisma Studio
+npx prisma studio
+```
+
+Check the `User` table - you should see your user record with:
+- Email
+- Supabase User ID
+- Role: ADMIN
+- Created/Updated timestamps
+
+---
+
+### Step 10: Add Middleware (Optional)
+
+For automatic auth refresh, create `middleware.ts` in the root:
+
+```bash
+touch middleware.ts
+```
+
+**Add this code to `middleware.ts`:**
+
+```typescript
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
+
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            request.cookies.set(name, value)
+          )
+          response = NextResponse.next({
+            request,
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  await supabase.auth.getUser()
+
+  return response
+}
+
+export const config = {
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+}
+```
+
+---
+
+## Verification Checklist - Phase 1.3
+
+Before moving forward, verify:
+
+- [ ] Supabase client utilities created (`lib/supabase/client.ts` and `server.ts`)
+- [ ] `@supabase/ssr` package installed
+- [ ] Login page created and functional
+- [ ] Dashboard page created with auth protection
+- [ ] Sign out functionality working
+- [ ] Test user created in Supabase
+- [ ] User record automatically created in database on first login
+- [ ] Middleware configured for auth refresh
+- [ ] Can sign in and see dashboard
+- [ ] Can sign out and return to login
+
+---
+
 ## Next Steps
 
-Once Phase 1.1 and 1.2 are complete, you're ready for:
+Once Phase 1.1, 1.2, and 1.3 are complete, you're ready for:
 
-**Phase 1.3: Authentication Setup**
+**Phase 2.1: Project Management UI**
 
 See `Documentation/mvp-implementation-plan.md` for the next steps.
 

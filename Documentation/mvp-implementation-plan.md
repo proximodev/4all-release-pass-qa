@@ -162,22 +162,85 @@ Document all Next.js API routes:
 
 ---
 
-### **Phase 2: Core Data Layer (Week 2-3)**
+### **Phase 2: Dashboard UI Framework (Week 2)**
 
-#### Step 2.1: Project Management API
+#### Overview
+Establish the foundational dashboard UI structure, layout components, navigation system, and reusable components based on the Figma design. This phase creates the visual framework that all subsequent features will build upon.
+
+#### URL Structure
+```
+/dashboard                      → Dashboard home (template ready, redirects to /dashboard/qa/audit for now)
+/dashboard/qa/audit             → Site Audit (default QA Tools page)
+/dashboard/qa/performance       → Performance Tests
+/dashboard/qa/browser           → Browser Test/Screenshots
+/dashboard/qa/spelling          → Spellcheck
+/dashboard/projects             → Projects list
+/dashboard/projects/new         → Add New Project
+/dashboard/settings             → Settings placeholder
+/dashboard/utilities/[tool]     → Future utilities (not MVP)
+```
+
+**Project Context**: Query parameter pattern for QA Tools pages
+```
+/dashboard/qa/audit?project=[projectId]
+```
+
+#### Key Components to Build
+- **Layout System**
+  - `DashboardLayout` component (header + footer + main content area)
+  - Header with logo, top-level nav (QA Tools, Projects, Utilities), Settings, Logout
+  - Footer with copyright
+  - Breadcrumb component (route-based with project name support)
+
+- **Navigation**
+  - Top-level nav with active state detection (route-based)
+  - Second-level tabs for QA Tools (Site Audit, Performance, Browser Test, Spellcheck)
+  - Active tab styling with yellow underline
+
+- **Reusable UI Components**
+  - `Button` (primary, secondary variants)
+  - `Input`, `Select`, `Textarea` form controls
+  - `Tabs` component for QA Tools workspace
+  - `Card` / `Panel` components for content sections
+
+- **Styling Foundation**
+  - Import fonts from `temp/global.css` (Forma DJR Display, Gibson)
+  - Color palette: Brand Yellow (#FCC61D), Brand Cyan (#01A1AD), Dark Gray (#383439), etc.
+  - Basic responsive breakpoints (mobile, tablet, desktop)
+  - Tailwind CSS configuration
+
+#### Deliverables
+- [ ] Shared layout component with header, footer, navigation
+- [ ] Dashboard home page template (currently redirects)
+- [ ] URL structure implemented with Next.js App Router
+- [ ] Breadcrumb system with project name support
+- [ ] Core reusable components (Button, Input, Select, Textarea, Tabs, Card)
+- [ ] Responsive design with basic breakpoints
+- [ ] Settings placeholder page
+
+#### Notes
+- Breadcrumb format: `QA Tools / [Project Name]` (project name from query param)
+- Release Readiness component is **out of scope** for this phase
+- Focus on structure and reusability over pixel-perfect design
+
+---
+
+### **Phase 3: Core Data Layer (Week 2-3)**
+
+#### Step 3.1: Project Management API
 - [ ] `POST /api/projects` - Create project
 - [ ] `GET /api/projects` - List projects
 - [ ] `GET /api/projects/[id]` - Get project details
 - [ ] `PATCH /api/projects/[id]` - Update project
 - [ ] `DELETE /api/projects/[id]` - Delete project
 
-#### Step 2.2: Project Management UI
+#### Step 3.2: Project Management UI
 - [ ] Create project list page (`app/projects/page.tsx`)
 - [ ] Create new project form (`app/projects/new/page.tsx`)
 - [ ] Create project detail page (`app/projects/[id]/page.tsx`)
 - [ ] Add project selector component (for QA Tools workspace)
 
-#### Step 2.3: Test Run API (Basic)
+#### Step 3.3: Test Run API (Basic)
 - [ ] `POST /api/projects/[id]/test-runs` - Enqueue test with TestRunConfig
 - [ ] `GET /api/projects/[id]/test-runs` - List test runs
 - [ ] `GET /api/test-runs/[id]` - Get test run details
@@ -185,9 +248,9 @@ Document all Next.js API routes:
 
 ---
 
-### **Phase 3: Worker Service (Week 3-4)**
+### **Phase 4: Worker Service (Week 3-4)**
 
-#### Step 3.1: Worker Project Setup
+#### Step 4.1: Worker Project Setup
 - [ ] Create `qa-worker` directory
 - [ ] Initialize npm project
 - [ ] Install dependencies (Prisma, TypeScript, axios)
@@ -195,25 +258,25 @@ Document all Next.js API routes:
 - [ ] Configure `DATABASE_URL` in worker `.env`
 - [ ] Set up TypeScript config
 
-#### Step 3.2: Worker Core Loop
+#### Step 4.2: Worker Core Loop
 - [ ] Implement job claiming with atomic transaction
 - [ ] Implement polling loop with exponential backoff
 - [ ] Add heartbeat update mechanism
 - [ ] Create provider orchestration skeleton
 - [ ] Add error handling and logging (Winston or Pino)
 
-#### Step 3.3: Stuck Run Cleanup Job
+#### Step 4.3: Stuck Run Cleanup Job
 - [ ] Implement separate cleanup cron job (runs every 5 minutes)
 - [ ] Detect runs in RUNNING state with stale heartbeat
 - [ ] Mark as FAILED with timeout error message
 
 ---
 
-### **Phase 4: Provider Integrations (Week 4-6)**
+### **Phase 5: Provider Integrations (Week 4-6)**
 
 **Complete providers sequentially to validate full flow**
 
-#### Step 4.1: PageSpeed Integration (Start with simplest)
+#### Step 5.1: PageSpeed Integration (Start with simplest)
 - [ ] Write `Documentation/providers/pagespeed-integration.md`
 - [ ] Create `worker/providers/pagespeed.ts`
 - [ ] Implement mobile + desktop testing
@@ -222,7 +285,7 @@ Document all Next.js API routes:
 - [ ] Calculate average score and store in `TestRun.score`
 - [ ] Test end-to-end (enqueue → worker processes → view results)
 
-#### Step 4.2: SE Ranking Integration
+#### Step 5.2: SE Ranking Integration
 - [ ] Write `Documentation/providers/se-ranking-integration.md`
 - [ ] Create `worker/providers/se-ranking.ts`
 - [ ] Implement sitemap crawling (max 500 pages)
@@ -231,7 +294,7 @@ Document all Next.js API routes:
 - [ ] Store health score in `TestRun.score`
 - [ ] Implement issue aggregation API (`GET /api/test-runs/[id]/issues/summary`)
 
-#### Step 4.3: Playwright Screenshots Integration
+#### Step 5.3: Playwright Screenshots Integration
 - [ ] Write `Documentation/providers/playwright-integration.md`
 - [ ] Create `worker/providers/playwright-screenshots.ts`
 - [ ] Implement 4-viewport capture (Desktop Chrome/Safari, Tablet, Mobile)
@@ -240,7 +303,7 @@ Document all Next.js API routes:
 - [ ] Generate signed URLs for UI display
 - [ ] Implement screenshot viewer UI component
 
-#### Step 4.4: LanguageTool Integration
+#### Step 5.4: LanguageTool Integration
 - [ ] Write `Documentation/providers/languagetool-integration.md`
 - [ ] Create `worker/providers/languagetool.ts`
 - [ ] Use Playwright to render page and extract text
@@ -251,51 +314,51 @@ Document all Next.js API routes:
 
 ---
 
-### **Phase 5: UI Development (Week 6-8)**
+### **Phase 6: UI Development (Week 6-8)**
 
-#### Step 5.1: Release Readiness Component
+#### Step 6.1: Release Readiness Component
 - [ ] Create `lib/scoring.ts` with threshold constants
 - [ ] Implement `getReleaseReadiness()` function
 - [ ] Create Release Readiness display component (top-right of UI)
 - [ ] Show per-test color indicators
 - [ ] Add tooltips with score details
 
-#### Step 5.2: QA Tools Workspace
+#### Step 6.2: QA Tools Workspace
 - [ ] Create tabbed interface (Site Audit, Performance, Screenshots, Spelling)
 - [ ] Add project selector to left panel
 - [ ] Implement "Start Test" button with URL input (for Performance/Screenshots/Spelling)
 - [ ] Add test history preview in right panel
 - [ ] Implement real-time status polling (for RUNNING tests)
 
-#### Step 5.3: Test Results Pages
+#### Step 6.3: Test Results Pages
 - [ ] **Site Audit Results**: Issue list with filtering, links to SE Ranking report
 - [ ] **Performance Results**: Per-URL table with mobile/desktop scores, Core Web Vitals chart
 - [ ] **Screenshots Results**: Grid view with viewport labels, manual status controls
 - [ ] **Spelling Results**: Issue list with context snippets, manual status controls
 
-#### Step 5.4: Manual Test Status
+#### Step 6.4: Manual Test Status
 - [ ] Implement `POST /api/projects/[id]/manual-status`
 - [ ] Add PASS/REVIEW/FAIL buttons to Screenshots/Spelling result pages
 - [ ] Update Release Readiness in real-time after status change
 
 ---
 
-### **Phase 6: Polish & Retention (Week 8-9)**
+### **Phase 7: Polish & Retention (Week 8-9)**
 
-#### Step 6.1: Data Retention Implementation
+#### Step 7.1: Data Retention Implementation
 - [ ] Implement retention logic in worker (prune old TestRuns)
 - [ ] Cascade delete related UrlResult, Issue, ScreenshotSet records
 - [ ] Delete old screenshots from Supabase Storage
 - [ ] Test retention with multiple test runs
 
-#### Step 6.2: Email Notifications
+#### Step 7.2: Email Notifications
 - [ ] Choose email provider (Resend, SendGrid, AWS SES)
 - [ ] Write `Documentation/email-notifications.md`
 - [ ] Create email templates (HTML + plain text)
 - [ ] Implement notification trigger in worker (on test completion)
 - [ ] Test with all statuses (SUCCESS, PARTIAL, FAILED)
 
-#### Step 6.3: Error Handling & Monitoring
+#### Step 7.3: Error Handling & Monitoring
 - [ ] Set up Sentry (free tier) for app and worker
 - [ ] Add comprehensive error logging
 - [ ] Implement API retry logic for all providers (exponential backoff + jitter)
@@ -303,9 +366,9 @@ Document all Next.js API routes:
 
 ---
 
-### **Phase 7: Testing & Deployment (Week 9-10)**
+### **Phase 8: Testing & Deployment (Week 9-10)**
 
-#### Step 7.1: Testing
+#### Step 8.1: Testing
 - [ ] Write unit tests for scoring logic (`lib/scoring.test.ts`)
 - [ ] Write integration tests for API routes
 - [ ] Test worker with all 4 test types end-to-end
@@ -313,7 +376,7 @@ Document all Next.js API routes:
 - [ ] Test stuck run cleanup
 - [ ] Test with various project types (small sites, large sites, broken sites)
 
-#### Step 7.2: Deployment
+#### Step 8.2: Deployment
 - [ ] Deploy Next.js app to Vercel
 - [ ] Configure production environment variables
 - [ ] Run `npx prisma migrate deploy` on production database
@@ -321,7 +384,7 @@ Document all Next.js API routes:
 - [ ] Verify all API keys and access in production
 - [ ] Test production deployment with real sites
 
-#### Step 7.3: Documentation Finalization
+#### Step 8.3: Documentation Finalization
 - [ ] Review and update all documentation
 - [ ] Add screenshots to functional spec
 - [ ] Create troubleshooting guide
@@ -409,20 +472,21 @@ Everything else can be done in parallel or iteratively.
 ## ⏱️ Timeline Estimate
 
 - **Phase 1 (Foundation)**: 1-2 weeks
-- **Phase 2 (Core Data Layer)**: 1 week
-- **Phase 3 (Worker Service)**: 1 week
-- **Phase 4 (Provider Integrations)**: 2 weeks (all 4 providers)
-- **Phase 5 (UI Development)**: 2 weeks
-- **Phase 6 (Polish & Retention)**: 1 week
-- **Phase 7 (Testing & Deployment)**: 1 week
+- **Phase 2 (Dashboard UI Framework)**: 1 week
+- **Phase 3 (Core Data Layer)**: 1 week
+- **Phase 4 (Worker Service)**: 1 week
+- **Phase 5 (Provider Integrations)**: 2 weeks (all 4 providers)
+- **Phase 6 (UI Development)**: 2 weeks
+- **Phase 7 (Polish & Retention)**: 1 week
+- **Phase 8 (Testing & Deployment)**: 1 week
 
-**Total: 9-10 weeks** for a single full-time developer working alone.
+**Total: 10-11 weeks** for a single full-time developer working alone.
 
 With 2 developers working in parallel:
-- Developer 1: Foundation → Worker → Provider Integrations
+- Developer 1: Foundation → Dashboard UI Framework → Worker → Provider Integrations
 - Developer 2: Core Data Layer → UI Development → Manual Status
 
-**Total: 6-7 weeks** with parallelization.
+**Total: 7-8 weeks** with parallelization.
 
 ---
 
@@ -430,10 +494,11 @@ With 2 developers working in parallel:
 
 If working with multiple developers, these are natural handoff points:
 
-- **API contract definition** (Phase 2.1) - Must agree on request/response formats before UI work
-- **Provider integration specs** (Phase 4) - Write spec first, then implement in worker
-- **Scoring thresholds** (Phase 5.1) - Agree on Green/Yellow/Red values before UI implementation
-- **Email template review** (Phase 6.2) - Stakeholder approval needed before implementation
+- **Dashboard UI Framework** (Phase 2) - Establish visual patterns and components before feature development
+- **API contract definition** (Phase 3.1) - Must agree on request/response formats before UI work
+- **Provider integration specs** (Phase 5) - Write spec first, then implement in worker
+- **Scoring thresholds** (Phase 6.1) - Agree on Green/Yellow/Red values before UI implementation
+- **Email template review** (Phase 7.2) - Stakeholder approval needed before implementation
 
 ---
 

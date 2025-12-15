@@ -248,44 +248,189 @@ Establish the foundational dashboard UI structure, layout components, navigation
 
 ---
 
-### **Phase 4: Worker Service (Week 3-4)**
+### **Phase 4: Vercel Deployment (Optional - Week 3)**
 
-#### Step 4.1: Worker Project Setup
-- [ ] Create `qa-worker` directory
-- [ ] Initialize npm project
-- [ ] Install dependencies (Prisma, TypeScript, axios)
-- [ ] Copy/link Prisma schema
-- [ ] Configure `DATABASE_URL` in worker `.env`
-- [ ] Set up TypeScript config
+Deploy the Next.js application to Vercel early to validate production setup before building complex features.
 
-#### Step 4.2: Worker Core Loop
-- [ ] Implement job claiming with atomic transaction
-- [ ] Implement polling loop with exponential backoff
-- [ ] Add heartbeat update mechanism
-- [ ] Create provider orchestration skeleton
-- [ ] Add error handling and logging (Winston or Pino)
+#### Step 4.1: Git Setup
+- [ ] Initialize git repository
+- [ ] Create GitHub repository
+- [ ] Push code to GitHub
 
-#### Step 4.3: Stuck Run Cleanup Job
-- [ ] Implement separate cleanup cron job (runs every 5 minutes)
-- [ ] Detect runs in RUNNING state with stale heartbeat
-- [ ] Mark as FAILED with timeout error message
+#### Step 4.2: Vercel Deployment
+- [ ] Connect GitHub repository to Vercel
+- [ ] Configure environment variables in Vercel dashboard
+- [ ] Deploy application
+- [ ] Verify deployment works
+
+#### Step 4.3: Production Setup
+- [ ] Update Supabase redirect URLs for production domain
+- [ ] Run migrations in production (`npx prisma migrate deploy`)
+- [ ] Test authentication flow in production
+- [ ] Verify database connectivity
+
+#### Deliverables
+- [ ] Application deployed to Vercel with production URL
+- [ ] Environment variables configured
+- [ ] Database migrations applied to production
+- [ ] Authentication working in production
+
+**See**: `documentation/installation.md` Phase 4 for detailed step-by-step instructions.
 
 ---
 
-### **Phase 5: Provider Integrations (Week 4-6)**
+### **Phase 5: Worker Platform Setup (Optional - Week 3)**
 
-**Complete providers sequentially to validate full flow**
+Set up worker hosting platform (Railway or Fly.io) to validate deployment before implementing complex provider logic.
 
-#### Step 5.1: PageSpeed Integration (Start with simplest)
-- [ ] Write `Documentation/providers/pagespeed-integration.md`
-- [ ] Create `worker/providers/pagespeed.ts`
-- [ ] Implement mobile + desktop testing
+#### Step 5.1: Platform Selection
+- [ ] Choose platform: Railway (recommended) or Fly.io
+- [ ] Create account and connect GitHub
+
+#### Step 5.2: Minimal Worker Deployment
+- [ ] Create basic worker with heartbeat only
+- [ ] Configure environment variables on platform
+- [ ] Deploy worker to platform
+- [ ] Verify worker starts and logs appear
+
+#### Step 5.3: Database Connectivity Test
+- [ ] Add Prisma client to minimal worker
+- [ ] Test database connection from worker
+- [ ] Verify worker can query database
+
+#### Deliverables
+- [ ] Worker deployed to production platform
+- [ ] Worker logs visible in platform dashboard
+- [ ] Database connectivity verified from worker
+- [ ] Platform ready for provider implementations
+
+**See**: `documentation/installation.md` Phase 5 for detailed step-by-step instructions with Railway and Fly.io options.
+
+---
+
+### **Phase 6: Worker Service & Page Preflight (Week 3-4)**
+
+#### Step 6.1: Worker Project Setup
+- [ ] Create `worker` directory (not `qa-worker`)
+- [ ] Initialize npm project
+- [ ] Install dependencies:
+  - Core: Prisma, TypeScript, @supabase/supabase-js, dotenv
+  - Page Preflight: linkinator, zod
+  - Future: axios (for SE Ranking, LanguageTool)
+- [ ] Copy/link Prisma schema
+- [ ] Configure environment variables in worker `.env`:
+  - `DATABASE_URL`
+  - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+  - `PAGE_SPEED_API_KEY` (Google API key - free tier: 25k requests/day)
+- [ ] Set up TypeScript config
+- [ ] Create worker directory structure:
+  ```
+  worker/
+  ├── lib/ (prisma, retry, scoring, heartbeat)
+  ├── jobs/ (claim, executor, cleanup)
+  ├── providers/ (pagespeed, linkinator, custom-rules, se-ranking, languagetool)
+  └── rules/ (custom rule plugins)
+  ```
+
+#### Step 6.2: Worker Core Loop
+- [ ] Implement job claiming with atomic transaction
+- [ ] Implement polling loop with exponential backoff (10s-60s)
+- [ ] Add heartbeat update mechanism (every 30s)
+- [ ] Create provider orchestration skeleton
+- [ ] Add error handling and logging (Winston or Pino)
+- [ ] Implement retry utility with exponential backoff
+
+#### Step 6.3: Stuck Run Cleanup Job
+- [ ] Implement separate cleanup cron job (runs every 5 minutes)
+- [ ] Detect runs in RUNNING state with stale heartbeat (>60 minutes)
+- [ ] Mark as FAILED with timeout error message
+
+**Note**: Schema migration for Page Preflight was completed in Phase 3.5 (see `documentation/installation.md`).
+
+**See**: `documentation/installation.md` Phase 6.1 for detailed worker infrastructure setup instructions.
+
+---
+
+### **Phase 7: Provider Integrations (Week 4-6)**
+
+**Priority Order: Page Preflight first (MVP), then other providers**
+
+#### Step 7.1: PageSpeed Lighthouse SEO Integration (Page Preflight - Priority 1)
+- [ ] Write `Documentation/providers/pagespeed-lighthouse-seo.md`
+- [ ] Create `worker/providers/pagespeed/client.ts`
+  - Call PageSpeed Insights API v5 with `category=seo`
+  - Parse `lighthouseResult.audits` object
+  - Retry on 5xx errors (PageSpeed can be flaky)
+  - Implement rate limiting (max 400/min)
+- [ ] Create `worker/providers/pagespeed/seo-mapper.ts`
+  - Map Lighthouse SEO audits to Issue records
+  - Severity assignment: CRITICAL (HTTP errors), HIGH (missing title), MEDIUM (meta description), LOW (alt text)
+  - Audit IDs to map: `document-title`, `meta-description`, `http-status-code`, `is-crawlable`, `canonical`, `hreflang`, `structured-data`, `viewport`, `image-alt`, `link-text`
+- [ ] Store issues in `Issue` table with provider='LIGHTHOUSE'
+- [ ] Store per-URL issue counts in `UrlResult` table
+- [ ] Test end-to-end with SITE_AUDIT + CUSTOM_URLS
+
+#### Step 7.2: Linkinator Integration (Page Preflight - Priority 2)
+- [ ] Write `Documentation/providers/linkinator-integration.md`
+- [ ] Create `worker/providers/linkinator/checker.ts`
+  - Use linkinator library to check links on page
+  - Configuration: concurrency=10, timeout=10s (internal) / 5s (external)
+  - Check internal links (404/500), external links (404/410), resources (404)
+  - Detect redirect chains (3+ redirects)
+  - Skip patterns: `mailto:*`, `tel:*`, `javascript:*`
+- [ ] Create `worker/providers/linkinator/mapper.ts`
+  - Map link states to Issue records
+  - Issue codes: LINK_BROKEN_INTERNAL (HIGH), LINK_BROKEN_EXTERNAL (MEDIUM), LINK_REDIRECT_CHAIN (LOW), LINK_TIMEOUT (MEDIUM)
+- [ ] Store issues in `Issue` table with provider='LINKINATOR'
+- [ ] Test with various link scenarios (working, broken, redirects)
+
+#### Step 7.3: Custom Rules Plugin System (Page Preflight - Priority 3)
+- [ ] Write `Documentation/providers/custom-rules.md`
+- [ ] Create `worker/providers/custom-rules/types.ts`
+  - Define RuleContext interface (url, html, headers, statusCode)
+  - Define RuleResult interface (code, summary, severity, meta)
+  - Define CustomRule type signature
+- [ ] Create `worker/providers/custom-rules/loader.ts`
+  - Scan `worker/rules/` directory for `.ts`/`.js` files
+  - Import each file (must export default function)
+  - Ignore files starting with `_` or `README`
+  - Handle loading errors gracefully
+- [ ] Create `worker/providers/custom-rules/executor.ts`
+  - Fetch page HTML via simple HTTP GET
+  - Execute all rules in parallel
+  - Wrap each rule in try-catch
+  - Convert RuleResult[] to Issue[] with provider='CUSTOM_RULE'
+- [ ] Create `worker/rules/meta-tags.ts` (example rule)
+  - Check for Open Graph tags (og:title, og:image)
+  - Check for Twitter Card tags
+  - Validate title length (max 60 chars)
+- [ ] Create `worker/rules/README.md` (documentation for rule authors)
+- [ ] Test with example rule
+
+#### Step 7.4: Page Preflight Integration in Executor
+- [ ] Update `worker/jobs/executor.ts`
+  - Add executeSiteAuditCustomUrls() function
+  - Run 3 providers in parallel: PageSpeed Lighthouse SEO, linkinator, custom rules
+  - Use Promise.allSettled() to handle partial success
+  - Aggregate all issues from providers
+  - Calculate score using scoring algorithm (100 base - penalties by severity)
+  - Determine status: SUCCESS (all 3 succeed), PARTIAL (1-2 succeed), FAILED (all fail)
+- [ ] Create `worker/lib/scoring.ts`
+  - Implement calculateSiteAuditScore() function
+  - Deductions: CRITICAL (-10), HIGH (-5), MEDIUM (-2), LOW (-1)
+  - Normalize by URL count
+- [ ] Test complete Page Preflight flow end-to-end
+
+#### Step 7.5: PageSpeed Performance Integration (Existing - Priority 4)
+- [ ] Write `Documentation/providers/pagespeed-performance.md`
+- [ ] Create `worker/providers/pagespeed/performance.ts` (reuse client from 5.1)
+- [ ] Implement mobile + desktop testing for performance category
 - [ ] Parse Core Web Vitals and scores
 - [ ] Store results in `UrlResult` table (2 rows per URL: mobile + desktop)
 - [ ] Calculate average score and store in `TestRun.score`
 - [ ] Test end-to-end (enqueue → worker processes → view results)
 
-#### Step 5.2: SE Ranking Integration
+#### Step 7.6: SE Ranking Integration (Future - Full Site Crawl)
 - [ ] Write `Documentation/providers/se-ranking-integration.md`
 - [ ] Create `worker/providers/se-ranking.ts`
 - [ ] Implement sitemap crawling (max 500 pages)
@@ -293,8 +438,9 @@ Establish the foundational dashboard UI structure, layout components, navigation
 - [ ] Store per-URL issue counts in `UrlResult`
 - [ ] Store health score in `TestRun.score`
 - [ ] Implement issue aggregation API (`GET /api/test-runs/[id]/issues/summary`)
+- [ ] Note: SE Ranking used for SITE_AUDIT + SITEMAP scope (not CUSTOM_URLS)
 
-#### Step 5.3: Playwright Screenshots Integration
+#### Step 7.7: Playwright Screenshots Integration
 - [ ] Write `Documentation/providers/playwright-integration.md`
 - [ ] Create `worker/providers/playwright-screenshots.ts`
 - [ ] Implement 4-viewport capture (Desktop Chrome/Safari, Tablet, Mobile)
@@ -303,7 +449,7 @@ Establish the foundational dashboard UI structure, layout components, navigation
 - [ ] Generate signed URLs for UI display
 - [ ] Implement screenshot viewer UI component
 
-#### Step 5.4: LanguageTool Integration
+#### Step 7.8: LanguageTool Integration
 - [ ] Write `Documentation/providers/languagetool-integration.md`
 - [ ] Create `worker/providers/languagetool.ts`
 - [ ] Use Playwright to render page and extract text
@@ -314,51 +460,51 @@ Establish the foundational dashboard UI structure, layout components, navigation
 
 ---
 
-### **Phase 6: UI Development (Week 6-8)**
+### **Phase 8: UI Development (Week 6-8)**
 
-#### Step 6.1: Release Readiness Component
+#### Step 8.1: Release Readiness Component
 - [ ] Create `lib/scoring.ts` with threshold constants
 - [ ] Implement `getReleaseReadiness()` function
 - [ ] Create Release Readiness display component (top-right of UI)
 - [ ] Show per-test color indicators
 - [ ] Add tooltips with score details
 
-#### Step 6.2: QA Tools Workspace
+#### Step 8.2: QA Tools Workspace
 - [ ] Create tabbed interface (Site Audit, Performance, Screenshots, Spelling)
 - [ ] Add project selector to left panel
 - [ ] Implement "Start Test" button with URL input (for Performance/Screenshots/Spelling)
 - [ ] Add test history preview in right panel
 - [ ] Implement real-time status polling (for RUNNING tests)
 
-#### Step 6.3: Test Results Pages
+#### Step 8.3: Test Results Pages
 - [ ] **Site Audit Results**: Issue list with filtering, links to SE Ranking report
 - [ ] **Performance Results**: Per-URL table with mobile/desktop scores, Core Web Vitals chart
 - [ ] **Screenshots Results**: Grid view with viewport labels, manual status controls
 - [ ] **Spelling Results**: Issue list with context snippets, manual status controls
 
-#### Step 6.4: Manual Test Status
+#### Step 8.4: Manual Test Status
 - [ ] Implement `POST /api/projects/[id]/manual-status`
 - [ ] Add PASS/REVIEW/FAIL buttons to Screenshots/Spelling result pages
 - [ ] Update Release Readiness in real-time after status change
 
 ---
 
-### **Phase 7: Polish & Retention (Week 8-9)**
+### **Phase 9: Polish & Retention (Week 8-9)**
 
-#### Step 7.1: Data Retention Implementation
+#### Step 9.1: Data Retention Implementation
 - [ ] Implement retention logic in worker (prune old TestRuns)
 - [ ] Cascade delete related UrlResult, Issue, ScreenshotSet records
 - [ ] Delete old screenshots from Supabase Storage
 - [ ] Test retention with multiple test runs
 
-#### Step 7.2: Email Notifications
+#### Step 9.2: Email Notifications
 - [ ] Choose email provider (Resend, SendGrid, AWS SES)
 - [ ] Write `Documentation/email-notifications.md`
 - [ ] Create email templates (HTML + plain text)
 - [ ] Implement notification trigger in worker (on test completion)
 - [ ] Test with all statuses (SUCCESS, PARTIAL, FAILED)
 
-#### Step 7.3: Error Handling & Monitoring
+#### Step 9.3: Error Handling & Monitoring
 - [ ] Set up Sentry (free tier) for app and worker
 - [ ] Add comprehensive error logging
 - [ ] Implement API retry logic for all providers (exponential backoff + jitter)
@@ -366,9 +512,9 @@ Establish the foundational dashboard UI structure, layout components, navigation
 
 ---
 
-### **Phase 8: Testing & Deployment (Week 9-10)**
+### **Phase 10: Testing & Deployment (Week 9-10)**
 
-#### Step 8.1: Testing
+#### Step 10.1: Testing
 - [ ] Write unit tests for scoring logic (`lib/scoring.test.ts`)
 - [ ] Write integration tests for API routes
 - [ ] Test worker with all 4 test types end-to-end
@@ -376,7 +522,7 @@ Establish the foundational dashboard UI structure, layout components, navigation
 - [ ] Test stuck run cleanup
 - [ ] Test with various project types (small sites, large sites, broken sites)
 
-#### Step 8.2: Deployment
+#### Step 10.2: Deployment
 - [ ] Deploy Next.js app to Vercel
 - [ ] Configure production environment variables
 - [ ] Run `npx prisma migrate deploy` on production database
@@ -384,7 +530,7 @@ Establish the foundational dashboard UI structure, layout components, navigation
 - [ ] Verify all API keys and access in production
 - [ ] Test production deployment with real sites
 
-#### Step 8.3: Documentation Finalization
+#### Step 10.3: Documentation Finalization
 - [ ] Review and update all documentation
 - [ ] Add screenshots to functional spec
 - [ ] Create troubleshooting guide

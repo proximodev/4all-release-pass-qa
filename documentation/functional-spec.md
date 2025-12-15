@@ -14,10 +14,11 @@ We will combine SEO technical health, performance, visual QA, and grammar checks
   * Test datamodel with history
   * Readiness score datamodel
   * QA Tests
-    * Site Audit (SE Ranking)
-    * Performance (Core Web Vitals)
+    * Site Audit - Page Preflight Mode (PageSpeed Lighthouse SEO + Linkinator + Custom Rules)
+    * Performance (PageSpeed Core Web Vitals)
     * Screenshots (Playwright)
     * Spelling/Grammar (LanguageTool)
+  * Note: Site Audit Full Site Crawl Mode (SE Ranking) deferred to V1.2
 * **V1.2**:
   * Visual diffs for regression detection
   * Baseline screenshot selection mechanism (TBD)
@@ -41,7 +42,7 @@ See technical-stack.md
 Persistent brand bar appears across the platform with the following navigation:
 
 * QA Tools
-  * Site Audit
+  * Site Audit / Page Preflight
   * Performance
   * Browser Test
   * Spellcheck
@@ -94,11 +95,11 @@ Empty states, no tests yet, partial failures, and manual review indicators are c
   * Primary site URL
   * Optional sitemap URL
   * Notes
-* Supported manual tests:
-  * Site Audit (SE Ranking)
-  * Performance (PageSpeed)
-  * Screenshots (manual status)
-  * Spelling/Grammar (manual status)
+* Supported test types:
+  * Site Audit - automated with numeric score (Page Preflight: Lighthouse + Linkinator + Custom Rules)
+  * Performance - automated with numeric score (PageSpeed)
+  * Screenshots - automated capture with manual status review
+  * Spelling/Grammar - automated detection with manual status review
 * Test history retention:
   * Current + previous run per test type
   * Screenshots: current + previous only
@@ -126,8 +127,10 @@ Empty states, no tests yet, partial failures, and manual review indicators are c
 Each project must display a Release Readiness summary based on the latest test runs.
 
 **Test scoring model:**
-* **Site Audit** — numeric score from SE Ranking
-* **Performance** — may include multiple URLs; score rule may be average or worst-case (MVP uses a single defined method)
+* **Site Audit** — numeric score (0-100) from Page Preflight (aggregated from Lighthouse SEO + Linkinator + Custom Rules issues)
+  - MVP: Page Preflight mode for custom URLs
+  - Future: SE Ranking for full site crawls
+* **Performance** — numeric score (0-100) averaged across tested URLs (mobile + desktop)
 * **Screenshots** — manual status (Pass / Needs Review / Fail)
 * **Spelling/Grammar** — manual status (Pass / Needs Review / Fail)
 
@@ -211,8 +214,8 @@ General rules:
   * id — UUID
   * testRunId — UUID (FK to TestRun.id)
   * url — string
-  * provider — string/enum (e.g., `SE_RANKING`, `LANGUAGETOOL`, `INTERNAL`)
-  * code — string (normalized issue code, e.g. `MISSING_H1`, `SPELLING_ERROR`)
+  * provider — string/enum (e.g., `LIGHTHOUSE`, `LINKINATOR`, `CUSTOM_RULE`, `SE_RANKING`, `LANGUAGETOOL`, `INTERNAL`)
+  * code — string (normalized issue code, e.g. `LIGHTHOUSE_NO_TITLE`, `LINK_BROKEN_INTERNAL`, `MISSING_OG_IMAGE`, `SPELLING_ERROR`)
   * summary — string (short human-readable description)
   * severity — string/enum (e.g., `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
   * meta — JSON (nullable; additional context such as selectors, offsets, raw messages)
@@ -220,6 +223,10 @@ General rules:
   * updatedAt — datetime
 
   Issue is a generic issue table used across test types (Site Audit, Spelling, possible future tools).
+
+  **MVP Providers**: LIGHTHOUSE (PageSpeed SEO), LINKINATOR (link checking), CUSTOM_RULE (custom validation rules), LANGUAGETOOL (spelling/grammar).
+
+  **Future Providers**: SE_RANKING (full site crawl), INTERNAL (system-generated issues).
 
 * ScreenshotSet
   * id — UUID
@@ -260,9 +267,18 @@ No dedicated `Readiness` table is required in MVP.
 Each test type has different URL selection capabilities based on its purpose:
 
 **Site Audit**:
-- **Scope**: Full sitemap crawl
-- **Configuration**: Automatically discovers and crawls all URLs from the project's `sitemapUrl`
-- **Crawl limits**: Maximum 500 pages per run; respects same-subdomain rule (won't crawl external subdomains)
+- **Scope**: Two modes based on use case
+- **Configuration Options**:
+  - **Page Preflight Mode (CUSTOM_URLS)**: User-selected URL list for pre-deployment validation
+    - Uses PageSpeed Insights API (Lighthouse SEO audits)
+    - Uses Linkinator for link validation (internal, external, resources)
+    - Uses custom rules plugin system for extensible checks
+    - Maximum 50 URLs per run in MVP
+  - **Full Site Crawl Mode (SITEMAP)**: Comprehensive site-wide audit (future implementation)
+    - Automatically discovers and crawls all URLs from project's `sitemapUrl`
+    - Uses SE Ranking Website Audit API
+    - Maximum 500 pages per run
+    - Same-subdomain rule (won't crawl external subdomains)
 - **JavaScript rendering**: Not supported in MVP (static HTML only)
 - **Authentication**: Not supported in MVP (public URLs only)
 
@@ -295,13 +311,72 @@ Each test type has different URL selection capabilities based on its purpose:
 - **JavaScript rendering**: Supported (Playwright waits for page load)
 - **Authentication**: Not supported in MVP
 
-### Site Audit (Crawl-Based)
-* Purpose: Catch SEO and UX-breaking defects early
-* Solution:
-  * SE Ranking Website Audit API
-* Documentation:
-  * https://seranking.com/api/data/website-audit/
-* Scope:  
+### Site Audit
+* Purpose: Catch SEO and UX-breaking defects early with pre-deployment page validation or comprehensive site-wide audits
+* Two modes:
+  * **Page Preflight (CUSTOM_URLS)** - MVP Implementation
+  * **Full Site Crawl (SITEMAP)** - Future
+
+#### Page Preflight Mode (CUSTOM_URLS) - MVP
+
+**Provider 1: PageSpeed Insights API (Lighthouse SEO)**
+* API: Google PageSpeed Insights API v5
+* Documentation: https://developers.google.com/speed/docs/insights/v5/about
+* Category: `seo` from Lighthouse audits
+* Checks Performed:
+  * **Meta Tags & Content**:
+    * `document-title` - Page has title tag
+    * `meta-description` - Document has meta description
+  * **Crawlability & Indexing**:
+    * `http-status-code` - Page has successful HTTP status
+    * `is-crawlable` - Page isn't blocked from indexing
+    * `robots-txt` - robots.txt is valid
+    * `crawlable-anchors` - Links are crawlable
+  * **Technical SEO**:
+    * `canonical` - Document has valid canonical
+    * `hreflang` - Document has valid hreflang
+    * `structured-data` - Structured data is valid
+    * `viewport` - Has viewport meta tag
+  * **Content Quality**:
+    * `image-alt` - Image elements have [alt] attributes
+    * `link-text` - Links have descriptive text
+
+**Provider 2: Linkinator (Link Validation)**
+* Library: linkinator (Google's link checker)
+* Documentation: https://github.com/JustinBeckwith/linkinator
+* Checks Performed:
+  * **Internal Links**: 404/500 errors, timeouts
+  * **External Links**: 404/410 errors (dead links)
+  * **Resource Links**: Missing images, CSS, JavaScript files (404 errors)
+  * **Redirect Chains**: Links with 3+ redirects
+* Configuration:
+  * Concurrent requests: 10
+  * Timeout: 10s (internal), 5s (external/resources)
+  * Skip patterns: `mailto:*`, `tel:*`, `javascript:*`
+
+**Provider 3: Custom Rules Plugin System**
+* Architecture: File-based plugins loaded from `worker/rules/` directory
+* Rule interface: Each rule receives page context (URL, HTML, headers) and returns issues
+* MVP Rules:
+  * Meta tags validation (Open Graph, Twitter Cards)
+  * Title length validation
+* Extensibility: Add new `.ts` files to `worker/rules/` directory
+
+**Scoring for Page Preflight**:
+* Base score: 100 points
+* Deductions:
+  * CRITICAL issues: -10 points each
+  * HIGH issues: -5 points each
+  * MEDIUM issues: -2 points each
+  * LOW issues: -1 point each
+* Normalized by URL count (more URLs = proportionally more tolerance)
+* Final score: 0-100
+
+#### Full Site Crawl Mode (SITEMAP) - Future Implementation
+
+**Provider: SE Ranking Website Audit API**
+* Documentation: https://seranking.com/api/data/website-audit/
+* Scope:
   Security (8 checks)
 * No HTTPS encryption
 * HTTP URLs in XML sitemap

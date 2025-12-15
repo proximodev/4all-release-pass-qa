@@ -1060,13 +1060,782 @@ Before moving forward, verify:
 
 ---
 
+## Phase 2: Dashboard UI Framework
+
+> See `documentation/mvp-implementation-plan.md` Phase 2 for implementation details.
+
+This phase covers building the core dashboard UI components and pages. Implementation steps will be added here once ready.
+
+---
+
+## Phase 3: Core Data Layer
+
+> See `documentation/mvp-implementation-plan.md` Phase 3 for implementation details.
+
+This phase covers building API routes and data access patterns. Implementation steps will be added here once ready.
+
+---
+
+## Phase 3.5: Schema Updates for Page Preflight
+
+Before implementing the worker service, we need to update the database schema to support Page Preflight providers.
+
+### Step 1: Update Prisma Schema
+
+Edit `prisma/schema.prisma` and update the `IssueProvider` enum:
+
+```prisma
+enum IssueProvider {
+  SE_RANKING
+  LANGUAGETOOL
+  LIGHTHOUSE      // ADD THIS - for PageSpeed Lighthouse SEO
+  LINKINATOR      // ADD THIS - for link checking
+  CUSTOM_RULE     // ADD THIS - for custom rules
+  INTERNAL
+}
+```
+
+### Step 2: Create and Apply Migration
+
+```bash
+# From project root
+npx prisma migrate dev --name add_page_preflight_providers
+```
+
+**Expected output:**
+```
+✔ Generated Prisma Client
+✔ Applied migration add_page_preflight_providers
+```
+
+### Step 3: Verify Schema Update
+
+```bash
+# Open Prisma Studio to verify
+npx prisma studio
+```
+
+Check that the `Issue` table's `provider` field now includes the three new enum values: LIGHTHOUSE, LINKINATOR, CUSTOM_RULE.
+
+---
+
+## Phase 4: Deploy Next.js to Vercel (Optional)
+
+Deploying your Next.js app to Vercel early helps validate that your production setup works before building complex features.
+
+### Step 1: Push Code to Git
+
+```bash
+# Initialize git if not already done
+git init
+
+# Add all files
+git add .
+
+# Commit
+git commit -m "Initial commit - ReleasePass MVP setup"
+
+# Create GitHub repository and push
+# (Follow GitHub instructions to create repo and add remote)
+git remote add origin https://github.com/your-username/releasepass-qa.git
+git branch -M main
+git push -u origin main
+```
+
+### Step 2: Connect to Vercel
+
+1. Go to [vercel.com](https://vercel.com/) and sign in
+2. Click **"Add New Project"**
+3. **Import Git Repository**:
+   - Select your GitHub repository
+   - Click **Import**
+
+### Step 3: Configure Project
+
+**Framework Preset**: Next.js (should auto-detect)
+
+**Root Directory**: `./` (leave as default)
+
+**Build Command**: `npm run build` (default)
+
+**Output Directory**: `.next` (default)
+
+**Install Command**: `npm install` (default)
+
+### Step 4: Add Environment Variables
+
+Click **"Environment Variables"** and add:
+
+```bash
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+# Database
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-id.supabase.co:5432/postgres
+
+# Email (if configured)
+EMAIL_PROVIDER_API_KEY=
+EMAIL_FROM=qa-bot@example.com
+```
+
+**Important**: Make sure to use the **Production** environment variables from your Supabase project, not development.
+
+### Step 5: Deploy
+
+1. Click **"Deploy"**
+2. Wait for deployment to complete (~2-3 minutes)
+3. Vercel will provide a URL like `https://releasepass-qa.vercel.app`
+
+### Step 6: Update Supabase Redirect URLs
+
+1. Go to Supabase Dashboard → **Authentication → URL Configuration**
+2. Add your Vercel URL to **Redirect URLs**:
+   - `https://your-app.vercel.app/**`
+3. Update **Site URL**: `https://your-app.vercel.app`
+
+### Step 7: Test Production Deployment
+
+1. Visit your Vercel URL
+2. Try to sign in with your test user
+3. Verify dashboard loads correctly
+4. Check that database connection works
+
+### Step 8: Run Migrations in Production
+
+```bash
+# Set DATABASE_URL to production database
+export DATABASE_URL="postgresql://postgres:[PASSWORD]@db.your-project-id.supabase.co:5432/postgres"
+
+# Run migrations
+npx prisma migrate deploy
+```
+
+**Alternative**: Run migrations automatically on deploy by adding to `package.json`:
+
+```json
+{
+  "scripts": {
+    "build": "prisma generate && prisma migrate deploy && next build"
+  }
+}
+```
+
+---
+
+## Phase 5: Worker Platform Setup (Optional)
+
+Setting up your worker hosting platform early ensures the deployment works before implementing complex provider logic.
+
+**Recommended Platform**: Railway (generous free tier, simple setup)
+**Alternative**: Fly.io (more scalable, slightly more complex)
+
+### Option A: Railway (Recommended)
+
+#### Step 1: Create Railway Account
+
+1. Go to [railway.app](https://railway.app/) and sign up
+2. Connect your GitHub account
+
+#### Step 2: Create New Project
+
+1. Click **"New Project"**
+2. Select **"Deploy from GitHub repo"**
+3. Select your repository
+4. Railway will detect it's a Node.js app
+
+#### Step 3: Configure Service
+
+1. Click on the deployed service
+2. Go to **Settings**
+3. **Root Directory**: Set to `worker`
+4. **Start Command**: `npm start`
+5. **Build Command**: `npm install && npx prisma generate && npm run build`
+
+#### Step 4: Add Environment Variables
+
+Go to **Variables** tab and add:
+
+```bash
+# Database (same as main app)
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-id.supabase.co:5432/postgres
+
+# Supabase
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+# PageSpeed API (will add later)
+PAGE_SPEED_API_KEY=
+
+# Worker Configuration
+POLL_INTERVAL_MIN=10000
+POLL_INTERVAL_MAX=60000
+HEARTBEAT_INTERVAL=30000
+STUCK_RUN_TIMEOUT=3600000
+
+# Node environment
+NODE_ENV=production
+```
+
+#### Step 5: Create Minimal Worker for Testing
+
+Before implementing full worker logic, create a minimal worker to validate deployment:
+
+```bash
+# From project root
+mkdir -p worker
+cd worker
+
+# Initialize npm project
+npm init -y
+
+# Install dependencies
+npm install @prisma/client dotenv
+
+# Create basic index.js
+```
+
+Create `worker/index.js`:
+
+```javascript
+require('dotenv').config();
+
+console.log('Worker starting...');
+console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Missing');
+
+// Keep process alive
+setInterval(() => {
+  console.log('Worker heartbeat:', new Date().toISOString());
+}, 30000);
+```
+
+Create `worker/package.json`:
+
+```json
+{
+  "name": "releasepass-worker",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.1",
+    "dotenv": "^16.0.0"
+  }
+}
+```
+
+#### Step 6: Deploy Worker
+
+```bash
+# Commit and push
+git add worker/
+git commit -m "Add minimal worker for platform testing"
+git push
+```
+
+Railway will automatically detect the change and redeploy.
+
+#### Step 7: Verify Deployment
+
+1. Go to Railway dashboard
+2. Click on your worker service
+3. Check **Logs** tab
+4. You should see: `Worker starting...` and periodic heartbeat messages
+
+#### Step 8: Test Database Connectivity
+
+Update `worker/index.js` to test Prisma connection:
+
+```javascript
+require('dotenv').config();
+const { PrismaClient } = require('@prisma/client');
+
+const prisma = new PrismaClient();
+
+async function testConnection() {
+  try {
+    const projectCount = await prisma.project.count();
+    console.log('✅ Database connected! Projects:', projectCount);
+  } catch (error) {
+    console.error('❌ Database connection failed:', error.message);
+  }
+}
+
+console.log('Worker starting...');
+testConnection();
+
+// Keep process alive
+setInterval(() => {
+  console.log('Worker heartbeat:', new Date().toISOString());
+}, 30000);
+```
+
+Commit and push to test. Check Railway logs for successful database connection.
+
+---
+
+### Option B: Fly.io (Alternative)
+
+#### Step 1: Install Fly CLI
+
+```bash
+# macOS/Linux
+curl -L https://fly.io/install.sh | sh
+
+# Windows (PowerShell)
+iwr https://fly.io/install.ps1 -useb | iex
+```
+
+#### Step 2: Login to Fly.io
+
+```bash
+fly auth login
+```
+
+#### Step 3: Create Fly.io App
+
+```bash
+cd worker
+fly launch
+```
+
+When prompted:
+- App name: `releasepass-worker-[your-name]`
+- Region: Choose closest to your database
+- PostgreSQL: **No** (we're using Supabase)
+- Redis: **No**
+
+#### Step 4: Configure fly.toml
+
+Edit `worker/fly.toml`:
+
+```toml
+app = "releasepass-worker"
+primary_region = "iad"
+
+[build]
+  builder = "heroku/buildpacks:20"
+
+[env]
+  NODE_ENV = "production"
+  POLL_INTERVAL_MIN = "10000"
+  POLL_INTERVAL_MAX = "60000"
+  HEARTBEAT_INTERVAL = "30000"
+  STUCK_RUN_TIMEOUT = "3600000"
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+```
+
+#### Step 5: Set Secrets
+
+```bash
+fly secrets set DATABASE_URL="postgresql://postgres:[PASSWORD]@db.your-project-id.supabase.co:5432/postgres"
+fly secrets set SUPABASE_URL="https://your-project-id.supabase.co"
+fly secrets set SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+```
+
+#### Step 6: Deploy
+
+```bash
+fly deploy
+```
+
+#### Step 7: View Logs
+
+```bash
+fly logs
+```
+
+You should see worker startup messages and heartbeats.
+
+---
+
+## Phase 6.1: Worker Infrastructure (Universal)
+
+This phase sets up the core worker service infrastructure that supports all test types. This is the foundation that will run Site Audit (Page Preflight and Full Site Crawl), Performance, Screenshots, and Spelling tests.
+
+### Step 1: Create Worker Directory Structure
+
+```bash
+# From project root
+mkdir -p worker/lib worker/jobs worker/providers worker/rules
+```
+
+**Directory explanation:**
+- `worker/lib/` - Shared utilities (Prisma client, retry logic, scoring)
+- `worker/jobs/` - Job claiming, execution orchestrator, cleanup
+- `worker/providers/` - Test provider implementations (will create subdirectories per provider)
+- `worker/rules/` - Custom rules for Page Preflight (extensibility)
+
+### Step 2: Initialize Worker Project
+
+```bash
+cd worker
+
+# Initialize npm project
+npm init -y
+
+# Install core dependencies
+npm install @prisma/client @supabase/supabase-js dotenv
+
+# Install dev dependencies
+npm install --save-dev typescript @types/node ts-node nodemon
+
+# Initialize TypeScript
+npx tsc --init
+```
+
+**Core dependencies:**
+- `@prisma/client` - Database access (same schema as main app)
+- `@supabase/supabase-js` - Supabase storage for screenshots
+- `dotenv` - Environment variable management
+
+### Step 3: Configure Worker TypeScript
+
+Edit `worker/tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node"
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+### Step 4: Configure Worker Environment Variables
+
+Create `worker/.env`:
+
+```bash
+# Database (same as main app)
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-id.supabase.co:5432/postgres
+
+# Supabase (for storage operations)
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+# PageSpeed Insights API
+# Get key from: https://console.cloud.google.com/apis/credentials
+PAGE_SPEED_API_KEY=YOUR_GOOGLE_API_KEY_HERE
+
+# Worker Configuration
+POLL_INTERVAL_MIN=10000          # 10 seconds
+POLL_INTERVAL_MAX=60000          # 60 seconds
+HEARTBEAT_INTERVAL=30000         # 30 seconds
+STUCK_RUN_TIMEOUT=3600000        # 60 minutes
+
+# Future providers (not needed for Page Preflight)
+SE_RANKING_API_KEY=
+LANGUAGETOOL_API_KEY=
+EMAIL_PROVIDER_API_KEY=
+EMAIL_FROM=qa-bot@example.com
+```
+
+**Getting a PageSpeed API Key:**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or select existing)
+3. Enable **PageSpeed Insights API**:
+   - Go to **APIs & Services → Library**
+   - Search for "PageSpeed Insights API"
+   - Click **Enable**
+4. Create credentials:
+   - Go to **APIs & Services → Credentials**
+   - Click **Create Credentials → API Key**
+   - Copy the API key
+5. (Optional) Restrict the API key to PageSpeed Insights API only for security
+
+**Free Tier Limits:**
+- 25,000 requests per day
+- 400 requests per minute
+
+### Step 5: Link Prisma Schema to Worker
+
+```bash
+# From worker directory
+# Copy schema from main project
+cp ../prisma/schema.prisma ./schema.prisma
+
+# OR create a symlink (Unix/Mac/Linux)
+ln -s ../prisma/schema.prisma ./schema.prisma
+
+# OR on Windows (run as Administrator)
+mklink schema.prisma ..\prisma\schema.prisma
+```
+
+Then generate Prisma client:
+
+```bash
+# From worker directory
+npx prisma generate
+```
+
+**Note**: The worker uses the same Prisma schema and database as the main app. Schema migrations were applied in Phase 3.5.
+
+### Step 6: Add Worker Scripts
+
+Edit `worker/package.json` to add these scripts:
+
+```json
+{
+  "name": "releasepass-worker",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "nodemon --exec ts-node index.ts",
+    "start": "ts-node index.ts",
+    "build": "tsc",
+    "test:providers": "ts-node scripts/test-providers.ts"
+  }
+}
+```
+
+### Step 7: Create Prisma Client Helper
+
+Create `worker/lib/prisma.ts`:
+
+```typescript
+import { PrismaClient } from '@prisma/client';
+
+const globalForPrisma = global as unknown as { prisma?: PrismaClient };
+
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: ['error', 'warn'],
+  });
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+}
+```
+
+### Step 8: Create Basic Worker Index
+
+Create `worker/index.ts`:
+
+```typescript
+import * as dotenv from 'dotenv';
+dotenv.config();
+
+console.log('Worker starting...');
+console.log('Environment check:');
+console.log('- DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Missing');
+
+// TODO: Add worker loop and provider implementations in Phase 6.2+
+console.log('Worker ready (awaiting implementation)');
+```
+
+**Note**: This is a minimal worker that validates the infrastructure. Provider implementations will be added in subsequent phases.
+
+### Step 9: Test Worker Setup
+
+```bash
+# From worker directory
+npm run dev
+```
+
+Expected output:
+```
+Worker starting...
+Environment check:
+- DATABASE_URL: Set
+Worker ready (awaiting implementation)
+```
+
+Press Ctrl+C to stop.
+
+### Step 10: Add Worker .gitignore
+
+Create `worker/.gitignore`:
+
+```
+node_modules/
+dist/
+.env
+*.log
+```
+
+---
+
+## Verification Checklist - Phase 6.1
+
+Before moving to provider integrations, verify:
+
+- [ ] Worker directory structure created
+- [ ] Worker npm project initialized
+- [ ] Core dependencies installed (@prisma/client, @supabase/supabase-js, dotenv)
+- [ ] TypeScript configured (`tsconfig.json`)
+- [ ] Worker `.env` configured with DATABASE_URL and SUPABASE credentials
+- [ ] Prisma schema linked to worker
+- [ ] Prisma client generated in worker
+- [ ] Worker scripts added to `package.json`
+- [ ] `lib/prisma.ts` created in worker
+- [ ] Basic worker `index.ts` created
+- [ ] Worker starts without errors (`npm run dev`)
+- [ ] Environment variables are detected correctly
+
+**Note**: Provider-specific dependencies (linkinator, zod, playwright, etc.) will be added in subsequent phases.
+
+---
+
+## Phase 6.2: Page Preflight Providers (Site Audit CUSTOM_URLS)
+
+This phase implements the three providers for Page Preflight mode: PageSpeed Lighthouse SEO, Linkinator, and Custom Rules plugin system.
+
+### Step 1: Install Page Preflight Dependencies
+
+```bash
+# From worker directory
+npm install linkinator zod
+```
+
+**What these do:**
+- `linkinator` - Google's link checking library for detecting broken links, redirects, and timeouts
+- `zod` - TypeScript-first schema validation for validating external API responses and custom rule outputs
+
+### Step 2: Get PageSpeed API Key
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or select existing)
+3. Enable **PageSpeed Insights API**:
+   - Go to **APIs & Services → Library**
+   - Search for "PageSpeed Insights API"
+   - Click **Enable**
+4. Create credentials:
+   - Go to **APIs & Services → Credentials**
+   - Click **Create Credentials → API Key**
+   - Copy the API key
+5. (Optional) Restrict the API key to PageSpeed Insights API only for security
+
+**Free Tier Limits:**
+- 25,000 requests per day
+- 400 requests per minute
+
+### Step 3: Add PageSpeed API Key to Environment
+
+Edit `worker/.env` and add:
+
+```bash
+# PageSpeed Insights API
+PAGE_SPEED_API_KEY=YOUR_GOOGLE_API_KEY_HERE
+```
+
+### Step 4: Create Provider Directory Structure
+
+```bash
+# From worker directory
+mkdir -p providers/pagespeed providers/linkinator providers/custom-rules
+```
+
+### Step 5: Implement Page Preflight Providers
+
+> **Implementation Note**: Detailed provider implementation steps will be added in `documentation/mvp-implementation-plan.md` Phase 7 (Provider Integrations).
+
+For now, the infrastructure is ready. Provider implementations include:
+
+1. **PageSpeed Lighthouse SEO** (`providers/pagespeed/`)
+   - Client for PageSpeed Insights API v5
+   - SEO audit mapper (Lighthouse audits → Issue records)
+   - Retry logic with exponential backoff
+
+2. **Linkinator** (`providers/linkinator/`)
+   - Link checking logic (internal, external, resources)
+   - Result mapper (broken links → Issue records)
+   - Configurable timeout and retry
+
+3. **Custom Rules** (`providers/custom-rules/`)
+   - Rule loader (scans `rules/` directory)
+   - Rule executor (runs rules in parallel)
+   - Example rules: meta tags, Open Graph, title length
+
+---
+
+## Phase 6.3: Performance Provider (PageSpeed Core Web Vitals)
+
+> **Status**: To be implemented
+
+This phase will implement the Performance test provider using PageSpeed Insights API for Core Web Vitals (LCP, CLS, INP) and lab metrics.
+
+**Dependencies to add**:
+```bash
+npm install axios  # For HTTP requests to PageSpeed API
+```
+
+**Implementation**: See `documentation/mvp-implementation-plan.md` Phase 7.
+
+---
+
+## Phase 6.4: Screenshots Provider (Playwright)
+
+> **Status**: To be implemented
+
+This phase will implement the Screenshots test provider using Playwright for multi-viewport screenshot capture.
+
+**Dependencies to add**:
+```bash
+npm install playwright @playwright/test
+npx playwright install  # Install browser binaries
+```
+
+**Implementation**: See `documentation/mvp-implementation-plan.md` Phase 7.
+
+---
+
+## Phase 6.5: Spelling Provider (Playwright + LanguageTool)
+
+> **Status**: To be implemented
+
+This phase will implement the Spelling test provider using Playwright for text extraction and LanguageTool API for grammar/spelling checks.
+
+**Dependencies to add**:
+```bash
+# Playwright already installed in Phase 6.4
+npm install axios  # For HTTP requests to LanguageTool API
+```
+
+**Implementation**: See `documentation/mvp-implementation-plan.md` Phase 7.
+
+---
+
+## Phase 6.6: Full Site Crawl Provider (SE Ranking) - v1.2
+
+> **Status**: Deferred to v1.2
+
+This phase will implement the Site Audit Full Site Crawl mode using SE Ranking API for comprehensive site-wide audits.
+
+**Dependencies to add**:
+```bash
+npm install axios  # For HTTP requests to SE Ranking API
+```
+
+**Implementation**: See `documentation/mvp-implementation-plan.md` for v1.2 roadmap.
+
+---
+
 ## Next Steps
 
-Once Phase 1.1, 1.2, and 1.3 are complete, you're ready for:
+Once Phase 6.1 infrastructure is complete, you're ready for:
 
-**Phase 2.1: Project Management UI**
+**Phase 6.2**: Implement Page Preflight Providers (Lighthouse + Linkinator + Custom Rules)
 
-See `Documentation/mvp-implementation-plan.md` for the next steps.
+See `documentation/mvp-implementation-plan.md` Phase 7 for detailed provider implementation steps.
 
 ---
 

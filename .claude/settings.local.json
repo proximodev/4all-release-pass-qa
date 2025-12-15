@@ -15,7 +15,8 @@
       "Bash(npm install:*)",
       "Bash(tree:*)",
       "Bash(npm run build:*)",
-      "Bash(npx prisma db push:*)"
+      "Bash(npx prisma db push:*)",
+      "Bash(xargs ls:*)"
     ]
   }
 }

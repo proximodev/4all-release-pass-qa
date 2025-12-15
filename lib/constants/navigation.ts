@@ -4,3 +4,8 @@ export const qaTabs = [
   { label: 'Browser Test', href: '/qa/browser' },
   { label: 'Spellcheck', href: '/qa/spelling' },
 ]
+
+export const projectTabs = [
+    { label: 'All Projects', href: '/projects' },
+    { label: 'Add Project', href: '/projects/new' },
+]

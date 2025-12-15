@@ -14,7 +14,8 @@
       "Bash(npx prisma generate:*)",
       "Bash(npm install:*)",
       "Bash(tree:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(npx prisma db push:*)"
     ]
   }
 }

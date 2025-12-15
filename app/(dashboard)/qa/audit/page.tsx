@@ -3,6 +3,7 @@ import Card from '@/components/ui/card/Card'
 import PageContainer from '@/components/layout/PageContainer'
 import TwoColumnGrid from '@/components/layout/TwoColumnGrid'
 import { qaTabs } from '@/lib/constants/navigation'
+import ProjectSelector from '@/components/ui/ProjectSelector'
 
 export default function SiteAuditPage() {
   return (
@@ -11,8 +12,7 @@ export default function SiteAuditPage() {
 
       <TwoColumnGrid>
         <Card title="Project">
-          <p className="text-black/60">Select or create a project to run Site Audit tests.</p>
-          {/* Project selector will go here in Phase 3 */}
+          <ProjectSelector />
         </Card>
 
         <Card title="Latest Results">

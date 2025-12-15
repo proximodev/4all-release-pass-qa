@@ -46,24 +46,25 @@ export default function Header() {
           <nav className="flex items-center space-x-8">
             <Link
               href="/qa/audit"
-              className={`text-white hover:text-brand-yellow transition-colors ${
-                isActive('/qa') ? 'text-brand-yellow' : ''
+              className={`hover:text-brand-yellow transition-colors ${
+                isActive('/qa') ? 'active' : ''
               }`}
             >
               QA Tools
             </Link>
             <Link
               href="/projects"
-              className={`text-white hover:text-brand-yellow transition-colors ${
-                isActive('/projects') ? 'text-brand-yellow' : ''
+              className={`hover:text-brand-yellow transition-colors ${
+                isActive('/projects') ? 'active' : ''
               }`}
             >
               Projects
             </Link>
             <Link
               href="/utilities"
-              className="text-white/50 hover:text-white/70 transition-colors cursor-not-allowed"
-              aria-disabled="true"
+              className={`hover:text-brand-yellow transition-colors ${
+                  isActive('/utilities') ? 'active' : ''
+              }`}
             >
               Utilities
             </Link>
@@ -73,7 +74,7 @@ export default function Header() {
           <div className="flex items-center space-x-4">
             <Link
               href="/settings"
-              className="text-white hover:text-brand-yellow transition-colors"
+              className="hover:text-brand-yellow transition-colors"
               aria-label="Settings"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -84,7 +85,7 @@ export default function Header() {
             <button
               onClick={handleSignOut}
               disabled={isLoggingOut}
-              className="px-4 py-2 bg-white text-black hover:bg-white/90 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-white text-black hover:bg-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoggingOut ? 'Logging out...' : 'Logout'}
             </button>

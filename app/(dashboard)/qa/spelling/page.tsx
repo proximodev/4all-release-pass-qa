@@ -3,6 +3,7 @@ import Card from '@/components/ui/card/Card'
 import PageContainer from '@/components/layout/PageContainer'
 import TwoColumnGrid from '@/components/layout/TwoColumnGrid'
 import { qaTabs } from '@/lib/constants/navigation'
+import ProjectSelector from '@/components/ui/ProjectSelector'
 
 export default function SpellcheckPage() {
   return (
@@ -11,8 +12,8 @@ export default function SpellcheckPage() {
 
       <TwoColumnGrid>
         <Card title="Project">
-          <p className="text-black/60">Select or create a project to run Spellcheck tests.</p>
-          {/* Project selector and URL input will go here in Phase 3 & 6 */}
+          <ProjectSelector />
+          {/* URL input will go here in Phase 6 */}
         </Card>
 
         <Card title="Latest Results">

@@ -1257,11 +1257,16 @@ Setting up your worker hosting platform early ensures the deployment works befor
 
 Go to **Variables** tab and add:
 
+**⚠️ Important**: Variable names differ from Phase 1 because:
+- Next.js uses `NEXT_PUBLIC_` prefix for client-side variables
+- Worker is server-side only (no `NEXT_PUBLIC_` prefix needed)
+- Worker only needs `SERVICE_ROLE_KEY` (not `ANON_KEY`)
+
 ```bash
 # Database (same as main app)
 DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-id.supabase.co:5432/postgres
 
-# Supabase
+# Supabase (note: no NEXT_PUBLIC_ prefix for worker)
 SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 

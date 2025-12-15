@@ -1,0 +1,12 @@
+{
+  "name": "releasepass-worker",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.1",
+    "dotenv": "^16.0.0"
+  }
+}

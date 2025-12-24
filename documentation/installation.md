@@ -4,6 +4,100 @@ This guide will walk you through setting up the ReleasePass platform from scratc
 
 ---
 
+## Release Run Model Changes (December 2025)
+
+> **Important for existing installations**: If you have an existing database, see the [Migration from Previous Schema](#migration-from-previous-schema) section before proceeding.
+
+The ReleasePass platform now uses a **Release Run model** where tests are grouped into cohesive launch candidates. This introduces several schema changes:
+
+### New Tables
+
+| Table | Purpose |
+|-------|---------|
+| `ReleaseRun` | Frozen snapshot representing a single launch candidate. Contains URL list, selected tests, and status (PENDING/READY/FAIL). |
+
+### Modified Tables
+
+| Table | Changes |
+|-------|---------|
+| `TestRun` | Added `releaseRunId` (FK to ReleaseRun, nullable for site-level tests). Updated `type` enum to include `PAGE_PREFLIGHT`. |
+| `Issue` | Added `impact` field (enum: `BLOCKER`, `WARNING`, `INFO`) to determine effect on release readiness. |
+| `ManualTestStatus` | Added `releaseRunId` (FK to ReleaseRun) to scope manual reviews to specific Release Runs. |
+| `IssueProvider` enum | Added `LIGHTHOUSE`, `LINKINATOR`, `CUSTOM_RULE` values for Page Preflight providers. |
+
+### New Enums
+
+| Enum | Values | Purpose |
+|------|--------|---------|
+| `ReleaseRunStatus` | `PENDING`, `READY`, `FAIL` | Release Run readiness status |
+| `IssueImpact` | `BLOCKER`, `WARNING`, `INFO` | Issue effect on release readiness |
+
+### Key Behavioral Changes
+
+- **Release Readiness** is now computed **per Release Run**, not from "latest tests across time"
+- **URLs are frozen** once a Release Run begins execution
+- **Page-level tests** (Page Preflight, Performance, Screenshots, Spelling) belong to Release Runs
+- **Site-level tests** (Site Audit Full Crawl) run independently of Release Runs
+- **BLOCKER issues** cause the Release Run status to be FAIL
+
+---
+
+## Migration from Previous Schema
+
+If you have an existing ReleasePass database from before the Release Run model, follow these steps:
+
+### Step 1: Backup Your Database
+
+```bash
+# Using pg_dump (replace with your connection details)
+pg_dump -h db.your-project-id.supabase.co -U postgres -d postgres > backup_before_release_run.sql
+```
+
+### Step 2: Create Migration File
+
+Create a new migration to add the Release Run model:
+
+```bash
+npx prisma migrate dev --name add_release_run_model
+```
+
+### Step 3: Data Migration Strategy
+
+**Option A: Fresh Start (Recommended for MVP)**
+- If you have minimal test data, simply delete existing TestRun records
+- New tests will be created within Release Runs going forward
+
+**Option B: Migrate Existing Data**
+- Create a ReleaseRun for each unique (projectId, date) combination
+- Update TestRun.releaseRunId to point to the corresponding ReleaseRun
+- Update ManualTestStatus.releaseRunId similarly
+- Set default `impact` values on existing Issues (e.g., map CRITICAL severity to BLOCKER)
+
+```sql
+-- Example: Set default impact based on severity for existing issues
+UPDATE "Issue"
+SET impact = CASE
+  WHEN severity = 'CRITICAL' THEN 'BLOCKER'
+  WHEN severity = 'HIGH' THEN 'WARNING'
+  ELSE 'INFO'
+END
+WHERE impact IS NULL;
+```
+
+### Step 4: Verify Migration
+
+```bash
+npx prisma studio
+```
+
+Check that:
+- ReleaseRun table exists with correct columns
+- TestRun has releaseRunId column
+- Issue has impact column
+- ManualTestStatus has releaseRunId column
+
+---
+
 ## Prerequisites
 
 Before starting, ensure you have:
@@ -192,12 +286,14 @@ Now open `prisma/schema.prisma` and **replace all contents** with the schema fro
 
 `Documentation/platform-technical-setup.md` (section 3)
 
+> **⚠️ Schema Update Required**: The schema below predates the Release Run model. After applying this base schema, you must also apply the Release Run model updates. See [Release Run Model Changes](#release-run-model-changes-december-2024) at the top of this document for the additional tables and fields required.
+
 > **Note for Windows ARM64 Users:**
 > The schema includes `engineType = "binary"` in the generator block for ARM64 Windows compatibility.
 > This setting works on all platforms (x64, ARM64, Mac, Linux) with negligible performance impact.
 > See the comment in the schema for details on reverting when ARM64 support is no longer needed.
 
-Or copy from here:
+**Base schema** (requires Release Run updates - see note above):
 
 ```prisma
 datasource db {
@@ -1116,6 +1212,150 @@ npx prisma studio
 ```
 
 Check that the `Issue` table's `provider` field now includes the three new enum values: LIGHTHOUSE, LINKINATOR, CUSTOM_RULE.
+
+---
+
+## Phase 3.6: Schema Updates for Release Run Model
+
+This phase adds the Release Run model to the database schema. See [Release Run Model Changes](#release-run-model-changes-december-2024) for context.
+
+### Step 1: Update Prisma Schema with New Enums
+
+Edit `prisma/schema.prisma` and add these new enums:
+
+```prisma
+enum ReleaseRunStatus {
+  PENDING
+  READY
+  FAIL
+}
+
+enum IssueImpact {
+  BLOCKER
+  WARNING
+  INFO
+}
+```
+
+Also update the `TestType` enum to include `PAGE_PREFLIGHT`:
+
+```prisma
+enum TestType {
+  PAGE_PREFLIGHT    // ADD THIS - for Page Preflight tests (page-level)
+  SITE_AUDIT        // Keep for Full Site Crawl (site-level, v1.2)
+  PERFORMANCE
+  SCREENSHOTS
+  SPELLING
+}
+```
+
+### Step 2: Add ReleaseRun Model
+
+Add the new `ReleaseRun` model to `prisma/schema.prisma`:
+
+```prisma
+model ReleaseRun {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId     String            @db.Uuid
+  status        ReleaseRunStatus  @default(PENDING)
+  urls          Json              // Frozen array of URLs to test
+  selectedTests Json              // Array of selected page-level test types
+
+  project       Project           @relation(fields: [projectId], references: [id])
+  testRuns      TestRun[]
+  manualStatuses ManualTestStatus[]
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([projectId, status])
+  @@index([createdAt])
+}
+```
+
+### Step 3: Update Existing Models
+
+**Update `Project` model** - add relation to ReleaseRun:
+
+```prisma
+model Project {
+  // ... existing fields ...
+  releaseRuns  ReleaseRun[]      // ADD THIS
+  // ... rest of model ...
+}
+```
+
+**Update `TestRun` model** - add releaseRunId:
+
+```prisma
+model TestRun {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  releaseRunId  String?     @db.Uuid    // ADD THIS - nullable for site-level tests
+  projectId     String      @db.Uuid
+  // ... rest of existing fields ...
+
+  releaseRun    ReleaseRun? @relation(fields: [releaseRunId], references: [id], onDelete: Cascade)  // ADD THIS
+  // ... rest of relations ...
+
+  @@index([releaseRunId])    // ADD THIS
+  // ... rest of indexes ...
+}
+```
+
+**Update `Issue` model** - add impact field:
+
+```prisma
+model Issue {
+  // ... existing fields ...
+  severity  IssueSeverity
+  impact    IssueImpact       // ADD THIS
+  meta      Json?
+  // ... rest of model ...
+}
+```
+
+**Update `ManualTestStatus` model** - add releaseRunId:
+
+```prisma
+model ManualTestStatus {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  releaseRunId    String           @db.Uuid    // ADD THIS
+  projectId       String           @db.Uuid
+  // ... rest of existing fields ...
+
+  releaseRun      ReleaseRun       @relation(fields: [releaseRunId], references: [id], onDelete: Cascade)  // ADD THIS
+  // ... rest of relations ...
+
+  @@index([releaseRunId])    // ADD THIS
+  // ... rest of indexes ...
+}
+```
+
+### Step 4: Create and Apply Migration
+
+```bash
+# From project root
+npx prisma migrate dev --name add_release_run_model
+```
+
+**Expected output:**
+```
+✔ Generated Prisma Client
+✔ Applied migration add_release_run_model
+```
+
+### Step 5: Verify Schema Update
+
+```bash
+# Open Prisma Studio to verify
+npx prisma studio
+```
+
+Check that:
+- `ReleaseRun` table exists with status, urls, selectedTests columns
+- `TestRun` table has `releaseRunId` column
+- `Issue` table has `impact` column
+- `ManualTestStatus` table has `releaseRunId` column
 
 ---
 

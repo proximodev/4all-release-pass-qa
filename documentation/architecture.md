@@ -1,6 +1,6 @@
 # ReleasePass: Architecture & Technical Design
 
-**Last Updated**: December 14, 2024 (Page Preflight MVP)
+**Last Updated**: December 20, 2024 (Release Run Model)
 
 This document describes the technical architecture, design decisions, and implementation patterns for the ReleasePass QA platform.
 
@@ -251,9 +251,24 @@ Database records store the storage keys/paths for screenshots. The app uses sign
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Release Run Model
+
+A **Release Run** is the central unit of release qualification. It represents a single launch candidate tested as a cohesive unit.
+
+**Key characteristics**:
+- Project-scoped container for multiple TestRuns
+- Frozen snapshot of: URL list + selected page-level tests
+- URLs are immutable once execution begins
+- Only page-level tests are included (Site Audit Full Crawl is site-level, not part of Release Runs)
+
+**Release Run Status**:
+- **PENDING**: One or more selected tests not yet completed, or manual review tests not marked PASS
+- **READY**: All selected tests completed, no blockers, manual review tests marked PASS
+- **FAIL**: One or more BLOCKER issues present, or manual review marked FAIL
+
 ### Test Lifecycle
 
-Tests follow this state machine:
+Individual TestRuns within a Release Run follow this state machine:
 
 ```
 QUEUED → RUNNING → (SUCCESS | FAILED | PARTIAL)
@@ -269,34 +284,45 @@ QUEUED → RUNNING → (SUCCESS | FAILED | PARTIAL)
 **IMPORTANT**: `TestRun.status` represents **operational execution status** (whether the worker completed processing), NOT quality assessment.
 
 **Quality Assessment** is stored separately:
-- Site Audit & Performance: `TestRun.score` field (0-100) + configured thresholds
+- Performance: `TestRun.score` field (0-100) + configured thresholds
+- Page Preflight: Issue impact levels (BLOCKER issues cause Release Run FAIL)
 - Screenshots & Spelling: `ManualTestStatus.statusLabel` (PASS/REVIEW/FAIL)
 
 ### Data Flow
 
-**1. User Triggers Test**:
-- UI calls API route: `POST /api/test-runs`
-- API creates TestRun record with `status = QUEUED`
-- API creates TestRunConfig record with scope and URLs (if applicable)
+**1. User Creates Release Run**:
+- UI calls API route: `POST /api/release-runs`
+- API creates ReleaseRun record with `status = PENDING`
+- API stores frozen URL list and selected page-level tests
+- For each selected test type, API creates TestRun record with `status = QUEUED`
+- API creates TestRunConfig records with scope and URLs
 
-**2. Worker Processes Test**:
-- Worker polls for QUEUED runs
+**2. Worker Processes Tests**:
+- Worker polls for QUEUED TestRuns
 - Atomically claims run (updates to RUNNING)
-- Executes providers based on test type and scope:
-  - Site Audit CUSTOM_URLS: Lighthouse + Linkinator + Custom Rules
-  - Site Audit SITEMAP: SE Ranking (v1.2)
+- Executes providers based on test type:
+  - Page Preflight: Lighthouse SEO + Linkinator + Custom Rules
   - Performance: PageSpeed API
   - Screenshots: Playwright
   - Spelling: Playwright + LanguageTool
 - Saves results to UrlResult, Issue, ScreenshotSet tables
-- Calculates score (for Site Audit / Performance)
+- Calculates score (for Performance)
 - Updates TestRun to SUCCESS/FAILED/PARTIAL
-- Sends email notification
+- Updates parent ReleaseRun status based on all TestRuns
+- Sends email notification when Release Run reaches terminal state
 
 **3. User Views Results**:
-- UI fetches TestRun with related data
-- Displays score, issues, screenshots
-- Computes Release Readiness on-demand
+- UI fetches ReleaseRun with related TestRuns and data
+- Displays per-test scores, issues, screenshots
+- Shows Release Run status (PENDING/READY/FAIL) computed from:
+  - All TestRun completion states
+  - Issue impact levels (BLOCKER causes FAIL)
+  - ManualTestStatus entries
+
+**4. User Re-runs Test** (optional):
+- User can re-run any test within the same Release Run
+- New TestRun replaces previous result for that test type
+- Release Run status is recomputed
 
 ### Handling External API Failures
 
@@ -339,14 +365,22 @@ This approach avoids throwing away successful work and provides clear visibility
 
 ### Test Execution Scope
 
-Each test type has different URL selection capabilities:
+Tests are categorized as **page-level** (included in Release Runs) or **site-level** (run independently):
+
+**Page-Level Tests (Part of Release Runs)**:
 
 | Test Type | Supported Scopes | Notes |
 |-----------|------------------|-------|
-| Site Audit | CUSTOM_URLS (MVP), SITEMAP (v1.2) | Page Preflight: max 50 URLs. Full Site Crawl: max 500 pages, same subdomain only |
-| Performance | SINGLE_URL, CUSTOM_URLS, SITEMAP | Full Site mode limited to 20 URLs to avoid excessive API usage |
+| Page Preflight | CUSTOM_URLS | Lighthouse SEO + Linkinator + Custom Rules. Max 50 URLs per Release Run |
+| Performance | SINGLE_URL, CUSTOM_URLS, SITEMAP | Limited to 20 URLs to avoid excessive API usage |
 | Screenshots | CUSTOM_URLS | Fixed 4 viewports: Desktop Chrome/Safari 1440px, Tablet iOS 768px, Mobile iOS 375px |
 | Spelling | CUSTOM_URLS | Playwright extracts text from rendered pages |
+
+**Site-Level Tests (NOT part of Release Runs)**:
+
+| Test Type | Supported Scopes | Notes |
+|-----------|------------------|-------|
+| Site Audit (Full Crawl) | SITEMAP | SE Ranking API (v1.2). Max 500 pages, same subdomain only |
 
 > See `functional-spec.md` for detailed per-test-type URL selection rules.
 
@@ -394,30 +428,37 @@ Each test type has different URL selection capabilities:
 
 ### Release Readiness Computation
 
-**Decision**: Release Readiness is **computed at runtime, never stored**.
+**Decision**: Release Readiness is **computed per Release Run, not across unrelated test timestamps**.
 
 **Rationale**:
-- Always reflects latest test data
-- No risk of stale cached values
-- Simpler implementation
+- Answers "Is *this release* ready?" not "What do our latest tests say?"
+- All tests within a Release Run share the same frozen URL set
+- Re-running a test updates results within the same Release Run context
+- Clear pass/fail semantics tied to a specific launch candidate
 
-**Implementation**: Query latest TestRun per type + ManualTestStatus on-demand when UI needs it.
+**Implementation**:
+- Query all TestRuns within the Release Run
+- Check for BLOCKER issues (cause FAIL status)
+- Check ManualTestStatus entries for manual review tests
+- Derive Release Run status: PENDING (tests incomplete), READY (all pass), FAIL (blockers present)
 
 ### Data Retention Strategy
 
-**Decision**: Keep current + previous run per test type per project.
+**Decision**: Keep current + previous Release Run per project.
 
 **Rationale**:
-- Supports visual diffs (compare current vs previous screenshots)
+- Supports visual diffs (compare current vs previous screenshots within Release Runs)
 - Keeps database size manageable
 - Provides enough history for trend analysis
+- Release Runs are the atomic unit of retention (all tests within a Release Run are retained together)
 
 **Implementation**:
-- Test history: Two most recent TestRun rows per (projectId, type)
-- Screenshots: Current + previous ScreenshotSet rows only
-- Raw API payloads: Two most recent per type keep rawPayload populated
-- Worker enforces retention after each test completion
-- Delete older TestRuns and all related UrlResult, Issue, ScreenshotSet rows
+- Release Runs: Two most recent ReleaseRun rows per project
+- Test history: All TestRuns within retained Release Runs (current result per test type)
+- Screenshots: Current + previous ScreenshotSet rows within retained Release Runs
+- Raw API payloads: Two most recent per test type
+- Worker enforces retention after each Release Run completion
+- Delete older ReleaseRuns and all related TestRun, UrlResult, Issue, ScreenshotSet rows
 
 ---
 
@@ -724,48 +765,65 @@ export const SCREENSHOT_VIEWPORTS = [
 ```typescript
 // lib/release-readiness.ts
 import { prisma } from '@/lib/prisma';
-import { TestType, TestStatus, ManualTestType } from '@prisma/client';
+import { ReleaseRunStatus, TestStatus, ManualTestType, IssueImpact } from '@prisma/client';
 
-export async function getReleaseReadiness(projectId: string) {
-  // Get latest completed run per test type
-  const runs = await prisma.testRun.groupBy({
-    by: ['type'],
-    where: {
-      projectId,
-      status: { in: [TestStatus.SUCCESS, TestStatus.FAILED, TestStatus.PARTIAL] },
-    },
-    _max: { createdAt: true },
-  });
-
-  const latestRuns = await prisma.testRun.findMany({
-    where: {
-      projectId,
-      OR: runs.map((r) => ({
-        type: r.type,
-        createdAt: r._max.createdAt!,
-      })),
-    },
+export async function getReleaseRunStatus(releaseRunId: string): Promise<ReleaseRunStatus> {
+  // Get the Release Run with all related TestRuns
+  const releaseRun = await prisma.releaseRun.findUnique({
+    where: { id: releaseRunId },
     include: {
-      urlResults: true,
-      issues: true,
+      testRuns: {
+        include: {
+          issues: true,
+        },
+      },
     },
   });
 
-  // Get manual test statuses
+  if (!releaseRun) throw new Error('Release Run not found');
+
+  // Check if any tests are still incomplete
+  const incompleteTests = releaseRun.testRuns.filter(
+    (run) => run.status === TestStatus.QUEUED || run.status === TestStatus.RUNNING
+  );
+  if (incompleteTests.length > 0) {
+    return ReleaseRunStatus.PENDING;
+  }
+
+  // Check for BLOCKER issues (causes FAIL)
+  const hasBlockers = releaseRun.testRuns.some((run) =>
+    run.issues.some((issue) => issue.impact === IssueImpact.BLOCKER)
+  );
+  if (hasBlockers) {
+    return ReleaseRunStatus.FAIL;
+  }
+
+  // Check manual test statuses (Screenshots, Spelling)
   const manualStatuses = await prisma.manualTestStatus.findMany({
     where: {
-      projectId,
+      releaseRunId,
       testType: { in: [ManualTestType.SCREENSHOTS, ManualTestType.SPELLING] },
     },
-    orderBy: { updatedAt: 'desc' },
   });
 
-  // Map to readiness model (numeric scores + manual labels + colors)
-  return buildReadinessObject(latestRuns, manualStatuses);
+  // If any manual test is FAIL, Release Run is FAIL
+  if (manualStatuses.some((s) => s.statusLabel === 'FAIL')) {
+    return ReleaseRunStatus.FAIL;
+  }
+
+  // If any manual test is not yet PASS (still REVIEW or missing), Release Run is PENDING
+  const requiredManualTests = [ManualTestType.SCREENSHOTS, ManualTestType.SPELLING];
+  const passedManualTests = manualStatuses.filter((s) => s.statusLabel === 'PASS');
+  if (passedManualTests.length < requiredManualTests.length) {
+    return ReleaseRunStatus.PENDING;
+  }
+
+  // All tests complete, no blockers, all manual tests passed
+  return ReleaseRunStatus.READY;
 }
 ```
 
-Key rule: Never persist Release Readiness; recompute whenever UI needs it or test completes.
+Key rule: Release Readiness is computed **per Release Run**, not from "latest tests across time".
 
 ### Basic API Route Examples
 
@@ -844,12 +902,13 @@ See `prisma/schema.prisma` for complete schema. Key entities:
 - **Company** - Future multi-tenant support (placeholder only, not exposed in MVP)
 - **Project** - Sites being tested (name, siteUrl, sitemapUrl, notes)
 - **User** - Links to Supabase Auth via `supabaseUserId`, stores role metadata
-- **TestRun** - Test execution records with lifecycle states, score (0-100), lastHeartbeat for stuck run detection
+- **ReleaseRun** - A frozen snapshot representing a single launch candidate; contains URL list, selected tests, and status (PENDING/READY/FAIL)
+- **TestRun** - Test execution records within a Release Run; has lifecycle states (QUEUED/RUNNING/SUCCESS/FAILED/PARTIAL), score (0-100), lastHeartbeat for stuck run detection
 - **TestRunConfig** - Stores URL selection for each test run (scope: CUSTOM_URLS, SITEMAP, or SINGLE_URL)
 - **UrlResult** - Per-URL metrics (Core Web Vitals, scores, issue counts, viewport)
-- **Issue** - Normalized issues from all test providers
+- **Issue** - Normalized issues from all test providers with impact level (BLOCKER, WARNING, INFO)
 - **ScreenshotSet** - Screenshot metadata and storage keys
-- **ManualTestStatus** - User-entered pass/fail/review statuses (no history in MVP)
+- **ManualTestStatus** - User-entered pass/fail/review statuses per Release Run (no history in MVP)
 
 ### Schema Management
 
@@ -974,9 +1033,10 @@ See `prisma/schema.prisma` for complete schema. Key entities:
 ### Other
 
 8. **Spelling text extraction**: Needs refinement during implementation to filter navigation/boilerplate
-9. **Foreign key cascades**: All child tables (UrlResult, Issue, ScreenshotSet) have `ON DELETE CASCADE` when parent TestRun is deleted
-10. **TestRun deletion triggers retention cleanup**: When new test completes, immediately prune old TestRuns and related data
-11. **Release Readiness is always computed**, never stored. Query latest TestRun per type + ManualTestStatus on-demand
+9. **Foreign key cascades**: All child tables (UrlResult, Issue, ScreenshotSet) have `ON DELETE CASCADE` when parent TestRun is deleted. ReleaseRun deletion cascades to all child TestRuns.
+10. **ReleaseRun deletion triggers retention cleanup**: When new Release Run completes, immediately prune old Release Runs and all related data
+11. **Release Readiness is computed per Release Run**, not from "latest tests across time". Query all TestRuns within the Release Run + ManualTestStatus entries.
+12. **URLs are frozen per Release Run**: Once a Release Run begins execution, its URL list cannot be modified. Re-runs use the same frozen URLs.
 
 ---
 
@@ -1039,3 +1099,4 @@ All key architectural questions have been resolved:
 - **Functional Requirements**: See `functional-spec.md`
 - **Implementation Plan**: See `mvp-implementation-plan.md`
 - **Prisma Schema**: See `prisma/schema.prisma`
+- **Release Run Model Changes**: See `RELEASE-PASS-CHANGES.MD`

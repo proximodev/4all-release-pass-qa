@@ -11,14 +11,15 @@ We will combine SEO technical health, performance, visual QA, and grammar checks
   * Password protected web interface
   * User management
   * Project data model and management
-  * Test datamodel with history
-  * Readiness score datamodel
-  * QA Tests
-    * Site Audit - Page Preflight Mode (PageSpeed Lighthouse SEO + Linkinator + Custom Rules)
+  * **Release Run model** — frozen URL snapshots tested as cohesive launch candidates
+  * Test datamodel with history (scoped to Release Runs)
+  * Readiness score per Release Run (PENDING / READY / FAIL)
+  * QA Tests (Page-Level, part of Release Runs):
+    * Page Preflight (PageSpeed Lighthouse SEO + Linkinator + Custom Rules)
     * Performance (PageSpeed Core Web Vitals)
     * Screenshots (Playwright)
     * Spelling/Grammar (LanguageTool)
-  * Note: Site Audit Full Site Crawl Mode (SE Ranking) deferred to V1.2
+  * Note: Site Audit Full Site Crawl Mode (SE Ranking) is site-level, NOT part of Release Runs, deferred to V1.2
 * **V1.2**:
   * Visual diffs for regression detection
   * Baseline screenshot selection mechanism (TBD)
@@ -56,17 +57,26 @@ Persistent brand bar appears across the platform with the following navigation:
 ## QA Tools Workspace
 
 ### General
-Tabs include Site Audit, Performance, Browser Test, and Spellcheck. Each tab has:
-- Left panel: project info, inputs, and Start Test button.
-- Right panel: latest results summary, history preview, and link to full results.
+Primary navigation is organized around **Release Runs** — the unit of release qualification.
+
+- **Release Run List**: Shows all Release Runs for the selected project with status (PENDING/READY/FAIL)
+- **Release Run Detail View**: Primary workspace showing all tests within a Release Run
+- Test tabs include Page Preflight, Performance, Screenshots, and Spellcheck
+- Each test shows results within the context of the current Release Run
 
 ### Project Selection
-A project selector (display in left panel) that allows switching projects or creating new ones.
-- Selecting a project loads latest test results and updates Release Readiness.
-- Adding a new projects directs user to Project > Add Project
+A project selector that allows switching projects or creating new ones.
+- Selecting a project loads the list of Release Runs for that project
+- The most recent Release Run is shown by default
+- Adding a new project directs user to Project > Add Project
 
 ### Release Readiness
-Displayed top-right. Shows per-test score or status with color coding. Updates after test completion.
+Displayed per Release Run. Shows status (PENDING/READY/FAIL) with color coding.
+- **PENDING**: Tests incomplete or manual reviews not yet marked PASS
+- **READY**: All tests complete, no blockers, all manual reviews PASS
+- **FAIL**: BLOCKER issues present or manual review marked FAIL
+
+Updates in real-time as tests complete within the Release Run.
 
 ### Test Results Views
 Each test type has a full results page with detailed metrics, issues, screenshots, or manual status controls.
@@ -95,59 +105,93 @@ Empty states, no tests yet, partial failures, and manual review indicators are c
   * Primary site URL
   * Optional sitemap URL
   * Notes
-* Supported test types:
-  * Site Audit - automated with numeric score (Page Preflight: Lighthouse + Linkinator + Custom Rules)
+* **Release Run model**:
+  * A Release Run represents a single launch candidate tested as a cohesive unit
+  * Contains a frozen URL list and selected page-level tests
+  * URLs are immutable once execution begins
+  * Release Run status: PENDING → READY or FAIL
+* Supported test types (page-level, part of Release Runs):
+  * Page Preflight - automated with pass/fail based on issue impact (Lighthouse SEO + Linkinator + Custom Rules)
   * Performance - automated with numeric score (PageSpeed)
   * Screenshots - automated capture with manual status review
   * Spelling/Grammar - automated detection with manual status review
+* Site-level tests (NOT part of Release Runs):
+  * Site Audit Full Crawl - automated with numeric score (SE Ranking, v1.2)
 * Test history retention:
-  * Current + previous run per test type
-  * Screenshots: current + previous only
+  * Current + previous Release Run per project
+  * All TestRuns within retained Release Runs
+  * Screenshots: current + previous only within retained Release Runs
   * Raw API payloads: two most recent per test type
-* Test lifecycle:
+* TestRun lifecycle (within a Release Run):
   * QUEUED → RUNNING → SUCCESS / FAILED / PARTIAL
   * **IMPORTANT**: `TestRun.status` represents the **operational execution status** of the test run itself (whether the worker successfully completed processing), NOT the quality assessment of the test results.
   * Quality assessment for Screenshots and Spelling is stored separately in `ManualTestStatus` (PASS / REVIEW / FAIL).
-  * For Site Audit and Performance, quality is determined by the numeric `score` field combined with configured thresholds.
+  * For Performance, quality is determined by the numeric `score` field combined with configured thresholds.
+  * For Page Preflight, quality is determined by issue impact levels (BLOCKER issues cause Release Run FAIL).
 * Partial test success must be supported.
 * Background worker:
   * Atomic job locking
   * Retries for transient errors
   * Dead-letter after repeated failures
-  * Enforces retention rules
+  * Enforces retention rules (scoped to Release Runs)
+  * Updates Release Run status after TestRun completion
 * User management (admin only)
-* Email notifications for completed test runs
-* UI provides dashboards for running tests, browsing results, and reviewing issues
+* Email notifications for completed Release Runs
+* UI provides dashboards for managing Release Runs, running tests, browsing results, and reviewing issues
 * Utilities rewritten and integrated:
   * Bulk Performance
   * HTML Cleaner
   * Bullshit Tester
 
 ## Release Readiness
-Each project must display a Release Readiness summary based on the latest test runs.
 
-**Test scoring model:**
-* **Site Audit** — numeric score (0-100) from Page Preflight (aggregated from Lighthouse SEO + Linkinator + Custom Rules issues)
-  - MVP: Page Preflight mode for custom URLs
-  - Future: SE Ranking for full site crawls
+Release Readiness is computed **per Release Run**, not from "latest tests across time". The key question is: "Is *this release* ready?"
+
+### Release Run Model
+
+A **Release Run** represents a single launch candidate tested as a cohesive unit:
+- Project-scoped container for multiple TestRuns
+- Frozen snapshot of: URL list + selected page-level tests
+- URLs are immutable once execution begins
+- Only page-level tests are included (Site Audit Full Crawl is site-level, not part of Release Runs)
+
+### Release Run Status
+
+* **PENDING** — One or more tests not yet completed, or manual review tests not marked PASS
+* **READY** — All tests completed, no BLOCKER issues, all manual reviews marked PASS
+* **FAIL** — One or more BLOCKER issues present, or manual review marked FAIL
+
+### Test Scoring Model
+
+**Page-Level Tests (Part of Release Runs):**
+* **Page Preflight** — pass/fail based on issue impact levels (BLOCKER issues cause FAIL)
 * **Performance** — numeric score (0-100) averaged across tested URLs (mobile + desktop)
 * **Screenshots** — manual status (Pass / Needs Review / Fail)
 * **Spelling/Grammar** — manual status (Pass / Needs Review / Fail)
 
-**Each test contributes either:**
-* A numeric score
-* OR a manual status label
+**Site-Level Tests (NOT part of Release Runs):**
+* **Site Audit (Full Crawl)** — numeric score (0-100) from SE Ranking (v1.2)
 
-**Color mapping:**
-* Green — Passing
-* Yellow — Moderate concern
-* Red — Failing
-* Grey (Review) — Not reviewed or needs manual verification
+### Issue Impact Levels
 
-**Behavior:**
-* Recomputed whenever any test run completes
-* Not stored as a physical table; derived dynamically
-* Only current readiness state is shown in MVP
+Issues include an `impact` field that determines their effect on release readiness:
+* **BLOCKER** — Prevents release readiness (causes Release Run status = FAIL)
+* **WARNING** — Flagged for attention but does not block release
+* **INFO** — Informational only, no effect on readiness
+
+### Color Mapping
+
+* Green — Passing / READY
+* Yellow — Moderate concern / WARNING issues present
+* Red — Failing / FAIL
+* Grey — Not reviewed or needs manual verification / PENDING
+
+### Behavior
+
+* Computed per Release Run (not across unrelated test timestamps)
+* Status updates in real-time as tests complete within the Release Run
+* Re-running a test updates results within the same Release Run
+* Not stored as a physical table; derived dynamically from TestRuns and ManualTestStatus
 
 ## Data Schema
 General rules:
@@ -172,6 +216,17 @@ General rules:
   * createdAt — datetime
   * updatedAt — datetime
 
+* ReleaseRun
+  * id — UUID
+  * projectId — UUID (FK to Projects.id)
+  * status — enum (`PENDING`, `READY`, `FAIL`)
+  * urls — JSON (frozen array of URLs to test)
+  * selectedTests — JSON (array of selected page-level test types)
+  * createdAt — datetime
+  * updatedAt — datetime
+
+  ReleaseRun represents a single launch candidate tested as a cohesive unit. URLs are frozen once execution begins and cannot be modified. All TestRuns within a ReleaseRun share the same URL set.
+
 * Users
   * id — UUID
   * email — string (unique)
@@ -186,15 +241,20 @@ General rules:
 
 * TestRun
   * id — UUID
+  * releaseRunId — UUID (FK to ReleaseRun.id; nullable for site-level tests)
   * projectId — UUID (FK to Projects.id)
-  * type — enum (`SITE_AUDIT`, `PERFORMANCE`, `SCREENSHOTS`, `SPELLING`)
+  * type — enum (`PAGE_PREFLIGHT`, `PERFORMANCE`, `SCREENSHOTS`, `SPELLING`, `SITE_AUDIT`)
   * status — enum (`QUEUED`, `RUNNING`, `SUCCESS`, `FAILED`, `PARTIAL`)
+  * score — integer (nullable; 0-100 for Performance tests)
   * startedAt — datetime (nullable until run starts)
   * finishedAt — datetime (nullable until run finishes)
+  * lastHeartbeat — datetime (nullable; updated by worker during processing)
   * rawPayload — JSON (raw API response for debugging; current run only)
   * error — text (nullable; error message or summary if failed/partial)
   * createdAt — datetime
   * updatedAt — datetime
+
+  TestRun belongs to a ReleaseRun for page-level tests. Multiple TestRuns of the same type may exist within a ReleaseRun; only the latest per type is considered "current". Re-running a test creates a new TestRun within the same ReleaseRun.
 
 * UrlResult
   * id — UUID
@@ -218,11 +278,17 @@ General rules:
   * code — string (normalized issue code, e.g. `LIGHTHOUSE_NO_TITLE`, `LINK_BROKEN_INTERNAL`, `MISSING_OG_IMAGE`, `SPELLING_ERROR`)
   * summary — string (short human-readable description)
   * severity — string/enum (e.g., `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
+  * impact — enum (`BLOCKER`, `WARNING`, `INFO`)
   * meta — JSON (nullable; additional context such as selectors, offsets, raw messages)
   * createdAt — datetime
   * updatedAt — datetime
 
-  Issue is a generic issue table used across test types (Site Audit, Spelling, possible future tools).
+  Issue is a generic issue table used across test types (Page Preflight, Spelling, possible future tools).
+
+  **Impact vs Severity**: `severity` indicates the technical severity of the issue. `impact` determines the effect on release readiness:
+  * **BLOCKER** — Prevents release readiness (causes Release Run status = FAIL)
+  * **WARNING** — Flagged for attention but does not block release
+  * **INFO** — Informational only, no effect on readiness
 
   **MVP Providers**: LIGHTHOUSE (PageSpeed SEO), LINKINATOR (link checking), CUSTOM_RULE (custom validation rules), LANGUAGETOOL (spelling/grammar).
 
@@ -243,6 +309,7 @@ General rules:
 
 * ManualTestStatus
   * id — UUID
+  * releaseRunId — UUID (FK to ReleaseRun.id)
   * projectId — UUID (FK to Projects.id)
   * testType — enum (`SCREENSHOTS`, `SPELLING`)
   * statusLabel — enum (`PASS`, `REVIEW`, `FAIL`)
@@ -250,13 +317,14 @@ General rules:
   * createdAt — datetime
   * updatedAt — datetime
 
-  ManualTestStatus stores user-entered status decisions for tests that do not have a numeric score (Screenshots and Spelling/Grammar). Release Readiness uses these statuses in combination with the latest TestRun data for each test type.
+  ManualTestStatus stores user-entered status decisions for tests that do not have a numeric score (Screenshots and Spelling/Grammar). These statuses are scoped to a specific Release Run and contribute to that Release Run's readiness status.
 
-  **MVP Note**: Only the current status is stored; updates overwrite the previous status. Change history/audit trail will be added in v1.5.
+  **MVP Note**: Only the current status is stored per Release Run; updates overwrite the previous status. Change history/audit trail will be added in v1.5.
 
-Release Readiness itself is a derived object computed at runtime from:
-* The most recent TestRun per test type for the selected Project, and
-* Any corresponding ManualTestStatus entries.
+Release Readiness itself is a derived object computed at runtime **per Release Run** from:
+* All TestRuns within the Release Run, and
+* Issue impact levels (BLOCKER issues cause FAIL), and
+* ManualTestStatus entries for that Release Run.
 
 No dedicated `Readiness` table is required in MVP.
 
@@ -264,36 +332,35 @@ No dedicated `Readiness` table is required in MVP.
 
 ### Test Execution Scope & URL Selection
 
-Each test type has different URL selection capabilities based on its purpose:
+Tests are categorized as **page-level** (included in Release Runs) or **site-level** (run independently).
 
-**Site Audit**:
-- **Scope**: Two modes based on use case
-- **Configuration Options**:
-  - **Page Preflight Mode (CUSTOM_URLS)**: User-selected URL list for pre-deployment validation
-    - Uses PageSpeed Insights API (Lighthouse SEO audits)
-    - Uses Linkinator for link validation (internal, external, resources)
-    - Uses custom rules plugin system for extensible checks
-    - Maximum 50 URLs per run in MVP
-  - **Full Site Crawl Mode (SITEMAP)**: Comprehensive site-wide audit (future implementation)
-    - Automatically discovers and crawls all URLs from project's `sitemapUrl`
-    - Uses SE Ranking Website Audit API
-    - Maximum 500 pages per run
-    - Same-subdomain rule (won't crawl external subdomains)
+**IMPORTANT**: For page-level tests within a Release Run, URLs are **frozen** once the Release Run begins execution. All tests in the Release Run share the same URL set.
+
+#### Page-Level Tests (Part of Release Runs)
+
+**Page Preflight**:
+- **Scope**: User-selected URL list (frozen per Release Run)
+- **Configuration**: User pastes 1 or more specific URLs when creating a Release Run
+- **Providers**:
+  - PageSpeed Insights API (Lighthouse SEO audits) — binary pass/fail checks
+  - Linkinator for link validation (internal, external, resources)
+  - Custom rules plugin system for extensible checks
+- **Maximum**: 50 URLs per Release Run in MVP
 - **JavaScript rendering**: Not supported in MVP (static HTML only)
 - **Authentication**: Not supported in MVP (public URLs only)
 
 **Performance**:
-- **Scope**: User-selectable — either custom URL list OR sitemap-based
+- **Scope**: Uses frozen URL list from Release Run, or sitemap-based selection
 - **Configuration Options**:
-  - **Pages Mode**: User pastes 1 or more specific URLs in the UI (textarea, one per line)
+  - **Pages Mode**: Uses URLs from the Release Run's frozen URL list
   - **Full Site Mode**: Tests URLs from sitemap with a limit of 20 URLs for MVP (to manage API quotas and execution time)
 - **Tests per URL**: Each URL is tested for both mobile and desktop viewports
 - **Field data**: Uses lab metrics only (CrUX field data may not be available for all URLs, especially staging sites)
-- **Scoring**: MVP uses **average performance score** across all tested URLs for Release Readiness computation
+- **Scoring**: MVP uses **average performance score** across all tested URLs
 
 **Screenshots**:
-- **Scope**: Custom URL list only
-- **Configuration**: User pastes 1 or more specific URLs in the UI
+- **Scope**: Uses frozen URL list from Release Run
+- **Configuration**: URLs come from the Release Run's frozen URL list
 - **Viewport matrix** (MVP fixed configuration):
   - Desktop / Chrome (1440px width)
   - Desktop / Safari (1440px width)
@@ -303,21 +370,30 @@ Each test type has different URL selection capabilities based on its purpose:
 - **Authentication**: Not supported in MVP
 
 **Spelling/Grammar**:
-- **Scope**: Custom URL list only
-- **Configuration**: User pastes 1 or more specific URLs in the UI
+- **Scope**: Uses frozen URL list from Release Run
+- **Configuration**: URLs come from the Release Run's frozen URL list
 - **Text extraction**: Uses Playwright to render page and extract visible text from final DOM
 - **Content filtering**: Extracts text content only; filters out navigation, hidden elements (subject to refinement during implementation)
 - **Batching**: Large pages split into batches for LanguageTool API (max batch size TBD based on API limits)
 - **JavaScript rendering**: Supported (Playwright waits for page load)
 - **Authentication**: Not supported in MVP
 
-### Site Audit
-* Purpose: Catch SEO and UX-breaking defects early with pre-deployment page validation or comprehensive site-wide audits
-* Two modes:
-  * **Page Preflight (CUSTOM_URLS)** - MVP Implementation
-  * **Full Site Crawl (SITEMAP)** - Future
+#### Site-Level Tests (NOT part of Release Runs)
 
-#### Page Preflight Mode (CUSTOM_URLS) - MVP
+**Site Audit (Full Site Crawl)** — Future implementation (v1.2):
+- **Scope**: Comprehensive site-wide audit
+- **Configuration**: Automatically discovers and crawls all URLs from project's `sitemapUrl`
+- **Provider**: SE Ranking Website Audit API
+- **Maximum**: 500 pages per run
+- **Same-subdomain rule**: Won't crawl external subdomains
+- **Note**: This is a site-level test that runs independently of Release Runs
+
+### Page Preflight (Page-Level, Part of Release Runs)
+* Purpose: Catch SEO and UX-breaking defects early with pre-deployment page validation
+* Part of Release Runs with frozen URL lists
+* Uses Lighthouse SEO for binary pass/fail checks (no element counts or granular diagnostics)
+
+#### Components
 
 **Provider 1: PageSpeed Insights API (Lighthouse SEO)**
 * API: Google PageSpeed Insights API v5
@@ -372,9 +448,11 @@ Each test type has different URL selection capabilities based on its purpose:
 * Normalized by URL count (more URLs = proportionally more tolerance)
 * Final score: 0-100
 
-#### Full Site Crawl Mode (SITEMAP) - Future Implementation
+### Site Audit Full Crawl (Site-Level, NOT Part of Release Runs) - Future v1.2
 
 **Provider: SE Ranking Website Audit API**
+
+> **Note**: This is a site-level test that runs independently of Release Runs. It provides comprehensive site-wide auditing but is not part of the release qualification workflow.
 * Documentation: https://seranking.com/api/data/website-audit/
 * Scope:
   Security (8 checks)
@@ -514,8 +592,9 @@ Each test type has different URL selection capabilities based on its purpose:
 * X (ex-Twitter) Card tag missing
 * Use of incompatible plugins
 
-#### Performance
+### Performance (Page-Level, Part of Release Runs)
 * Purpose: Keep Core Web Vitals (LCP, CLS, INP) in green and prevent regressions.
+* Part of Release Runs with frozen URL lists
 * Solution:
   * Google PageSpeed Insights API v5 – lab \+ field data
 * Documentation:
@@ -523,12 +602,14 @@ Each test type has different URL selection capabilities based on its purpose:
 * Cost:
   * Free for current usage
 * Scope:
-  * Lab metrics (synthetic Lighthouse)  
+  * Lab metrics (synthetic Lighthouse)
     Field metrics (CrUX)
   * Lighthouse a11y
 
-### Screenshots
+### Screenshots (Page-Level, Part of Release Runs)
 * Purpose: Capture high-fidelity screenshots across devices/browsers for rendering verification.
+* Part of Release Runs with frozen URL lists
+* Manual review required (PASS / REVIEW / FAIL)
 * Solution:
   * Playwright scripted captures
 * Documentation
@@ -539,19 +620,21 @@ Each test type has different URL selection capabilities based on its purpose:
 * Scope:
   * Device/viewport matrix (mobile breakpoints included)
   * Full-page \+ above-the-fold options
-  * Targeted page set
+  * Targeted page set from Release Run's frozen URL list
 * Output:
   * Stored images in S3-compatible storage, linked in dashboard.
 
-### Spelling 
+### Spelling (Page-Level, Part of Release Runs)
 * Purpose: Detect spelling and contextual grammar issues in rendered text.
+* Part of Release Runs with frozen URL lists
+* Manual review required (PASS / REVIEW / FAIL)
 * Solution:
   * Language Tool API
 * Documentation
   * https://languagetool.org/
   * https://languagetool.org/http-api/
 * Scope:
-  * Extract visible page text, send in batches
+  * Extract visible page text from Release Run's frozen URL list, send in batches
   * Return flagged issues and normalized suggestions.
 
 ## Version 1.2

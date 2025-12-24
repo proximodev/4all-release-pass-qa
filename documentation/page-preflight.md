@@ -42,7 +42,7 @@ Displayed at the top of the results page.
 - Allow fast comparison between runs
 
 ---
-
+R
 ## 3. URL Selector (Primary Navigation)
 
 Because Page Preflight may run against multiple URLs, results must be navigated **per URL**.

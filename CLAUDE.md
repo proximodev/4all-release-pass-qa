@@ -53,12 +53,13 @@ See `Documentation/platform-technical-setup.md` section 3 for the complete Prism
 - `Company` - Future multi-tenant support (not exposed in MVP)
 - `Project` - Sites being tested (name, siteUrl, sitemapUrl, notes)
 - `User` - Links to Supabase Auth, stores role metadata
-- `TestRun` - Test execution records with lifecycle states, score (0-100), and lastHeartbeat for stuck run detection
+- `ReleaseRun` - A frozen snapshot representing a single launch candidate (see Release Run Model below)
+- `TestRun` - Test execution records with lifecycle states, score (0-100), and lastHeartbeat for stuck run detection; belongs to a ReleaseRun
 - `TestRunConfig` - Stores URL selection for each test run (scope: CUSTOM_URLS, SITEMAP, or SINGLE_URL)
 - `UrlResult` - Per-URL metrics (Core Web Vitals, scores, issue counts, viewport)
-- `Issue` - Normalized issues from all test providers
+- `Issue` - Normalized issues from all test providers with impact level (BLOCKER, WARNING, INFO)
 - `ScreenshotSet` - Screenshot metadata and storage keys
-- `ManualTestStatus` - User-entered pass/fail/review statuses (no history in MVP)
+- `ManualTestStatus` - User-entered pass/fail/review statuses per Release Run (no history in MVP)
 
 ### Test Lifecycle
 
@@ -79,31 +80,73 @@ QUEUED → RUNNING → (SUCCESS | FAILED | PARTIAL)
 
 ### Test Execution Scope
 
-Each test type has different URL selection capabilities:
+Tests are categorized as **page-level** (included in Release Runs) or **site-level** (run independently):
 
-- **Site Audit**: Full sitemap crawl (max 500 pages, same subdomain only)
-- **Performance**: User-selectable (custom URL list OR sitemap with 20-URL limit in MVP)
+**Page-Level Tests (Part of Release Runs):**
+- **Page Preflight**: Lighthouse SEO checks + Custom Rules + Linkinator (see Page Preflight Tests below)
+- **Performance**: User-selectable URLs (custom list OR sitemap with 20-URL limit in MVP)
 - **Screenshots**: Custom URL list only (4 fixed viewports: Desktop Chrome/Safari 1440px, Tablet iOS Safari 768px, Mobile iOS Safari 375px)
 - **Spelling**: Custom URL list only (Playwright extracts text from rendered pages)
+
+**Site-Level Tests (NOT part of Release Runs):**
+- **Site Audit**: Full sitemap crawl (max 500 pages, same subdomain only) via SE Ranking
+
+### Issue Impact Levels
+
+All issues stored in the `Issue` table include an `impact` field that determines their effect on release readiness:
+
+- **BLOCKER**: Prevents release readiness (causes Release Run status = FAIL)
+- **WARNING**: Flagged for attention but does not block release
+- **INFO**: Informational only, no effect on readiness
+
+The `impact` level is distinct from the `provider` (source of the issue). Impact determines release relevance, while provider identifies the test that detected it.
 
 ### Data Retention Rules
 
 The worker enforces these retention policies:
 
-- **Test history**: Keep current + previous run per test type per project
+- **Release Runs**: Keep current + previous Release Run per project
+- **Test history**: Keep current + previous run per test type within each retained Release Run
 - **Screenshots**: Current + previous only
 - **Raw API payloads**: Two most recent per test type
-- Older data is pruned after new test completion
+- Older data is pruned after new Release Run completion
+
+### Release Run Model
+
+A **Release Run** is the central unit of release qualification. It represents a single launch candidate tested as a cohesive unit.
+
+**Key characteristics:**
+- Project-scoped container for multiple test runs
+- Frozen snapshot of: URL list + selected page-level tests
+- URLs are immutable once execution begins
+- Default test set includes all page-level tests
+- Only page-level tests are included (Site Audit is site-level, not part of Release Runs)
+
+**Release Run Status:**
+- **PENDING**: One or more selected tests not yet completed, or manual review tests not marked PASS
+- **READY**: All selected tests completed, no blockers, manual review tests marked PASS
+- **FAIL**: One or more blockers present, or manual review marked FAIL
+
+**TestRun relationship:**
+- TestRuns belong to a Release Run
+- Multiple TestRuns of the same type may exist within a Release Run
+- Only the latest per type is considered "current"
+- Re-running a test replaces its result within the same Release Run
 
 ### Release Readiness
 
-Release Readiness is **computed at runtime, not stored**. For each project, it's derived from:
+Release Readiness is **computed per Release Run, not across time**. The key question is: "Is *this release* ready?" — not "What do our latest tests say?"
 
-1. Latest completed `TestRun` per `TestType`
-2. `ManualTestStatus` entries for manual review tests
+For each Release Run, readiness is derived from:
+
+1. Status of all TestRuns within that Release Run
+2. `ManualTestStatus` entries for manual review tests (Screenshots, Spelling)
+3. Issue impact levels (BLOCKER issues cause FAIL status)
 
 Each test contributes either:
-- A numeric score (Site Audit, Performance)
+- A numeric score with pass/fail threshold (Performance)
+- A pass/fail checklist (Page Preflight via Lighthouse SEO + Custom Rules)
+- Itemized issues (Linkinator for link/resource health)
 - A manual status label (Screenshots, Spelling: PASS / REVIEW / FAIL)
 
 Color mapping: Green (passing), Yellow (moderate concern), Red (failing), Grey (needs review)
@@ -181,22 +224,42 @@ EMAIL_FROM=qa-bot@example.com
 
 ## QA Test Providers
 
-### Site Audit
+### Page Preflight (Page-Level)
+
+Page Preflight combines three components for launch-critical page validation:
+
+**Lighthouse SEO**
+- **Purpose**: Binary validation checks only (pass/fail)
+- **Scope**: SEO best practices as a checklist
+- **Note**: No element counts, selectors, or granular diagnostics — results are presented as a checklist
+
+**Custom Rules**
+- **Purpose**: Cover launch-critical gaps not handled by Lighthouse
+- **Scope**: Hard blockers (e.g., noindex detection, canonical intent validation, H1 errors)
+- **Impact**: Issues flagged as BLOCKER prevent release readiness
+
+**Linkinator**
+- **Purpose**: Link and resource health validation
+- **Scope**: Broken links, missing resources, redirect chains
+- **Note**: No SEO heuristics or anchor analysis — results are itemized, actionable issues
+
+### Site Audit (Site-Level)
 - **Provider**: SE Ranking Website Audit API
 - **Scope**: 105 checks across security, crawling, redirects, sitemap, meta tags, content, localization, performance, JavaScript, CSS, links, mobile optimization
+- **Note**: Site-level test, NOT part of Release Runs
 - **Documentation**: https://seranking.com/api/data/website-audit/
 
-### Performance
+### Performance (Page-Level)
 - **Provider**: Google PageSpeed Insights API v5
 - **Scope**: Core Web Vitals (LCP, CLS, INP), lab metrics, field data (CrUX), Lighthouse accessibility
 - **Documentation**: https://developers.google.com/speed/docs/insights/v5/about
 
-### Screenshots
+### Screenshots (Page-Level)
 - **Provider**: Playwright + optional LambdaTest
 - **Scope**: Multi-device/viewport captures, full-page and above-the-fold options
 - **Storage**: Supabase Storage bucket
 
-### Spelling/Grammar
+### Spelling/Grammar (Page-Level)
 - **Provider**: LanguageTool API
 - **Scope**: Spelling and contextual grammar issues in rendered text
 - **Documentation**: https://languagetool.org/http-api/
@@ -239,16 +302,17 @@ async function claimNextQueuedRun() {
 - **Prisma Client singleton**: Use `lib/prisma.ts` helper to avoid multiple instances in dev
 - **Shared schema**: Worker and app use the same Prisma schema file
 - **TypeScript strictness**: Relaxed initially for MVP, with project-wide TypeScript usage
-- **No stored readiness**: Release Readiness is always computed on-demand
+- **Release Run-centric readiness**: Readiness is computed per Release Run, not from "latest tests across time"
+- **Immutable URL snapshots**: Once a Release Run begins execution, its URL list cannot be modified
 - **Partial success handling**: Tests can complete with mixed provider results
 - **Error tracking**: Use Sentry (free plan) for both app and worker errors
-- **Email notifications**: Sent by worker on test completion (SUCCESS/PARTIAL/FAILED)
+- **Email notifications**: Sent by worker on Release Run completion (all tests done or failed)
 
 ## Roadmap Context
 
-- **MVP**: Core platform with 4 test types, basic UI, authentication, single admin bucket
+- **MVP**: Core platform with Release Run model, page-level tests (Page Preflight, Performance, Screenshots, Spelling), basic UI, authentication
 - **V1.2**: Visual diffs for regression detection (LambdaTest SmartUI or Resemble.js)
-- **Later**: Marketing/analytics checks, accessibility scans (WCAG baseline)
+- **Later**: URL presets, environments/versioning, Git integration, marketing/analytics checks, accessibility scans (WCAG baseline)
 
 ## Design Reference
 
@@ -260,3 +324,4 @@ Figma: https://www.figma.com/design/YMiFr3zrjXxKxdh1olKpwo/4all--internal-?node-
 - `Documentation/technical-stack.md` - Technology choices and architecture decisions
 - `Documentation/platform-technical-setup.md` - Step-by-step Supabase + Prisma setup guide
 - `Documentation/architecture-recommendations.md` - Schema enhancements, scoring rules, worker patterns, and resolved architectural decisions
+- `Documentation/RELEASE-PASS-CHANGES.MD` - Release Run model introduction and documentation update requirements

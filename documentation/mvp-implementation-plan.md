@@ -1,9 +1,11 @@
 # ReleasePass MVP: Implementation Plan & Documentation Needs
 
-**Date**: December 8, 2024
+**Date**: December 20, 2025
 **Status**: Ready for Implementation
 
 This document outlines the recommended order of operations for implementing the ReleasePass MVP and identifies additional documentation that should be created during implementation.
+
+> **Release Run Model**: This plan reflects the Release Run-centric architecture where tests are grouped into cohesive launch candidates. See `RELEASE-PASS-CHANGES.MD` for the full model specification.
 
 ---
 
@@ -61,27 +63,35 @@ Document all Next.js API routes:
 - `PATCH /api/projects/[id]` - Update project
 - `DELETE /api/projects/[id]` - Delete project
 
-**Test Runs**
-- `POST /api/projects/[id]/test-runs` - Enqueue new test run (with TestRunConfig)
-- `GET /api/projects/[id]/test-runs` - List test runs for project
+**Release Runs** (Primary unit of release qualification)
+- `POST /api/projects/[id]/release-runs` - Create new Release Run (with frozen URLs + selected tests)
+- `GET /api/projects/[id]/release-runs` - List Release Runs for project
+- `GET /api/release-runs/[id]` - Get Release Run details (with all TestRuns, issues, status)
+- `GET /api/release-runs/[id]/status` - Get Release Run status (PENDING/READY/FAIL) for polling
+- `DELETE /api/release-runs/[id]` - Delete Release Run and all child data
+
+**Test Runs** (Within a Release Run)
+- `POST /api/release-runs/[id]/test-runs` - Re-run a test within Release Run (creates new TestRun)
+- `GET /api/release-runs/[id]/test-runs` - List test runs within Release Run
 - `GET /api/test-runs/[id]` - Get test run details (with urlResults, issues, screenshots)
-- `GET /api/test-runs/[id]/status` - Get test run status (for polling)
+- `GET /api/test-runs/[id]/status` - Get TestRun execution status (for polling)
 
-**Manual Test Status**
-- `POST /api/projects/[id]/manual-status` - Update manual test status (Screenshots/Spelling)
-- `GET /api/projects/[id]/manual-status` - Get current manual statuses
-
-**Release Readiness**
-- `GET /api/projects/[id]/release-readiness` - Compute and return release readiness
+**Manual Test Status** (Scoped to Release Run)
+- `POST /api/release-runs/[id]/manual-status` - Update manual test status (Screenshots/Spelling)
+- `GET /api/release-runs/[id]/manual-status` - Get current manual statuses for Release Run
 
 **Issues**
 - `GET /api/test-runs/[id]/issues` - Get issues for test run
-- `GET /api/test-runs/[id]/issues/summary` - Get aggregated issue summary
+- `GET /api/test-runs/[id]/issues/summary` - Get aggregated issue summary by impact level
 
 **Users**
 - `GET /api/users` - List all users (admin only)
 - `POST /api/users` - Create user
 - `GET /api/auth/sync-user` - Upsert user from Supabase Auth session
+
+**Site-Level Tests** (NOT part of Release Runs - v1.2)
+- `POST /api/projects/[id]/site-audit` - Trigger site-level audit (SE Ranking Full Crawl)
+- `GET /api/projects/[id]/site-audit` - Get latest site audit results
 
 ---
 
@@ -91,7 +101,9 @@ Document all Next.js API routes:
 
 - Score-to-color threshold definitions
 - Performance multi-URL averaging strategy
-- Release Readiness computation algorithm
+- Issue impact levels (BLOCKER, WARNING, INFO) and their effect on Release Run status
+- Release Readiness computation algorithm (per Release Run, not across time)
+- Release Run status determination (PENDING → READY or FAIL)
 - Example calculations with test data
 
 ---
@@ -238,13 +250,20 @@ Establish the foundational dashboard UI structure, layout components, navigation
 - [ ] Create project list page (`app/projects/page.tsx`)
 - [ ] Create new project form (`app/projects/new/page.tsx`)
 - [ ] Create project detail page (`app/projects/[id]/page.tsx`)
-- [ ] Add project selector component (for QA Tools workspace)
+- [ ] Add project selector component (for Release Run creation)
 
-#### Step 3.3: Test Run API (Basic)
-- [ ] `POST /api/projects/[id]/test-runs` - Enqueue test with TestRunConfig
-- [ ] `GET /api/projects/[id]/test-runs` - List test runs
+#### Step 3.3: Release Run API
+- [ ] `POST /api/projects/[id]/release-runs` - Create Release Run with frozen URLs + selected tests
+- [ ] `GET /api/projects/[id]/release-runs` - List Release Runs for project
+- [ ] `GET /api/release-runs/[id]` - Get Release Run details with all TestRuns
+- [ ] `GET /api/release-runs/[id]/status` - Get Release Run status (PENDING/READY/FAIL)
+- [ ] `DELETE /api/release-runs/[id]` - Delete Release Run and cascade to children
+
+#### Step 3.4: Test Run API (Within Release Runs)
+- [ ] `POST /api/release-runs/[id]/test-runs` - Re-run a test within Release Run
+- [ ] `GET /api/release-runs/[id]/test-runs` - List test runs within Release Run
 - [ ] `GET /api/test-runs/[id]` - Get test run details
-- [ ] `GET /api/test-runs/[id]/status` - Get status (for polling)
+- [ ] `GET /api/test-runs/[id]/status` - Get TestRun execution status (for polling)
 
 ---
 
@@ -310,6 +329,8 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 
 ### **Phase 6: Worker Service & Page Preflight (Week 3-4)**
 
+> **Note**: The worker processes TestRuns within Release Runs. Page-level tests (Page Preflight, Performance, Screenshots, Spelling) belong to Release Runs. Site-level tests (Site Audit Full Crawl) run independently and are deferred to v1.2.
+
 #### Step 6.1: Worker Project Setup
 - [ ] Create `worker` directory (not `qa-worker`)
 - [ ] Initialize npm project
@@ -317,7 +338,7 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
   - Core: Prisma, TypeScript, @supabase/supabase-js, dotenv
   - Page Preflight: linkinator, zod
   - Future: axios (for SE Ranking, LanguageTool)
-- [ ] Copy/link Prisma schema
+- [ ] Copy/link Prisma schema (includes ReleaseRun model)
 - [ ] Configure environment variables in worker `.env`:
   - `DATABASE_URL`
   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
@@ -326,7 +347,7 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 - [ ] Create worker directory structure:
   ```
   worker/
-  ├── lib/ (prisma, retry, scoring, heartbeat)
+  ├── lib/ (prisma, retry, scoring, heartbeat, release-run-status)
   ├── jobs/ (claim, executor, cleanup)
   ├── providers/ (pagespeed, linkinator, custom-rules, se-ranking, languagetool)
   └── rules/ (custom rule plugins)
@@ -339,13 +360,24 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 - [ ] Create provider orchestration skeleton
 - [ ] Add error handling and logging (Winston or Pino)
 - [ ] Implement retry utility with exponential backoff
+- [ ] Update Release Run status after TestRun completion (recompute PENDING/READY/FAIL)
 
-#### Step 6.3: Stuck Run Cleanup Job
+#### Step 6.3: Release Run Status Computation
+- [ ] Create `lib/release-run-status.ts` utility
+- [ ] Implement status computation logic:
+  - PENDING: Tests incomplete or manual reviews not PASS
+  - READY: All tests complete, no BLOCKER issues, all manual reviews PASS
+  - FAIL: BLOCKER issues present or manual review FAIL
+- [ ] Update Release Run status after each TestRun completes
+- [ ] Send email notification when Release Run reaches terminal state (READY or FAIL)
+
+#### Step 6.4: Stuck Run Cleanup Job
 - [ ] Implement separate cleanup cron job (runs every 5 minutes)
-- [ ] Detect runs in RUNNING state with stale heartbeat (>60 minutes)
+- [ ] Detect TestRuns in RUNNING state with stale heartbeat (>60 minutes)
 - [ ] Mark as FAILED with timeout error message
+- [ ] Recompute parent Release Run status
 
-**Note**: Schema migration for Page Preflight was completed in Phase 3.5 (see `documentation/installation.md`).
+**Note**: Schema migration for Release Run model was completed in Phase 3.6 (see `documentation/installation.md`).
 
 **See**: `documentation/installation.md` Phase 6.1 for detailed worker infrastructure setup instructions.
 
@@ -353,7 +385,16 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 
 ### **Phase 7: Provider Integrations (Week 4-6)**
 
-**Priority Order: Page Preflight first (MVP), then other providers**
+**Priority Order**: Page-level tests first (part of Release Runs), then site-level tests (v1.2)
+
+**Page-Level Tests** (Part of Release Runs):
+1. Page Preflight (Lighthouse SEO + Linkinator + Custom Rules)
+2. Performance (PageSpeed Core Web Vitals)
+3. Screenshots (Playwright)
+4. Spelling (Playwright + LanguageTool)
+
+**Site-Level Tests** (NOT part of Release Runs - v1.2):
+- Site Audit Full Crawl (SE Ranking)
 
 #### Step 7.1: PageSpeed Lighthouse SEO Integration (Page Preflight - Priority 1)
 - [ ] Write `Documentation/providers/pagespeed-lighthouse-seo.md`
@@ -365,10 +406,11 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 - [ ] Create `worker/providers/pagespeed/seo-mapper.ts`
   - Map Lighthouse SEO audits to Issue records
   - Severity assignment: CRITICAL (HTTP errors), HIGH (missing title), MEDIUM (meta description), LOW (alt text)
+  - **Impact assignment**: BLOCKER (is-crawlable, http-status-code failures), WARNING (missing title/meta), INFO (alt text)
   - Audit IDs to map: `document-title`, `meta-description`, `http-status-code`, `is-crawlable`, `canonical`, `hreflang`, `structured-data`, `viewport`, `image-alt`, `link-text`
-- [ ] Store issues in `Issue` table with provider='LIGHTHOUSE'
+- [ ] Store issues in `Issue` table with provider='LIGHTHOUSE' and impact level
 - [ ] Store per-URL issue counts in `UrlResult` table
-- [ ] Test end-to-end with SITE_AUDIT + CUSTOM_URLS
+- [ ] Test end-to-end with PAGE_PREFLIGHT test type within a Release Run
 
 #### Step 7.2: Linkinator Integration (Page Preflight - Priority 2)
 - [ ] Write `Documentation/providers/linkinator-integration.md`
@@ -381,14 +423,15 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 - [ ] Create `worker/providers/linkinator/mapper.ts`
   - Map link states to Issue records
   - Issue codes: LINK_BROKEN_INTERNAL (HIGH), LINK_BROKEN_EXTERNAL (MEDIUM), LINK_REDIRECT_CHAIN (LOW), LINK_TIMEOUT (MEDIUM)
-- [ ] Store issues in `Issue` table with provider='LINKINATOR'
+  - **Impact assignment**: BLOCKER (broken internal links), WARNING (broken external), INFO (redirect chains)
+- [ ] Store issues in `Issue` table with provider='LINKINATOR' and impact level
 - [ ] Test with various link scenarios (working, broken, redirects)
 
 #### Step 7.3: Custom Rules Plugin System (Page Preflight - Priority 3)
 - [ ] Write `Documentation/providers/custom-rules.md`
 - [ ] Create `worker/providers/custom-rules/types.ts`
   - Define RuleContext interface (url, html, headers, statusCode)
-  - Define RuleResult interface (code, summary, severity, meta)
+  - Define RuleResult interface (code, summary, severity, **impact**, meta)
   - Define CustomRule type signature
 - [ ] Create `worker/providers/custom-rules/loader.ts`
   - Scan `worker/rules/` directory for `.ts`/`.js` files
@@ -399,110 +442,130 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
   - Fetch page HTML via simple HTTP GET
   - Execute all rules in parallel
   - Wrap each rule in try-catch
-  - Convert RuleResult[] to Issue[] with provider='CUSTOM_RULE'
+  - Convert RuleResult[] to Issue[] with provider='CUSTOM_RULE' and impact level
 - [ ] Create `worker/rules/meta-tags.ts` (example rule)
-  - Check for Open Graph tags (og:title, og:image)
-  - Check for Twitter Card tags
-  - Validate title length (max 60 chars)
+  - Check for Open Graph tags (og:title, og:image) - WARNING impact
+  - Check for Twitter Card tags - INFO impact
+  - Check for noindex when not intended - BLOCKER impact
+  - Validate title length (max 60 chars) - WARNING impact
 - [ ] Create `worker/rules/README.md` (documentation for rule authors)
 - [ ] Test with example rule
 
 #### Step 7.4: Page Preflight Integration in Executor
 - [ ] Update `worker/jobs/executor.ts`
-  - Add executeSiteAuditCustomUrls() function
+  - Add executePagePreflight() function
   - Run 3 providers in parallel: PageSpeed Lighthouse SEO, linkinator, custom rules
   - Use Promise.allSettled() to handle partial success
-  - Aggregate all issues from providers
-  - Calculate score using scoring algorithm (100 base - penalties by severity)
-  - Determine status: SUCCESS (all 3 succeed), PARTIAL (1-2 succeed), FAILED (all fail)
+  - Aggregate all issues from providers with impact levels
+  - Determine TestRun status: SUCCESS (all 3 succeed), PARTIAL (1-2 succeed), FAILED (all fail)
+  - Update parent Release Run status after completion
 - [ ] Create `worker/lib/scoring.ts`
-  - Implement calculateSiteAuditScore() function
-  - Deductions: CRITICAL (-10), HIGH (-5), MEDIUM (-2), LOW (-1)
-  - Normalize by URL count
-- [ ] Test complete Page Preflight flow end-to-end
+  - Implement calculatePagePreflightScore() function (optional, score not primary metric)
+  - Primary metric is issue impact levels, not numeric score
+- [ ] Test complete Page Preflight flow end-to-end within a Release Run
 
-#### Step 7.5: PageSpeed Performance Integration (Existing - Priority 4)
+#### Step 7.5: PageSpeed Performance Integration (Page-Level - Priority 4)
 - [ ] Write `Documentation/providers/pagespeed-performance.md`
-- [ ] Create `worker/providers/pagespeed/performance.ts` (reuse client from 5.1)
+- [ ] Create `worker/providers/pagespeed/performance.ts` (reuse client from 7.1)
 - [ ] Implement mobile + desktop testing for performance category
 - [ ] Parse Core Web Vitals and scores
 - [ ] Store results in `UrlResult` table (2 rows per URL: mobile + desktop)
 - [ ] Calculate average score and store in `TestRun.score`
-- [ ] Test end-to-end (enqueue → worker processes → view results)
+- [ ] Update parent Release Run status after completion
+- [ ] Test end-to-end within a Release Run (create Release Run → worker processes → view results)
 
-#### Step 7.6: SE Ranking Integration (Future - Full Site Crawl)
+#### Step 7.6: SE Ranking Integration (Site-Level - v1.2)
+> **Note**: This is a site-level test that runs independently of Release Runs. Deferred to v1.2.
+
 - [ ] Write `Documentation/providers/se-ranking-integration.md`
 - [ ] Create `worker/providers/se-ranking.ts`
 - [ ] Implement sitemap crawling (max 500 pages)
-- [ ] Parse issues and store in `Issue` table
+- [ ] Parse issues and store in `Issue` table with impact levels
 - [ ] Store per-URL issue counts in `UrlResult`
 - [ ] Store health score in `TestRun.score`
 - [ ] Implement issue aggregation API (`GET /api/test-runs/[id]/issues/summary`)
-- [ ] Note: SE Ranking used for SITE_AUDIT + SITEMAP scope (not CUSTOM_URLS)
+- [ ] Note: Site Audit Full Crawl is NOT part of Release Runs - runs at project level independently
 
-#### Step 7.7: Playwright Screenshots Integration
+#### Step 7.7: Playwright Screenshots Integration (Page-Level - Priority 5)
 - [ ] Write `Documentation/providers/playwright-integration.md`
 - [ ] Create `worker/providers/playwright-screenshots.ts`
 - [ ] Implement 4-viewport capture (Desktop Chrome/Safari, Tablet, Mobile)
 - [ ] Upload to Supabase Storage (`qa-screenshots` bucket)
 - [ ] Store metadata in `ScreenshotSet` table
 - [ ] Generate signed URLs for UI display
+- [ ] Update parent Release Run status after completion (requires manual PASS to reach READY)
 - [ ] Implement screenshot viewer UI component
 
-#### Step 7.8: LanguageTool Integration
+#### Step 7.8: LanguageTool Integration (Page-Level - Priority 6)
 - [ ] Write `Documentation/providers/languagetool-integration.md`
 - [ ] Create `worker/providers/languagetool.ts`
 - [ ] Use Playwright to render page and extract text
 - [ ] Filter out navigation/boilerplate (heuristic-based)
 - [ ] Batch large text blocks for API
-- [ ] Parse issues and store in `Issue` table
+- [ ] Parse issues and store in `Issue` table with impact levels (typically WARNING or INFO)
+- [ ] Update parent Release Run status after completion (requires manual PASS to reach READY)
 - [ ] Test with various page types
 
 ---
 
 ### **Phase 8: UI Development (Week 6-8)**
 
-#### Step 8.1: Release Readiness Component
-- [ ] Create `lib/scoring.ts` with threshold constants
-- [ ] Implement `getReleaseReadiness()` function
-- [ ] Create Release Readiness display component (top-right of UI)
-- [ ] Show per-test color indicators
-- [ ] Add tooltips with score details
+> **Note**: The UI is organized around Release Runs as the primary navigation unit. Users create Release Runs, view their status, and drill into individual test results.
 
-#### Step 8.2: QA Tools Workspace
-- [ ] Create tabbed interface (Site Audit, Performance, Screenshots, Spelling)
-- [ ] Add project selector to left panel
-- [ ] Implement "Start Test" button with URL input (for Performance/Screenshots/Spelling)
-- [ ] Add test history preview in right panel
+#### Step 8.1: Release Run List & Creation
+- [ ] Create Release Run list page (`app/dashboard/release-runs/page.tsx`)
+  - Show all Release Runs for selected project with status (PENDING/READY/FAIL)
+  - Color coding: Green (READY), Red (FAIL), Grey (PENDING)
+- [ ] Create "New Release Run" form
+  - URL input (paste URLs, one per line)
+  - Test selection checkboxes (Page Preflight, Performance, Screenshots, Spelling)
+  - URLs are frozen on creation
+- [ ] Implement Release Run status polling (for PENDING runs)
+
+#### Step 8.2: Release Run Detail View
+- [ ] Create Release Run detail page (`app/dashboard/release-runs/[id]/page.tsx`)
+- [ ] Show Release Run status prominently (PENDING/READY/FAIL)
+- [ ] Create tabbed interface for tests within Release Run (Page Preflight, Performance, Screenshots, Spelling)
+- [ ] Show per-test status and results summary
+- [ ] Add "Re-run Test" button for each test type
 - [ ] Implement real-time status polling (for RUNNING tests)
 
-#### Step 8.3: Test Results Pages
-- [ ] **Site Audit Results**: Issue list with filtering, links to SE Ranking report
+#### Step 8.3: Test Results Pages (Within Release Run Context)
+- [ ] **Page Preflight Results**: Issue list grouped by impact (BLOCKER, WARNING, INFO), filter by provider
 - [ ] **Performance Results**: Per-URL table with mobile/desktop scores, Core Web Vitals chart
 - [ ] **Screenshots Results**: Grid view with viewport labels, manual status controls
 - [ ] **Spelling Results**: Issue list with context snippets, manual status controls
 
-#### Step 8.4: Manual Test Status
-- [ ] Implement `POST /api/projects/[id]/manual-status`
+#### Step 8.4: Manual Test Status (Scoped to Release Run)
+- [ ] Implement `POST /api/release-runs/[id]/manual-status`
 - [ ] Add PASS/REVIEW/FAIL buttons to Screenshots/Spelling result pages
-- [ ] Update Release Readiness in real-time after status change
+- [ ] Update Release Run status in real-time after manual status change
+- [ ] Show warning if PASS would enable READY status (user confirmation)
+
+#### Step 8.5: Release Readiness Summary Component
+- [ ] Create Release Readiness display component (shows within Release Run detail)
+- [ ] Show per-test status with color indicators
+- [ ] Show BLOCKER issue count prominently
+- [ ] Add tooltips with test details
 
 ---
 
 ### **Phase 9: Polish & Retention (Week 8-9)**
 
 #### Step 9.1: Data Retention Implementation
-- [ ] Implement retention logic in worker (prune old TestRuns)
-- [ ] Cascade delete related UrlResult, Issue, ScreenshotSet records
+- [ ] Implement retention logic in worker (prune old Release Runs)
+- [ ] Keep current + previous Release Run per project
+- [ ] Cascade delete related TestRun, UrlResult, Issue, ScreenshotSet, ManualTestStatus records
 - [ ] Delete old screenshots from Supabase Storage
-- [ ] Test retention with multiple test runs
+- [ ] Test retention with multiple Release Runs
 
 #### Step 9.2: Email Notifications
 - [ ] Choose email provider (Resend, SendGrid, AWS SES)
 - [ ] Write `Documentation/email-notifications.md`
 - [ ] Create email templates (HTML + plain text)
-- [ ] Implement notification trigger in worker (on test completion)
-- [ ] Test with all statuses (SUCCESS, PARTIAL, FAILED)
+- [ ] Implement notification trigger in worker (on Release Run reaching READY or FAIL)
+- [ ] Include Release Run summary: test results, BLOCKER count, manual review status
+- [ ] Test with all Release Run statuses (READY, FAIL)
 
 #### Step 9.3: Error Handling & Monitoring
 - [ ] Set up Sentry (free tier) for app and worker
@@ -515,11 +578,13 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 ### **Phase 10: Testing & Deployment (Week 9-10)**
 
 #### Step 10.1: Testing
-- [ ] Write unit tests for scoring logic (`lib/scoring.test.ts`)
-- [ ] Write integration tests for API routes
-- [ ] Test worker with all 4 test types end-to-end
-- [ ] Test retention enforcement
-- [ ] Test stuck run cleanup
+- [ ] Write unit tests for Release Run status computation (`lib/release-run-status.test.ts`)
+- [ ] Write unit tests for issue impact logic
+- [ ] Write integration tests for Release Run API routes
+- [ ] Test worker with all 4 page-level test types end-to-end within Release Runs
+- [ ] Test Release Run status transitions (PENDING → READY, PENDING → FAIL)
+- [ ] Test retention enforcement (keeps 2 most recent Release Runs per project)
+- [ ] Test stuck run cleanup and Release Run status recomputation
 - [ ] Test with various project types (small sites, large sites, broken sites)
 
 #### Step 10.2: Deployment
@@ -543,10 +608,11 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 ### Code
 - [ ] Next.js application (deployed to Vercel)
 - [ ] Worker service (deployed to Railway/Fly.io/Render)
-- [ ] Prisma schema and migrations
-- [ ] API routes (projects, test runs, manual status, release readiness)
-- [ ] UI components (project management, QA tools workspace, test results)
-- [ ] Provider integrations (SE Ranking, PageSpeed, Playwright, LanguageTool)
+- [ ] Prisma schema and migrations (includes ReleaseRun model)
+- [ ] API routes (projects, release runs, test runs, manual status)
+- [ ] UI components (project management, Release Run list/detail, test results)
+- [ ] Provider integrations (PageSpeed Lighthouse SEO, Linkinator, Custom Rules, PageSpeed Performance, Playwright, LanguageTool)
+- [ ] Release Run status computation logic
 
 ### Documentation
 - [ ] `Documentation/functional-spec.md` (updated)
@@ -574,17 +640,20 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 
 ### Functional
 - [ ] Users can create projects with siteUrl and optional sitemapUrl
-- [ ] Users can trigger all 4 test types (Site Audit, Performance, Screenshots, Spelling)
-- [ ] Worker processes tests atomically without race conditions
-- [ ] Test results display correctly in UI
-- [ ] Manual status updates work for Screenshots and Spelling
-- [ ] Release Readiness computes and displays correctly
-- [ ] Data retention enforces 2-run history per test type
-- [ ] Email notifications sent on test completion
+- [ ] Users can create Release Runs with frozen URLs and selected page-level tests
+- [ ] Users can trigger all 4 page-level test types within Release Runs (Page Preflight, Performance, Screenshots, Spelling)
+- [ ] Worker processes TestRuns atomically without race conditions
+- [ ] Worker updates Release Run status after each TestRun completion
+- [ ] Test results display correctly in UI within Release Run context
+- [ ] Manual status updates work for Screenshots and Spelling (scoped to Release Run)
+- [ ] Release Run status computes correctly (PENDING → READY or FAIL)
+- [ ] BLOCKER issues correctly cause Release Run FAIL status
+- [ ] Data retention enforces 2 Release Runs per project
+- [ ] Email notifications sent when Release Run reaches READY or FAIL
 
 ### Non-Functional
 - [ ] All API routes respond in <2 seconds (excluding long-running test execution)
-- [ ] Worker handles failures gracefully (retries, PARTIAL status)
+- [ ] Worker handles failures gracefully (retries, PARTIAL status, Release Run status update)
 - [ ] Stuck runs are detected and cleaned up within 5-10 minutes
 - [ ] No memory leaks in worker (can run for days)
 - [ ] Error tracking captures all exceptions (Sentry)
@@ -596,11 +665,13 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 
 These items MUST be completed in order:
 
-1. **Database schema & migrations** - Foundation for everything
+1. **Database schema & migrations** - Foundation for everything (includes ReleaseRun model)
 2. **Authentication** - Required before any protected routes
-3. **Worker atomic job locking** - Required before provider integrations
-4. **One complete provider integration** - Validates entire test flow end-to-end
-5. **Release Readiness computation** - Core UX feature
+3. **Release Run API** - Create/list/get Release Runs (core data model)
+4. **Worker atomic job locking** - Required before provider integrations
+5. **Release Run status computation** - Determines PENDING/READY/FAIL based on TestRuns and issues
+6. **One complete provider integration within Release Run** - Validates entire test flow end-to-end
+7. **Issue impact levels** - BLOCKER/WARNING/INFO determine Release Run status
 
 Everything else can be done in parallel or iteratively.
 
@@ -608,10 +679,11 @@ Everything else can be done in parallel or iteratively.
 
 ## 📝 Notes
 
-- **Prioritize one complete vertical slice**: Instead of building all APIs then all UI, complete one test type end-to-end (e.g., PageSpeed) to validate the full flow early.
-- **Provider integrations are independent**: These can be assigned to different developers or completed sequentially.
+- **Prioritize one complete vertical slice**: Instead of building all APIs then all UI, complete one Release Run with Page Preflight end-to-end to validate the full flow early.
+- **Provider integrations are independent**: These can be assigned to different developers or completed sequentially. All page-level tests work within Release Runs.
 - **UI polish can happen in parallel**: While provider integrations are being built, UI components can be stubbed with mock data.
 - **Documentation should be written DURING implementation**, not after. Each provider integration should produce its integration guide.
+- **Release Run is the atomic unit**: Always think in terms of Release Runs, not individual tests. Tests exist within the context of a Release Run.
 
 ---
 

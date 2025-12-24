@@ -32,7 +32,8 @@ enum UserRole {
 }
 
 enum TestType {
-  SITE_AUDIT
+  PAGE_PREFLIGHT // Page-level SEO + link checking + custom rules
+  SITE_AUDIT     // Full site crawl (site-level, v1.2)
   PERFORMANCE
   SCREENSHOTS
   SPELLING
@@ -85,6 +86,18 @@ enum ManualStatusLabel {
   FAIL
 }
 
+enum ReleaseRunStatus {
+  PENDING
+  READY
+  FAIL
+}
+
+enum IssueImpact {
+  BLOCKER
+  WARNING
+  INFO
+}
+
 /// ---- CORE ENTITIES ----
 
 model Company {
@@ -106,6 +119,7 @@ model Project {
   notes      String?
 
   company        Company?           @relation(fields: [companyId], references: [id])
+  releaseRuns    ReleaseRun[]
   testRuns       TestRun[]
   screenshotSets ScreenshotSet[]
   manualStatuses ManualTestStatus[]
@@ -135,8 +149,29 @@ model User {
   @@index([supabaseUserId])
 }
 
+/// A frozen snapshot representing a single launch candidate
+model ReleaseRun {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId     String           @db.Uuid
+  name          String?          // Optional label (e.g., "v2.1 Launch", "December Release")
+  status        ReleaseRunStatus @default(PENDING)
+  urls          Json             // Frozen string array: ["https://example.com/page1", "https://example.com/page2"]
+  selectedTests Json             // TestType array: ["PAGE_PREFLIGHT", "PERFORMANCE", "SCREENSHOTS", "SPELLING"]
+
+  project        Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  testRuns       TestRun[]
+  manualStatuses ManualTestStatus[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, status])
+  @@index([createdAt])
+}
+
 model TestRun {
   id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  releaseRunId  String?    @db.Uuid // Nullable for site-level tests (SITE_AUDIT)
   projectId     String     @db.Uuid
   type          TestType
   status        TestStatus @default(QUEUED)
@@ -147,6 +182,7 @@ model TestRun {
   rawPayload    Json?
   error         String?
 
+  releaseRun     ReleaseRun?     @relation(fields: [releaseRunId], references: [id], onDelete: Cascade)
   project        Project         @relation(fields: [projectId], references: [id])
   urlResults     UrlResult[]
   issues         Issue[]
@@ -156,6 +192,7 @@ model TestRun {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([releaseRunId])
   @@index([projectId, type, createdAt])
   @@index([status, createdAt])
 }
@@ -219,6 +256,7 @@ model Issue {
   code      String
   summary   String
   severity  IssueSeverity
+  impact    IssueImpact   // BLOCKER prevents release, WARNING flags attention, INFO informational
   meta      Json?
 
   testRun TestRun @relation(fields: [testRunId], references: [id], onDelete: Cascade)
@@ -229,6 +267,7 @@ model Issue {
   @@index([testRunId])
   @@index([provider])
   @@index([severity])
+  @@index([impact])
   @@index([url])
 }
 
@@ -255,17 +294,20 @@ model ScreenshotSet {
 
 model ManualTestStatus {
   id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  releaseRunId    String            @db.Uuid // Required - manual statuses are per Release Run
   projectId       String            @db.Uuid
   testType        ManualTestType
   statusLabel     ManualStatusLabel
   updatedByUserId String            @db.Uuid
 
-  project   Project @relation(fields: [projectId], references: [id])
-  updatedBy User    @relation("ManualStatusUpdatedBy", fields: [updatedByUserId], references: [id])
+  releaseRun ReleaseRun @relation(fields: [releaseRunId], references: [id], onDelete: Cascade)
+  project    Project    @relation(fields: [projectId], references: [id])
+  updatedBy  User       @relation("ManualStatusUpdatedBy", fields: [updatedByUserId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([releaseRunId])
   @@index([projectId, testType])
   @@index([updatedByUserId])
 }

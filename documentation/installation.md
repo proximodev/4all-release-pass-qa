@@ -286,7 +286,7 @@ Now open `prisma/schema.prisma` and **replace all contents** with the schema fro
 
 `Documentation/platform-technical-setup.md` (section 3)
 
-> **⚠️ Schema Update Required**: The schema below predates the Release Run model. After applying this base schema, you must also apply the Release Run model updates. See [Release Run Model Changes](#release-run-model-changes-december-2024) at the top of this document for the additional tables and fields required.
+> **⚠️ Schema Update Required**: The schema below predates the Release Run model. After applying this base schema, you must also apply the Release Run model updates. See [Release Run Model Changes](#release-run-model-changes-december-2025) at the top of this document for the additional tables and fields required.
 
 > **Note for Windows ARM64 Users:**
 > The schema includes `engineType = "binary"` in the generator block for ARM64 Windows compatibility.
@@ -1217,7 +1217,9 @@ Check that the `Issue` table's `provider` field now includes the three new enum 
 
 ## Phase 3.6: Schema Updates for Release Run Model
 
-This phase adds the Release Run model to the database schema. See [Release Run Model Changes](#release-run-model-changes-december-2024) for context.
+This phase adds the Release Run model to the database schema. See [Release Run Model Changes](#release-run-model-changes-december-2025) for context.
+
+> **Important**: This migration adds required fields (`Issue.impact`, `ManualTestStatus.releaseRunId`). If you have existing data, follow the **Fresh Start** approach: delete existing TestRun, Issue, and ManualTestStatus records before applying this migration. For MVP with minimal test data, this is the recommended approach.
 
 ### Step 1: Update Prisma Schema with New Enums
 
@@ -1254,15 +1256,17 @@ enum TestType {
 Add the new `ReleaseRun` model to `prisma/schema.prisma`:
 
 ```prisma
+/// A frozen snapshot representing a single launch candidate
 model ReleaseRun {
   id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   projectId     String            @db.Uuid
+  name          String?           // Optional label (e.g., "v2.1 Launch", "December Release")
   status        ReleaseRunStatus  @default(PENDING)
-  urls          Json              // Frozen array of URLs to test
-  selectedTests Json              // Array of selected page-level test types
+  urls          Json              // Frozen string array: ["https://example.com/page1", "https://example.com/page2"]
+  selectedTests Json              // TestType array: ["PAGE_PREFLIGHT", "PERFORMANCE", "SCREENSHOTS", "SPELLING"]
 
-  project       Project           @relation(fields: [projectId], references: [id])
-  testRuns      TestRun[]
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  testRuns       TestRun[]
   manualStatuses ManualTestStatus[]
 
   createdAt     DateTime          @default(now())
@@ -1352,7 +1356,7 @@ npx prisma studio
 ```
 
 Check that:
-- `ReleaseRun` table exists with status, urls, selectedTests columns
+- `ReleaseRun` table exists with name, status, urls, selectedTests columns
 - `TestRun` table has `releaseRunId` column
 - `Issue` table has `impact` column
 - `ManualTestStatus` table has `releaseRunId` column

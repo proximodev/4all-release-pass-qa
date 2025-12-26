@@ -8,6 +8,8 @@ import PageHeader from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { projectTabs } from "@/lib/constants/navigation"
 import Tabs from "@/components/ui/tabs/Tabs"
+import TabPanel from "@/components/layout/TabPanel"
+
 
 interface Project {
   id: string
@@ -47,21 +49,11 @@ export default function ProjectsPage() {
   return (
     <PageContainer>
       <Tabs tabs={projectTabs} />
-
-      <PageHeader
-        title="All Projects"
-        action={
-          <Link href="/projects/new">
-            <Button>Add New Project</Button>
-          </Link>
-        }
-      />
-
-      {/* Filter Input */}
-      <div className="mb-4">
+      <TabPanel>
+      <div className="mb-8">
         <input
           type="text"
-          placeholder="Filter by name..."
+          placeholder="Filter by name"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="px-4 py-2 border border-medium-gray rounded w-full max-w-md"
@@ -113,6 +105,8 @@ export default function ProjectsPage() {
           </div>
         )}
       </Card>
+
+      </TabPanel>
     </PageContainer>
   )
 }

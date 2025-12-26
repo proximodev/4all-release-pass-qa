@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 
 export default function DashboardPage() {
-  // For now, redirect to QA Tools - Site Audit
+  // Redirect to ReleasePass
   // This page can be built out later as a dashboard home
-  redirect('/qa/audit')
+  redirect('/releasepass')
 }

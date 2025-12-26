@@ -1,11 +1,9 @@
-export const qaTabs = [
-  { label: 'Site Audit', href: '/qa/audit' },
-  { label: 'Performance', href: '/qa/performance' },
-  { label: 'Browser Test', href: '/qa/browser' },
-  { label: 'Spellcheck', href: '/qa/spelling' },
+export const releasePassTabs = [
+  { label: 'Preflight', href: '/releasepass/preflight' },
+  { label: 'Site Audit', href: '/releasepass/site-audit' },
 ]
 
 export const projectTabs = [
-    { label: 'All Projects', href: '/projects' },
-    { label: 'Add Project', href: '/projects/new' },
+  { label: 'View', href: '/projects' },
+  { label: 'Add New Project', href: '/projects/new' },
 ]

@@ -8,6 +8,7 @@ import PageContainer from '@/components/layout/PageContainer'
 import Tabs from '@/components/ui/tabs/Tabs'
 import { projectTabs } from '@/lib/constants/navigation'
 import Link from 'next/link'
+import TabPanel from "@/components/layout/TabPanel"
 
 interface Project {
   id: string
@@ -89,10 +90,9 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
   return (
     <PageContainer>
       <Tabs tabs={projectTabs} />
-
-      <Card title={project.name}>
+      <TabPanel>
+      <Card title={"View " + project.name}>
         <div className="space-y-6">
-          {/* Project Details */}
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-black/70 mb-1">
@@ -172,6 +172,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
           </div>
         </div>
       </Card>
+      </TabPanel>
     </PageContainer>
   )
 }

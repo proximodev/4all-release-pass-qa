@@ -23,7 +23,7 @@ export default function Tabs({ tabs }: TabsProps) {
   }
 
   const isActive = (href: string) => {
-    return pathname === href
+    return pathname === href || pathname.startsWith(href + '/')
   }
 
   return (

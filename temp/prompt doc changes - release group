@@ -1,0 +1,33 @@
+You are updating documentation for the ReleasePass product.
+
+Context:
+- ReleasePass uses a Release Run model.
+- A Release Run represents a single launch candidate.
+- URLs are frozen per Release Run.
+- Page-level tests run inside a Release Run.
+- Site-level audits are NOT part of Release Runs.
+- Release readiness is computed per Release Run, not across unrelated test timestamps.
+- A Release Run can be PENDING, READY, or FAIL.
+- Page Preflight includes Lighthouse SEO (binary checks), Linkinator, and Custom Rules.
+
+Task:
+1. Read the provided documentation section carefully.
+2. Identify any content that:
+   - assumes readiness is computed from “latest tests”
+   - lacks the Release Run concept
+   - mixes page-level and site-level tests
+   - implies mutable URL sets
+3. Update the section to:
+   - explicitly reference Release Runs where applicable
+   - align scoring and readiness logic to Release Runs
+   - reflect frozen URL sets and rerunnable tests
+   - preserve existing tone and structure unless incorrect
+4. Do NOT invent new features or expand scope.
+5. If a section is already correct, say so explicitly and explain why.
+
+Output:
+- Provide the revised documentation section in Markdown.
+- Include a brief summary of what changed and why.
+
+Here is the documentation section to update:
+<<<PASTE SECTION HERE>>>

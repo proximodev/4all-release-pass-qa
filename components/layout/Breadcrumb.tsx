@@ -23,11 +23,11 @@ export default function Breadcrumb() {
 
   // Generate breadcrumb based on route
   const getBreadcrumb = () => {
-    if (pathname.startsWith('/qa')) {
+    if (pathname.startsWith('/releasepass')) {
       if (projectName) {
-        return `QA Tools / ${projectName}`
+        return `ReleasePass / ${projectName}`
       }
-      return 'QA Tools'
+      return 'ReleasePass'
     }
     if (pathname.startsWith('/projects')) {
       return 'Projects'

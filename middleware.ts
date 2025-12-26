@@ -49,7 +49,7 @@ export async function middleware(request: NextRequest) {
 export const config = {
     matcher: [
         '/dashboard/:path*',
-        '/qa/:path*',
+        '/releasepass/:path*',
         '/projects/:path*',
         '/settings/:path*',
         '/utilities/:path*',

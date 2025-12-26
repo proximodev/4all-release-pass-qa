@@ -66,7 +66,7 @@ export default function NewProjectPage() {
       <Tabs tabs={projectTabs} />
       <TwoColumnGrid>
         <FormContainer>
-          <Card title="Add New Project">
+          <Card>
             <form onSubmit={handleSubmit} className="space-y-4">
               {errors.general && (
                 <div className="bg-red/10 border border-red text-red p-3 rounded">
@@ -77,7 +77,7 @@ export default function NewProjectPage() {
               <Input
                 label="Project Name"
                 name="name"
-                placeholder="e.g., 4All Digital Marketing Site"
+                placeholder="e.g., Company Website"
                 required
                 error={errors.name}
               />

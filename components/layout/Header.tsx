@@ -11,8 +11,8 @@ export default function Header() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const isActive = (path: string) => {
-    if (path === '/qa') {
-      return pathname.startsWith('/qa')
+    if (path === '/releasepass') {
+      return pathname.startsWith('/releasepass')
     }
     return pathname.startsWith(path)
   }
@@ -45,12 +45,12 @@ export default function Header() {
           {/* Main Navigation */}
           <nav className="flex items-center space-x-8">
             <Link
-              href="/qa/audit"
+              href="/releasepass"
               className={`hover:text-brand-yellow transition-colors ${
-                isActive('/qa') ? 'active' : ''
+                isActive('/releasepass') ? 'active' : ''
               }`}
             >
-              QA Tools
+              ReleasePass
             </Link>
             <Link
               href="/projects"

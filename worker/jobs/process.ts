@@ -1,6 +1,9 @@
 import { TestRun, TestType, TestStatus } from '@prisma/client';
 import { startHeartbeat } from '../lib/heartbeat';
 import { completeTestRun, failTestRun } from './claim';
+import { processPerformance } from '../providers/pagespeed';
+import { processPagePreflight } from '../providers/preflight';
+import { processSiteAudit } from '../providers/seranking';
 
 // Type for TestRun with relations (from claimNextQueuedRun)
 type TestRunWithRelations = TestRun & {
@@ -20,34 +23,38 @@ export async function processTestRun(testRun: TestRunWithRelations): Promise<voi
   const stopHeartbeat = startHeartbeat(testRun.id);
 
   try {
+    let score: number | null = null;
+
     switch (testRun.type) {
       case TestType.PAGE_PREFLIGHT:
-        await processPagePreflight(testRun);
+        score = await processPagePreflight(testRun);
         break;
 
       case TestType.PERFORMANCE:
-        await processPerformance(testRun);
+        score = await processPerformance(testRun);
         break;
 
       case TestType.SCREENSHOTS:
         await processScreenshots(testRun);
+        // Screenshots don't have a numeric score
         break;
 
       case TestType.SPELLING:
         await processSpelling(testRun);
+        // Spelling doesn't have a numeric score
         break;
 
       case TestType.SITE_AUDIT:
-        await processSiteAudit(testRun);
+        score = await processSiteAudit(testRun);
         break;
 
       default:
         throw new Error(`Unknown test type: ${testRun.type}`);
     }
 
-    // Mark as successful
-    await completeTestRun(testRun.id, TestStatus.SUCCESS);
-    console.log(`Test run ${testRun.id} completed successfully`);
+    // Mark as successful with score
+    await completeTestRun(testRun.id, TestStatus.SUCCESS, score !== null ? { score } : undefined);
+    console.log(`Test run ${testRun.id} completed successfully${score !== null ? ` (score: ${score})` : ''}`);
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -61,30 +68,16 @@ export async function processTestRun(testRun: TestRunWithRelations): Promise<voi
 }
 
 // ============================================================================
-// Provider Stubs (to be implemented in Phase 6.2+)
+// Provider Stubs (to be implemented)
 // ============================================================================
 
-async function processPagePreflight(testRun: TestRunWithRelations): Promise<void> {
-  console.log(`[PAGE_PREFLIGHT] Processing ${testRun.id}`);
-  // TODO: Implement in Phase 6.2
-  // - Run Lighthouse SEO audits via PageSpeed API
-  // - Run Linkinator for link checking
-  // - Run Custom Rules
-  // - Store results in Issue table
-  throw new Error('PAGE_PREFLIGHT provider not yet implemented');
-}
-
-async function processPerformance(testRun: TestRunWithRelations): Promise<void> {
-  console.log(`[PERFORMANCE] Processing ${testRun.id}`);
-  // TODO: Implement in Phase 6.3
-  // - Run PageSpeed API for Core Web Vitals
-  // - Store results in UrlResult table
-  throw new Error('PERFORMANCE provider not yet implemented');
-}
+// Note: processPerformance is imported from '../providers/pagespeed'
+// Note: processPagePreflight is imported from '../providers/preflight'
+// Note: processSiteAudit is imported from '../providers/seranking'
 
 async function processScreenshots(testRun: TestRunWithRelations): Promise<void> {
   console.log(`[SCREENSHOTS] Processing ${testRun.id}`);
-  // TODO: Implement in Phase 6.4
+  // TODO: Implement
   // - Capture screenshots via Playwright
   // - Upload to Supabase Storage
   // - Store metadata in ScreenshotSet table
@@ -93,17 +86,9 @@ async function processScreenshots(testRun: TestRunWithRelations): Promise<void> 
 
 async function processSpelling(testRun: TestRunWithRelations): Promise<void> {
   console.log(`[SPELLING] Processing ${testRun.id}`);
-  // TODO: Implement in Phase 6.5
+  // TODO: Implement
   // - Extract text via Playwright
   // - Check via LanguageTool API
   // - Store results in Issue table
   throw new Error('SPELLING provider not yet implemented');
-}
-
-async function processSiteAudit(testRun: TestRunWithRelations): Promise<void> {
-  console.log(`[SITE_AUDIT] Processing ${testRun.id}`);
-  // TODO: Implement in Phase 6.6 (v1.2)
-  // - Run SE Ranking full site crawl
-  // - Store results in UrlResult and Issue tables
-  throw new Error('SITE_AUDIT provider not yet implemented (v1.2)');
 }

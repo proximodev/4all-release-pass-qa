@@ -12,7 +12,8 @@
   "dependencies": {
     "@prisma/client": "^6.19.1",
     "@supabase/supabase-js": "^2.87.1",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "linkinator": "^7.5.3"
   },
   "devDependencies": {
     "@types/node": "^25.0.2",

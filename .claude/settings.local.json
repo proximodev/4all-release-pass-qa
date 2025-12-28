@@ -25,7 +25,8 @@
       "Bash(npx prisma migrate:*)",
       "Bash(npx prisma studio:*)",
       "Bash(npm start)",
-      "Bash(npx tsc)"
+      "Bash(npx tsc)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

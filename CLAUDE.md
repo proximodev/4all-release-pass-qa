@@ -80,16 +80,16 @@ QUEUED → RUNNING → (SUCCESS | FAILED | PARTIAL)
 
 ### Test Execution Scope
 
-Tests are categorized as **page-level** (included in Release Runs) or **site-level** (run independently):
+Tests are organized into two tabs under **ReleasePass** in the navigation:
 
-**Page-Level Tests (Part of Release Runs):**
-- **Page Preflight**: Lighthouse SEO checks + Custom Rules + Linkinator (see Page Preflight Tests below)
+**Preflight Tab - Page-Level Tests (Part of Release Runs):**
+- **Baseline** (PAGE_PREFLIGHT): Lighthouse SEO checks + Custom Rules + Linkinator
 - **Performance**: User-selectable URLs (custom list OR sitemap with 20-URL limit in MVP)
-- **Screenshots**: Custom URL list only (4 fixed viewports: Desktop Chrome/Safari 1440px, Tablet iOS Safari 768px, Mobile iOS Safari 375px)
+- **Browser** (SCREENSHOTS): Custom URL list only (4 fixed viewports: Desktop Chrome/Safari 1440px, Tablet iOS Safari 768px, Mobile iOS Safari 375px)
 - **Spelling**: Custom URL list only (Playwright extracts text from rendered pages)
 
-**Site-Level Tests (NOT part of Release Runs):**
-- **Site Audit**: Full sitemap crawl (max 500 pages, same subdomain only) via SE Ranking
+**Site Audit Tab - Site-Level Tests (NOT part of Release Runs):**
+- **Site Audit**: Full sitemap crawl (max 500 pages, same subdomain only) via SE Ranking API exclusively
 
 ### Issue Impact Levels
 

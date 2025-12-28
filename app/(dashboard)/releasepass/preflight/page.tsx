@@ -33,7 +33,7 @@ export default function PreflightPage() {
           />
         </div>
       </Card>
-      <Card title="Latest Results">
+      <Card title="Status">
         {testId ? (
           <TestResultsSummary testId={testId} />
         ) : (

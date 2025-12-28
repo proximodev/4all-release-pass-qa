@@ -126,23 +126,25 @@ Database records store the storage keys/paths for screenshots. The app uses sign
 
 ### External API Providers
 
-**Site Audit (Page Preflight - MVP)**:
-- PageSpeed Insights API v5 (Lighthouse SEO audits)
-- Linkinator (link checking)
-- Custom Rules plugin system (file-based extensibility)
+**Preflight Tests (Page-Level, Part of Release Runs)**:
 
-**Site Audit (Full Site Crawl - v1.2)**:
-- SE Ranking Website Audit API (105 checks)
+- **Baseline (PAGE_PREFLIGHT)**:
+  - PageSpeed Insights API v5 (Lighthouse SEO audits)
+  - Linkinator (link checking)
+  - Custom Rules plugin system (file-based extensibility)
 
-**Performance**:
-- Google PageSpeed Insights API v5 (Core Web Vitals, lab metrics, CrUX field data)
+- **Performance**:
+  - Google PageSpeed Insights API v5 (Core Web Vitals, lab metrics, CrUX field data)
 
-**Screenshots**:
-- Playwright (local rendering)
-- LambdaTest (optional cloud rendering)
+- **Screenshots (Browser)**:
+  - Playwright (local rendering)
+  - LambdaTest (optional cloud rendering)
 
-**Spelling/Grammar**:
-- LanguageTool API
+- **Spelling/Grammar**:
+  - LanguageTool API
+
+**Site Audit (Site-Level, Independent of Release Runs)**:
+- SE Ranking Website Audit API exclusively (105 checks across security, crawling, redirects, sitemap, meta tags, content, localization, performance, JavaScript, CSS, links, mobile optimization)
 
 ### Observability & Logging
 
@@ -365,22 +367,22 @@ This approach avoids throwing away successful work and provides clear visibility
 
 ### Test Execution Scope
 
-Tests are categorized as **page-level** (included in Release Runs) or **site-level** (run independently):
+Tests are categorized as **page-level** (Preflight tab, included in Release Runs) or **site-level** (Site Audit tab, run independently):
 
-**Page-Level Tests (Part of Release Runs)**:
+**Preflight Tab - Page-Level Tests (Part of Release Runs)**:
 
-| Test Type | Supported Scopes | Notes |
-|-----------|------------------|-------|
-| Page Preflight | CUSTOM_URLS | Lighthouse SEO + Linkinator + Custom Rules. Max 50 URLs per Release Run |
-| Performance | SINGLE_URL, CUSTOM_URLS, SITEMAP | Limited to 20 URLs to avoid excessive API usage |
-| Screenshots | CUSTOM_URLS | Fixed 4 viewports: Desktop Chrome/Safari 1440px, Tablet iOS 768px, Mobile iOS 375px |
-| Spelling | CUSTOM_URLS | Playwright extracts text from rendered pages |
+| UI Label | Test Type | Supported Scopes | Notes |
+|----------|-----------|------------------|-------|
+| Baseline | PAGE_PREFLIGHT | CUSTOM_URLS | Lighthouse SEO + Linkinator + Custom Rules. Max 50 URLs per Release Run |
+| Performance | PERFORMANCE | SINGLE_URL, CUSTOM_URLS, SITEMAP | Limited to 20 URLs to avoid excessive API usage |
+| Browser | SCREENSHOTS | CUSTOM_URLS | Fixed 4 viewports: Desktop Chrome/Safari 1440px, Tablet iOS 768px, Mobile iOS 375px |
+| Spelling | SPELLING | CUSTOM_URLS | Playwright extracts text from rendered pages |
 
-**Site-Level Tests (NOT part of Release Runs)**:
+**Site Audit Tab - Site-Level Tests (NOT part of Release Runs)**:
 
-| Test Type | Supported Scopes | Notes |
-|-----------|------------------|-------|
-| Site Audit (Full Crawl) | SITEMAP | SE Ranking API (v1.2). Max 500 pages, same subdomain only |
+| UI Label | Test Type | Provider | Notes |
+|----------|-----------|----------|-------|
+| Site Audit | SITE_AUDIT | SE Ranking API exclusively | Max 500 pages, same subdomain only |
 
 > See `functional-spec.md` for detailed per-test-type URL selection rules.
 

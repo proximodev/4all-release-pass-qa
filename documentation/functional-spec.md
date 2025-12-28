@@ -42,11 +42,9 @@ See technical-stack.md
 ## Global Navigation
 Persistent brand bar appears across the platform with the following navigation:
 
-* QA Tools
-  * Site Audit / Page Preflight
-  * Performance
-  * Browser Test
-  * Spellcheck
+* ReleasePass (main QA area)
+  * Preflight - page-level tests grouped by Release Run
+  * Site Audit - site-wide crawl (SE Ranking only)
 * Projects
   * Projects (list/edit)
   * Add Project
@@ -54,21 +52,34 @@ Persistent brand bar appears across the platform with the following navigation:
   * Users (list/edit)
   * Add User
 
-## QA Tools Workspace
+## ReleasePass Workspace
 
-### General
-Primary navigation is organized around **Release Runs** — the unit of release qualification.
+### Navigation Structure
+ReleasePass is the primary QA workspace with two tabs:
 
-- **Release Run List**: Shows all Release Runs for the selected project with status (PENDING/READY/FAIL)
-- **Release Run Detail View**: Primary workspace showing all tests within a Release Run
-- Test tabs include Page Preflight, Performance, Screenshots, and Spellcheck
-- Each test shows results within the context of the current Release Run
+- **Preflight**: Page-level tests (Baseline, Performance, Spelling, Browser) organized by Release Run
+- **Site Audit**: Site-wide crawl using SE Ranking API, organized by independent test runs
 
-### Project Selection
+### Preflight Tab
+Primary navigation organized around **Release Runs** — the unit of release qualification.
+
+- **Project Selector**: Dropdown with "(+) Add New Project" option
+- **Test Selector**: Dropdown showing Release Runs by date (e.g., "12/27/24 Preflight Test") with "(+) New Test" option
+- **New Test Form**: Create Release Run with test type checkboxes (Baseline, Performance, Spelling, Browser) and URL list
+- **Results Summary**: Shows test status, scores, and issue counts for selected Release Run
+
+### Site Audit Tab
+Independent site-level testing using SE Ranking API.
+
+- **Project Selector**: Same as Preflight tab
+- **Test Selector**: Dropdown showing Site Audit runs by date with "(+) New Test" option
+- **Results Summary**: Shows audit score and issue breakdown for selected test run
+
+### Project Selection (Shared)
 A project selector that allows switching projects or creating new ones.
-- Selecting a project loads the list of Release Runs for that project
-- The most recent Release Run is shown by default
-- Adding a new project directs user to Project > Add Project
+- Selecting a project loads the list of tests for that project
+- Query parameters (?project=&test=) preserve state across tab navigation
+- Adding a new project via "(+) Add New Project" redirects to Projects > Add Project
 
 ### Release Readiness
 Displayed per Release Run. Shows status (PENDING/READY/FAIL) with color coding.

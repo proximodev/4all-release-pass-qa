@@ -16,11 +16,13 @@ Page Preflight aggregates results from three providers, each with a distinct dat
 
 | Provider | Purpose | Data Shape | UI Pattern |
 |--------|--------|-----------|-----------|
-| Lighthouse (SEO) | Validation checks | Binary pass/fail | Checklist |
-| Linkinator | Link health | Itemized failures | Table / issue list |
-| Custom Rules | Extensible validation | Itemized issues | Table / grouped list |
+| Lighthouse (SEO) | Validation checks | Binary pass/fail (ResultItems) | Checklist |
+| Linkinator | Link health | Itemized failures (ResultItems) | Table / issue list |
+| Custom Rules | Extensible validation | Itemized results (ResultItems) | Table / grouped list |
 
-The UI **must respect these differences**. Attempting to present all results as a single “issue list” will reduce clarity and trust.
+The UI **must respect these differences**. Attempting to present all results as a single "issue list" will reduce clarity and trust.
+
+**Data Model**: All check results are stored as `ResultItem` records linked to `UrlResult`. Each ResultItem has a `status` (PASS/FAIL/SKIP) and, for failures, `severity` and `impact` fields.
 
 ---
 

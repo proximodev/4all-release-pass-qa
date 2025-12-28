@@ -1,6 +1,23 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+
+interface ResultItem {
+  id: string
+  status: string
+  code: string
+  name: string
+  severity?: string
+  impact?: string
+}
+
+interface UrlResultData {
+  id: string
+  url: string
+  issueCount?: number
+  resultItems?: ResultItem[]
+}
 
 interface TestRunData {
   id: string
@@ -9,8 +26,8 @@ interface TestRunData {
   score: number | null
   createdAt: string
   finishedAt: string | null
+  urlResults?: UrlResultData[]
   _count?: {
-    issues: number
     urlResults: number
   }
   project?: {
@@ -61,10 +78,12 @@ const TEST_TYPE_LABELS: Record<string, string> = {
 }
 
 export default function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryProps) {
+  const router = useRouter()
   const [releaseRun, setReleaseRun] = useState<ReleaseRun | null>(null)
   const [testRun, setTestRun] = useState<TestRunData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (testId) {
@@ -107,6 +126,32 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!releaseRun) return
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${releaseRun.name || 'this test'}"? This will also delete all associated test runs and results.`
+    )
+
+    if (!confirmed) return
+
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/release-runs/${releaseRun.id}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to delete test')
+      }
+
+      router.push('/releasepass/preflight')
+    } catch (err: any) {
+      setError(err.message)
+      setDeleting(false)
     }
   }
 
@@ -179,13 +224,23 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
           </div>
         )}
 
-        {/* Issue Count */}
-        {testRun._count && (
+        {/* Results Summary */}
+        {testRun.urlResults && (
           <div className="space-y-2">
             <h4 className="font-medium text-sm">Summary</h4>
             <div className="text-sm text-black/70">
-              <p>Issues found: {testRun._count.issues}</p>
-              <p>URLs analyzed: {testRun._count.urlResults}</p>
+              {(() => {
+                const allItems = testRun.urlResults.flatMap(r => r.resultItems || [])
+                const passCount = allItems.filter(i => i.status === 'PASS').length
+                const failCount = allItems.filter(i => i.status === 'FAIL').length
+                return (
+                  <>
+                    <p>Checks passed: {passCount}</p>
+                    <p>Checks failed: {failCount}</p>
+                    <p>URLs analyzed: {testRun.urlResults.length}</p>
+                  </>
+                )
+              })()}
             </div>
           </div>
         )}
@@ -268,6 +323,17 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
             </li>
           )}
         </ul>
+      </div>
+
+      {/* Delete Button */}
+      <div className="pt-4 border-t border-medium-gray">
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="text-sm text-red hover:text-red/80 disabled:opacity-50"
+        >
+          {deleting ? 'Deleting...' : 'Delete Test'}
+        </button>
       </div>
     </div>
   )

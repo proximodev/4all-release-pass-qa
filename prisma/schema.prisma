@@ -98,6 +98,12 @@ enum IssueImpact {
   INFO
 }
 
+enum ResultStatus {
+  PASS
+  FAIL
+  SKIP
+}
+
 /// ---- CORE ENTITIES ----
 
 model Company {
@@ -185,7 +191,6 @@ model TestRun {
   releaseRun     ReleaseRun?     @relation(fields: [releaseRunId], references: [id], onDelete: Cascade)
   project        Project         @relation(fields: [projectId], references: [id])
   urlResults     UrlResult[]
-  issues         Issue[]
   screenshotSets ScreenshotSet[]
   config         TestRunConfig?
 
@@ -238,7 +243,8 @@ model UrlResult {
   // Raw data
   additionalMetrics Json? // Provider-specific extras
 
-  testRun TestRun @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  testRun     TestRun      @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  resultItems ResultItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -248,27 +254,27 @@ model UrlResult {
   @@index([performanceScore])
 }
 
-model Issue {
-  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  testRunId String        @db.Uuid
-  url       String
-  provider  IssueProvider
-  code      String
-  summary   String
-  severity  IssueSeverity
-  impact    IssueImpact   // BLOCKER prevents release, WARNING flags attention, INFO informational
-  meta      Json?
+model ResultItem {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  urlResultId String         @db.Uuid
+  provider    IssueProvider
+  code        String
+  name        String         // Human-readable title of the check
+  status      ResultStatus
+  severity    IssueSeverity? // Only for FAIL status
+  impact      IssueImpact?   // Only for FAIL status: BLOCKER prevents release, WARNING flags attention, INFO informational
+  meta        Json?
 
-  testRun TestRun @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  urlResult UrlResult @relation(fields: [urlResultId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([testRunId])
+  @@index([urlResultId])
   @@index([provider])
+  @@index([status])
   @@index([severity])
   @@index([impact])
-  @@index([url])
 }
 
 model ScreenshotSet {

@@ -216,7 +216,7 @@ Database records store the storage keys/paths for screenshots. The app uses sign
 │  ┌─────────────────────────────────────────────────────────┐
 │  │           PostgreSQL Database                           │
 │  │  - Company, Project, User                               │
-│  │  - TestRun, TestRunConfig, UrlResult, Issue             │
+│  │  - TestRun, TestRunConfig, UrlResult, ResultItem        │
 │  │  - ScreenshotSet, ManualTestStatus                      │
 │  └─────────────────────────────────────────────────────────┘
 │                                                        ▲     │
@@ -249,7 +249,7 @@ Database records store the storage keys/paths for screenshots. The app uses sign
 │         └────────────┴────────────┘                         │
 │                      │                                       │
 │              Save to Database                               │
-│          (UrlResult, Issue, etc.)                           │
+│          (UrlResult, ResultItem, etc.)                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -307,7 +307,7 @@ QUEUED → RUNNING → (SUCCESS | FAILED | PARTIAL)
   - Performance: PageSpeed API
   - Screenshots: Playwright
   - Spelling: Playwright + LanguageTool
-- Saves results to UrlResult, Issue, ScreenshotSet tables
+- Saves results to UrlResult, ResultItem, ScreenshotSet tables
 - Calculates score (for Performance)
 - Updates TestRun to SUCCESS/FAILED/PARTIAL
 - Updates parent ReleaseRun status based on all TestRuns
@@ -460,7 +460,7 @@ Tests are categorized as **page-level** (Preflight tab, included in Release Runs
 - Screenshots: Current + previous ScreenshotSet rows within retained Release Runs
 - Raw API payloads: Two most recent per test type
 - Worker enforces retention after each Release Run completion
-- Delete older ReleaseRuns and all related TestRun, UrlResult, Issue, ScreenshotSet rows
+- Delete older ReleaseRuns and all related TestRun, UrlResult, ResultItem, ScreenshotSet rows
 
 ---
 
@@ -694,54 +694,52 @@ async function cleanupOldScreenshots(projectId: string, testType: TestType) {
 
 **Future improvement (v1.3)**: Add a `deleted` flag instead of hard delete, then reconcile storage async.
 
-### Issue Aggregation
+### ResultItem Aggregation
 
-**Approach**: Simple grouping by issue code with provider attribution.
-
-Store issues as-is in `Issue` table (one row per URL per issue). API endpoint provides aggregated view:
+**Approach**: Store all check results (pass and fail) in `ResultItem` table via `UrlResult`. API endpoint provides aggregated view:
 
 ```typescript
-// API: /api/test-runs/{runId}/issues/summary
+// API: /api/test-runs/{runId}/results/summary
 {
-  issueGroups: [
+  resultGroups: [
     {
-      code: "LIGHTHOUSE_NO_TITLE",
+      code: "document-title",
       provider: "LIGHTHOUSE",
+      name: "Document has a title element",
+      passCount: 2,
+      failCount: 1,
+      affectedUrls: ["url3"],  // URLs where it failed
       severity: "HIGH",
-      affectedUrlCount: 3,
-      affectedUrls: ["url1", "url2", "url3"],  // First 10 for preview
-      summary: "Page is missing a title tag"
+      impact: "WARNING"
     },
     {
-      code: "LINK_BROKEN_INTERNAL",
+      code: "BROKEN_INTERNAL_LINK",
       provider: "LINKINATOR",
-      severity: "HIGH",
-      affectedUrlCount: 5,
+      name: "Broken internal link",
+      passCount: 0,
+      failCount: 5,
       affectedUrls: ["url1", "url2", ...],
-      summary: "Broken internal link (404 error)"
-    },
-    {
-      code: "MISSING_OG_IMAGE",
-      provider: "CUSTOM_RULE",
-      severity: "MEDIUM",
-      affectedUrlCount: 2,
-      affectedUrls: ["url1", "url2"],
-      summary: "Missing Open Graph image tag"
+      severity: "HIGH",
+      impact: "BLOCKER"
     }
   ],
-  totalIssues: 47,
-  criticalCount: 2,
-  highCount: 18,
-  mediumCount: 22,
-  lowCount: 5
+  summary: {
+    totalChecks: 150,
+    passCount: 103,
+    failCount: 47,
+    criticalCount: 2,
+    highCount: 18,
+    mediumCount: 22,
+    lowCount: 5
+  }
 }
 ```
 
 **UI Display**:
-- Group by severity, then by provider
-- Show issue count badges by severity
-- Expandable sections per provider
-- Example: "Missing title tag (3 pages) [LIGHTHOUSE]"
+- Group by provider, then by check type
+- Show pass/fail counts per check
+- Expandable sections to see affected URLs for failures
+- Example: "Document has title (2 pass, 1 fail) [LIGHTHOUSE]"
 
 **Future Enhancement (V1.2 with SE Ranking)**:
 - Add `externalReportUrl` field for deep links to SE Ranking reports
@@ -770,13 +768,17 @@ import { prisma } from '@/lib/prisma';
 import { ReleaseRunStatus, TestStatus, ManualTestType, IssueImpact } from '@prisma/client';
 
 export async function getReleaseRunStatus(releaseRunId: string): Promise<ReleaseRunStatus> {
-  // Get the Release Run with all related TestRuns
+  // Get the Release Run with all related TestRuns and ResultItems
   const releaseRun = await prisma.releaseRun.findUnique({
     where: { id: releaseRunId },
     include: {
       testRuns: {
         include: {
-          issues: true,
+          urlResults: {
+            include: {
+              resultItems: true,
+            },
+          },
         },
       },
     },
@@ -792,9 +794,11 @@ export async function getReleaseRunStatus(releaseRunId: string): Promise<Release
     return ReleaseRunStatus.PENDING;
   }
 
-  // Check for BLOCKER issues (causes FAIL)
+  // Check for BLOCKER ResultItems (causes FAIL)
   const hasBlockers = releaseRun.testRuns.some((run) =>
-    run.issues.some((issue) => issue.impact === IssueImpact.BLOCKER)
+    run.urlResults.some((urlResult) =>
+      urlResult.resultItems.some((item) => item.impact === IssueImpact.BLOCKER)
+    )
   );
   if (hasBlockers) {
     return ReleaseRunStatus.FAIL;
@@ -908,7 +912,7 @@ See `prisma/schema.prisma` for complete schema. Key entities:
 - **TestRun** - Test execution records within a Release Run; has lifecycle states (QUEUED/RUNNING/SUCCESS/FAILED/PARTIAL), score (0-100), lastHeartbeat for stuck run detection
 - **TestRunConfig** - Stores URL selection for each test run (scope: CUSTOM_URLS, SITEMAP, or SINGLE_URL)
 - **UrlResult** - Per-URL metrics (Core Web Vitals, scores, issue counts, viewport)
-- **Issue** - Normalized issues from all test providers with impact level (BLOCKER, WARNING, INFO)
+- **ResultItem** - Individual check results (pass/fail) from all test providers; belongs to UrlResult; failed items have impact level (BLOCKER, WARNING, INFO)
 - **ScreenshotSet** - Screenshot metadata and storage keys
 - **ManualTestStatus** - User-entered pass/fail/review statuses per Release Run (no history in MVP)
 
@@ -917,7 +921,7 @@ See `prisma/schema.prisma` for complete schema. Key entities:
 - **Single source of truth**: `prisma/schema.prisma` defines entire data model
 - **Shared by app and worker**: Both use same Prisma Client and database
 - **Migration workflow**: Use `prisma migrate dev` in development, `prisma migrate deploy` in production
-- **Cascading deletes**: `ON DELETE CASCADE` on all child tables (UrlResult, Issue, ScreenshotSet) when parent TestRun is deleted
+- **Cascading deletes**: `ON DELETE CASCADE` on all child tables (UrlResult → ResultItem, ScreenshotSet) when parent TestRun is deleted
 
 > For complete Prisma schema, see `installation.md` Phase 1.2 or `prisma/schema.prisma`.
 
@@ -1035,7 +1039,7 @@ See `prisma/schema.prisma` for complete schema. Key entities:
 ### Other
 
 8. **Spelling text extraction**: Needs refinement during implementation to filter navigation/boilerplate
-9. **Foreign key cascades**: All child tables (UrlResult, Issue, ScreenshotSet) have `ON DELETE CASCADE` when parent TestRun is deleted. ReleaseRun deletion cascades to all child TestRuns.
+9. **Foreign key cascades**: UrlResult and ScreenshotSet have `ON DELETE CASCADE` when parent TestRun is deleted. ResultItem cascades from UrlResult. ReleaseRun deletion cascades to all child TestRuns.
 10. **ReleaseRun deletion triggers retention cleanup**: When new Release Run completes, immediately prune old Release Runs and all related data
 11. **Release Readiness is computed per Release Run**, not from "latest tests across time". Query all TestRuns within the Release Run + ManualTestStatus entries.
 12. **URLs are frozen per Release Run**: Once a Release Run begins execution, its URL list cannot be modified. Re-runs use the same frozen URLs.

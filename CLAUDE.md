@@ -56,8 +56,8 @@ See `Documentation/platform-technical-setup.md` section 3 for the complete Prism
 - `ReleaseRun` - A frozen snapshot representing a single launch candidate (see Release Run Model below)
 - `TestRun` - Test execution records with lifecycle states, score (0-100), and lastHeartbeat for stuck run detection; belongs to a ReleaseRun
 - `TestRunConfig` - Stores URL selection for each test run (scope: CUSTOM_URLS, SITEMAP, or SINGLE_URL)
-- `UrlResult` - Per-URL metrics (Core Web Vitals, scores, issue counts, viewport)
-- `Issue` - Normalized issues from all test providers with impact level (BLOCKER, WARNING, INFO)
+- `UrlResult` - Per-URL metrics and summary data; parent container for ResultItems
+- `ResultItem` - Individual check results (pass or fail) from all test providers; belongs to UrlResult
 - `ScreenshotSet` - Screenshot metadata and storage keys
 - `ManualTestStatus` - User-entered pass/fail/review statuses per Release Run (no history in MVP)
 
@@ -91,15 +91,32 @@ Tests are organized into two tabs under **ReleasePass** in the navigation:
 **Site Audit Tab - Site-Level Tests (NOT part of Release Runs):**
 - **Site Audit**: Full sitemap crawl (max 500 pages, same subdomain only) via SE Ranking API exclusively
 
-### Issue Impact Levels
+### ResultItem Model
 
-All issues stored in the `Issue` table include an `impact` field that determines their effect on release readiness:
+All check results are stored in the `ResultItem` table, which belongs to `UrlResult`. Each ResultItem represents an individual check (audit) that was run.
 
-- **BLOCKER**: Prevents release readiness (causes Release Run status = FAIL)
-- **WARNING**: Flagged for attention but does not block release
-- **INFO**: Informational only, no effect on readiness
+**Key fields:**
+- `status`: PASS | FAIL | SKIP - the outcome of the check
+- `name`: Human-readable title of the check
+- `code`: Normalized check code (e.g., `document-title`, `BROKEN_INTERNAL_LINK`)
+- `provider`: Source of the check (LIGHTHOUSE, LINKINATOR, CUSTOM_RULE, etc.)
+- `severity`: Only for FAIL status - LOW, MEDIUM, HIGH, CRITICAL
+- `impact`: Only for FAIL status - determines effect on release readiness:
+  - **BLOCKER**: Prevents release readiness (causes Release Run status = FAIL)
+  - **WARNING**: Flagged for attention but does not block release
+  - **INFO**: Informational only, no effect on readiness
 
-The `impact` level is distinct from the `provider` (source of the issue). Impact determines release relevance, while provider identifies the test that detected it.
+### Data Storage
+
+**TestRun.rawPayload**: Stores structured JSON with provider-keyed raw responses:
+```json
+{
+  "lighthouse": { /* full PageSpeed API response */ },
+  "linkinator": { /* full link check results */ }
+}
+```
+
+**UrlResult.additionalMetrics**: Stores per-URL summary data and metrics from each provider.
 
 ### Data Retention Rules
 
@@ -141,12 +158,11 @@ For each Release Run, readiness is derived from:
 
 1. Status of all TestRuns within that Release Run
 2. `ManualTestStatus` entries for manual review tests (Screenshots, Spelling)
-3. Issue impact levels (BLOCKER issues cause FAIL status)
+3. ResultItem impact levels (BLOCKER items cause FAIL status)
 
 Each test contributes either:
 - A numeric score with pass/fail threshold (Performance)
-- A pass/fail checklist (Page Preflight via Lighthouse SEO + Custom Rules)
-- Itemized issues (Linkinator for link/resource health)
+- A pass/fail checklist stored as ResultItems (Page Preflight via Lighthouse SEO + Custom Rules + Linkinator)
 - A manual status label (Screenshots, Spelling: PASS / REVIEW / FAIL)
 
 Color mapping: Green (passing), Yellow (moderate concern), Red (failing), Grey (needs review)

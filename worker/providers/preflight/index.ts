@@ -6,12 +6,12 @@
  * 2. Link validation (via Linkinator)
  * 3. Custom rules (extensible)
  *
- * Stores issues in the Issue table with appropriate impact levels.
- * Returns a calculated score (0-100) based on issue severity.
+ * Stores all check results (pass + fail) in ResultItem table via UrlResult.
+ * Returns a calculated score (0-100) based on failed item severity.
  */
 
 import { prisma } from '../../lib/prisma';
-import { IssueProvider, IssueSeverity, IssueImpact } from '@prisma/client';
+import { IssueProvider, IssueSeverity, IssueImpact, ResultStatus } from '@prisma/client';
 import { runPageSpeed, SeoAudit, PageSpeedResult } from '../pagespeed/client';
 import { checkLinks, LinkCheckResult, LinkCheckSummary } from '../linkinator/client';
 
@@ -23,20 +23,20 @@ interface TestRunWithRelations {
   releaseRun: { id: string; urls: unknown; selectedTests: unknown } | null;
 }
 
-interface IssueToCreate {
-  url: string;
+interface ResultItemToCreate {
   provider: IssueProvider;
   code: string;
-  summary: string;
-  severity: IssueSeverity;
-  impact: IssueImpact;
+  name: string;
+  status: ResultStatus;
+  severity?: IssueSeverity;
+  impact?: IssueImpact;
   meta?: any;
 }
 
-interface UrlResultToCreate {
+interface UrlCheckResults {
   url: string;
   seoScore: number | null;
-  issueCount: number;
+  resultItems: ResultItemToCreate[];
   linkCount: number;
   brokenLinkCount: number;
   lighthouseRaw?: any;
@@ -46,7 +46,7 @@ interface UrlResultToCreate {
 /**
  * Process a Page Preflight test run
  *
- * @returns Score (0-100) based on issue severity
+ * @returns Score (0-100) based on failed item severity
  */
 export async function processPagePreflight(testRun: TestRunWithRelations): Promise<number> {
   console.log(`[PAGE_PREFLIGHT] Starting for test run ${testRun.id}`);
@@ -66,123 +66,135 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
     console.log(`[PAGE_PREFLIGHT] Limited to 50 URLs (was ${urls.length})`);
   }
 
-  const allIssues: IssueToCreate[] = [];
-  const allUrlResults: UrlResultToCreate[] = [];
+  const allUrlResults: UrlCheckResults[] = [];
+  const rawPayload: { lighthouse: any[]; linkinator: any[] } = {
+    lighthouse: [],
+    linkinator: [],
+  };
 
   // Process each URL
   for (const url of limitedUrls) {
     console.log(`[PAGE_PREFLIGHT] Checking: ${url}`);
 
-    let urlResult: UrlResultToCreate = {
+    const urlCheckResult: UrlCheckResults = {
       url,
       seoScore: null,
-      issueCount: 0,
+      resultItems: [],
       linkCount: 0,
       brokenLinkCount: 0,
     };
 
     try {
       // Run Lighthouse SEO checks
-      const { issues: seoIssues, result: lighthouseResult } = await runLighthouseSeo(url);
-      allIssues.push(...seoIssues);
+      const { resultItems: seoItems, result: lighthouseResult } = await runLighthouseSeo(url);
+      urlCheckResult.resultItems.push(...seoItems);
 
       if (lighthouseResult) {
-        urlResult.seoScore = lighthouseResult.seoScore;
-        urlResult.lighthouseRaw = {
-          seoScore: lighthouseResult.seoScore,
-          performanceScore: lighthouseResult.performanceScore,
-          accessibilityScore: lighthouseResult.accessibilityScore,
-          auditsChecked: lighthouseResult.seoAudits.length,
-          auditsFailed: seoIssues.length,
-        };
+        urlCheckResult.seoScore = lighthouseResult.seoScore;
+        urlCheckResult.lighthouseRaw = lighthouseResult;
+        rawPayload.lighthouse.push({ url, result: lighthouseResult });
       }
 
       // Run Linkinator checks
-      const { issues: linkIssues, result: linkinatorResult } = await runLinkinator(url);
-      allIssues.push(...linkIssues);
+      const { resultItems: linkItems, result: linkinatorResult } = await runLinkinator(url);
+      urlCheckResult.resultItems.push(...linkItems);
 
       if (linkinatorResult) {
-        urlResult.linkCount = linkinatorResult.totalLinks;
-        urlResult.brokenLinkCount = linkinatorResult.brokenLinks.length;
-        urlResult.linkinatorRaw = {
-          totalLinks: linkinatorResult.totalLinks,
-          brokenLinks: linkinatorResult.brokenLinks.length,
-          redirects: linkinatorResult.redirects.length,
-          skipped: linkinatorResult.skipped.length,
-        };
+        urlCheckResult.linkCount = linkinatorResult.totalLinks;
+        urlCheckResult.brokenLinkCount = linkinatorResult.brokenLinks.length;
+        urlCheckResult.linkinatorRaw = linkinatorResult;
+        rawPayload.linkinator.push({ url, result: linkinatorResult });
       }
-
-      urlResult.issueCount = seoIssues.length + linkIssues.length;
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[PAGE_PREFLIGHT] Error checking ${url}:`, errorMessage);
 
-      // Add an issue for the failed check
-      allIssues.push({
-        url,
+      // Add a failed result item for the error
+      urlCheckResult.resultItems.push({
         provider: IssueProvider.INTERNAL,
         code: 'CHECK_FAILED',
-        summary: `Failed to check URL: ${errorMessage}`,
+        name: 'URL Check Failed',
+        status: ResultStatus.FAIL,
         severity: IssueSeverity.HIGH,
         impact: IssueImpact.WARNING,
         meta: { error: errorMessage },
       });
-
-      urlResult.issueCount = 1;
     }
 
-    allUrlResults.push(urlResult);
+    allUrlResults.push(urlCheckResult);
   }
 
-  // Store all issues in database
-  if (allIssues.length > 0) {
-    await prisma.issue.createMany({
-      data: allIssues.map(issue => ({
-        testRunId: testRun.id,
-        url: issue.url,
-        provider: issue.provider,
-        code: issue.code,
-        summary: issue.summary,
-        severity: issue.severity,
-        impact: issue.impact,
-        meta: issue.meta,
-      })),
-    });
+  // Store results in database
+  let totalPassCount = 0;
+  let totalFailCount = 0;
 
-    console.log(`[PAGE_PREFLIGHT] Stored ${allIssues.length} issues`);
-  }
-
-  // Store URL results in database
-  if (allUrlResults.length > 0) {
-    await prisma.urlResult.createMany({
-      data: allUrlResults.map(result => ({
+  for (const urlResult of allUrlResults) {
+    // Create UrlResult first
+    const createdUrlResult = await prisma.urlResult.create({
+      data: {
         testRunId: testRun.id,
-        url: result.url,
-        issueCount: result.issueCount,
+        url: urlResult.url,
+        issueCount: urlResult.resultItems.filter(r => r.status === ResultStatus.FAIL).length,
         additionalMetrics: {
-          seoScore: result.seoScore,
-          linkCount: result.linkCount,
-          brokenLinkCount: result.brokenLinkCount,
-          lighthouse: result.lighthouseRaw,
-          linkinator: result.linkinatorRaw,
+          seoScore: urlResult.seoScore,
+          linkCount: urlResult.linkCount,
+          brokenLinkCount: urlResult.brokenLinkCount,
+          lighthouse: urlResult.lighthouseRaw ? {
+            seoScore: urlResult.lighthouseRaw.seoScore,
+            performanceScore: urlResult.lighthouseRaw.performanceScore,
+            accessibilityScore: urlResult.lighthouseRaw.accessibilityScore,
+          } : null,
+          linkinator: urlResult.linkinatorRaw ? {
+            totalLinks: urlResult.linkinatorRaw.totalLinks,
+            brokenLinks: urlResult.linkinatorRaw.brokenLinks?.length || 0,
+            redirects: urlResult.linkinatorRaw.redirects?.length || 0,
+          } : null,
         },
-      })),
+      },
     });
 
-    console.log(`[PAGE_PREFLIGHT] Stored ${allUrlResults.length} URL results`);
+    // Create ResultItems linked to this UrlResult
+    if (urlResult.resultItems.length > 0) {
+      await prisma.resultItem.createMany({
+        data: urlResult.resultItems.map(item => ({
+          urlResultId: createdUrlResult.id,
+          provider: item.provider,
+          code: item.code,
+          name: item.name,
+          status: item.status,
+          severity: item.severity,
+          impact: item.impact,
+          meta: item.meta,
+        })),
+      });
+    }
+
+    // Count pass/fail
+    totalPassCount += urlResult.resultItems.filter(r => r.status === ResultStatus.PASS).length;
+    totalFailCount += urlResult.resultItems.filter(r => r.status === ResultStatus.FAIL).length;
   }
 
-  // Calculate score
-  const score = calculateScore(allIssues, limitedUrls.length);
+  console.log(`[PAGE_PREFLIGHT] Stored ${allUrlResults.length} URL results`);
+  console.log(`[PAGE_PREFLIGHT] Total checks: ${totalPassCount} passed, ${totalFailCount} failed`);
+
+  // Update TestRun with rawPayload
+  await prisma.testRun.update({
+    where: { id: testRun.id },
+    data: { rawPayload },
+  });
+
+  // Calculate score based on failed items only
+  const failedItems = allUrlResults.flatMap(r => r.resultItems.filter(i => i.status === ResultStatus.FAIL));
+  const score = calculateScore(failedItems, limitedUrls.length);
 
   // Log summary
-  const blockerCount = allIssues.filter(i => i.impact === IssueImpact.BLOCKER).length;
-  const warningCount = allIssues.filter(i => i.impact === IssueImpact.WARNING).length;
-  const infoCount = allIssues.filter(i => i.impact === IssueImpact.INFO).length;
+  const blockerCount = failedItems.filter(i => i.impact === IssueImpact.BLOCKER).length;
+  const warningCount = failedItems.filter(i => i.impact === IssueImpact.WARNING).length;
+  const infoCount = failedItems.filter(i => i.impact === IssueImpact.INFO).length;
 
   console.log(`[PAGE_PREFLIGHT] Completed. Score: ${score}`);
-  console.log(`[PAGE_PREFLIGHT] Issues: ${blockerCount} blockers, ${warningCount} warnings, ${infoCount} info`);
+  console.log(`[PAGE_PREFLIGHT] Failed items: ${blockerCount} blockers, ${warningCount} warnings, ${infoCount} info`);
 
   return score;
 }
@@ -214,9 +226,10 @@ function getUrlsToTest(testRun: TestRunWithRelations): string[] {
 
 /**
  * Run Lighthouse SEO audits via PageSpeed API
+ * Returns ALL audit results (pass + fail)
  */
-async function runLighthouseSeo(url: string): Promise<{ issues: IssueToCreate[]; result: PageSpeedResult | null }> {
-  const issues: IssueToCreate[] = [];
+async function runLighthouseSeo(url: string): Promise<{ resultItems: ResultItemToCreate[]; result: PageSpeedResult | null }> {
+  const resultItems: ResultItemToCreate[] = [];
   let result: PageSpeedResult | null = null;
 
   try {
@@ -225,64 +238,57 @@ async function runLighthouseSeo(url: string): Promise<{ issues: IssueToCreate[];
 
     console.log(`[PAGE_PREFLIGHT] Lighthouse SEO response: seoScore=${result.seoScore}, audits=${result.seoAudits.length}`);
 
-    // Log all audits for debugging
+    // Create ResultItems for ALL audits (pass + fail)
     for (const audit of result.seoAudits) {
-      console.log(`[PAGE_PREFLIGHT]   Audit: ${audit.id} score=${audit.score} title="${audit.title}"`);
+      const isPassing = audit.score === null || audit.score >= 1;
+      const { severity, impact } = mapSeoAuditSeverity(audit);
+
+      resultItems.push({
+        provider: IssueProvider.LIGHTHOUSE,
+        code: audit.id,
+        name: audit.title,
+        status: isPassing ? ResultStatus.PASS : ResultStatus.FAIL,
+        severity: isPassing ? undefined : severity,
+        impact: isPassing ? undefined : impact,
+        meta: {
+          description: audit.description,
+          displayValue: audit.displayValue,
+          score: audit.score,
+        },
+      });
+
+      console.log(`[PAGE_PREFLIGHT]   Audit: ${audit.id} ${isPassing ? 'PASS' : 'FAIL'} score=${audit.score}`);
     }
 
-    for (const audit of result.seoAudits) {
-      // Only create issues for failed audits (score < 1)
-      if (audit.score !== null && audit.score < 1) {
-        const { severity, impact } = mapSeoAuditSeverity(audit);
-
-        issues.push({
-          url,
-          provider: IssueProvider.LIGHTHOUSE,
-          code: `SEO_${audit.id.toUpperCase().replace(/-/g, '_')}`,
-          summary: audit.title,
-          severity,
-          impact,
-          meta: {
-            description: audit.description,
-            displayValue: audit.displayValue,
-            score: audit.score,
-            rawAudit: audit,  // Store full audit data
-          },
-        });
-      }
-    }
-
-    // If no issues but we got audits, log that all passed
-    if (issues.length === 0 && result.seoAudits.length > 0) {
-      console.log(`[PAGE_PREFLIGHT] Lighthouse SEO: All ${result.seoAudits.length} audits passed for ${url}`);
-    } else {
-      console.log(`[PAGE_PREFLIGHT] Lighthouse SEO: ${issues.length} issues for ${url}`);
-    }
+    const passCount = resultItems.filter(r => r.status === ResultStatus.PASS).length;
+    const failCount = resultItems.filter(r => r.status === ResultStatus.FAIL).length;
+    console.log(`[PAGE_PREFLIGHT] Lighthouse SEO: ${passCount} passed, ${failCount} failed for ${url}`);
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[PAGE_PREFLIGHT] Lighthouse SEO failed for ${url}:`, errorMsg);
 
-    // Create an issue to record the failure
-    issues.push({
-      url,
+    // Create a failed result item to record the error
+    resultItems.push({
       provider: IssueProvider.LIGHTHOUSE,
       code: 'LIGHTHOUSE_API_ERROR',
-      summary: `Lighthouse SEO check failed: ${errorMsg}`,
+      name: 'Lighthouse SEO Check Failed',
+      status: ResultStatus.FAIL,
       severity: IssueSeverity.HIGH,
       impact: IssueImpact.WARNING,
       meta: { error: errorMsg },
     });
   }
 
-  return { issues, result };
+  return { resultItems, result };
 }
 
 /**
  * Run Linkinator link validation
+ * Returns results for broken links (no pass items for working links to avoid clutter)
  */
-async function runLinkinator(url: string): Promise<{ issues: IssueToCreate[]; result: LinkCheckSummary | null }> {
-  const issues: IssueToCreate[] = [];
+async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCreate[]; result: LinkCheckSummary | null }> {
+  const resultItems: ResultItemToCreate[] = [];
   let result: LinkCheckSummary | null = null;
 
   try {
@@ -295,16 +301,27 @@ async function runLinkinator(url: string): Promise<{ issues: IssueToCreate[]; re
 
     console.log(`[PAGE_PREFLIGHT] Linkinator response: ${result.totalLinks} links, ${result.brokenLinks.length} broken`);
 
-    // Create issues for broken links
+    // Add a summary pass item if no broken links
+    if (result.brokenLinks.length === 0) {
+      resultItems.push({
+        provider: IssueProvider.LINKINATOR,
+        code: 'LINK_CHECK_PASSED',
+        name: `All ${result.totalLinks} links working`,
+        status: ResultStatus.PASS,
+        meta: { totalLinks: result.totalLinks },
+      });
+    }
+
+    // Create ResultItems for broken links
     for (const link of result.brokenLinks) {
       const isInternal = isInternalLink(url, link.url);
       const { severity, impact } = mapLinkSeverity(link, isInternal);
 
-      issues.push({
-        url,
+      resultItems.push({
         provider: IssueProvider.LINKINATOR,
         code: isInternal ? 'BROKEN_INTERNAL_LINK' : 'BROKEN_EXTERNAL_LINK',
-        summary: `Broken ${isInternal ? 'internal' : 'external'} link: ${link.url} (${link.status})`,
+        name: `Broken ${isInternal ? 'internal' : 'external'} link: ${link.url}`,
+        status: ResultStatus.FAIL,
         severity,
         impact,
         meta: {
@@ -316,14 +333,14 @@ async function runLinkinator(url: string): Promise<{ issues: IssueToCreate[]; re
       });
     }
 
-    // Optionally warn about redirect chains (as INFO)
+    // Add info items for internal redirect chains
     for (const redirect of result.redirects) {
       if (isInternalLink(url, redirect.url)) {
-        issues.push({
-          url,
+        resultItems.push({
           provider: IssueProvider.LINKINATOR,
           code: 'REDIRECT_CHAIN',
-          summary: `Internal redirect: ${redirect.url} (${redirect.status})`,
+          name: `Internal redirect: ${redirect.url}`,
+          status: ResultStatus.FAIL,
           severity: IssueSeverity.LOW,
           impact: IssueImpact.INFO,
           meta: {
@@ -334,25 +351,25 @@ async function runLinkinator(url: string): Promise<{ issues: IssueToCreate[]; re
       }
     }
 
-    console.log(`[PAGE_PREFLIGHT] Linkinator: ${issues.length} issues for ${url} (checked ${result.totalLinks} links)`);
+    console.log(`[PAGE_PREFLIGHT] Linkinator: ${resultItems.length} result items for ${url}`);
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[PAGE_PREFLIGHT] Linkinator failed for ${url}:`, errorMsg);
 
-    // Create an issue to record the failure
-    issues.push({
-      url,
+    // Create a failed result item to record the error
+    resultItems.push({
       provider: IssueProvider.LINKINATOR,
       code: 'LINKINATOR_ERROR',
-      summary: `Link check failed: ${errorMsg}`,
+      name: 'Link Check Failed',
+      status: ResultStatus.FAIL,
       severity: IssueSeverity.MEDIUM,
       impact: IssueImpact.WARNING,
       meta: { error: errorMsg },
     });
   }
 
-  return { issues, result };
+  return { resultItems, result };
 }
 
 /**
@@ -415,7 +432,7 @@ function mapLinkSeverity(
 }
 
 /**
- * Calculate score based on issues
+ * Calculate score based on failed items
  *
  * Scoring algorithm:
  * - Start with 100 points
@@ -427,11 +444,13 @@ function mapLinkSeverity(
  * - Normalize by URL count (more URLs = proportionally more tolerance)
  * - Clamp to 0-100
  */
-function calculateScore(issues: IssueToCreate[], urlCount: number): number {
+function calculateScore(failedItems: ResultItemToCreate[], urlCount: number): number {
   let score = 100;
 
-  for (const issue of issues) {
-    switch (issue.severity) {
+  for (const item of failedItems) {
+    if (!item.severity) continue;
+
+    switch (item.severity) {
       case IssueSeverity.CRITICAL:
         score -= 10;
         break;

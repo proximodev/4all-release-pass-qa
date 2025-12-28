@@ -11,7 +11,7 @@
  */
 
 import { prisma } from '../../lib/prisma';
-import { IssueProvider, IssueSeverity, IssueImpact } from '@prisma/client';
+import { IssueProvider, IssueSeverity, IssueImpact, ResultStatus } from '@prisma/client';
 import { runFullAudit, SeRankingIssue } from './client';
 
 interface TestRunWithRelations {
@@ -52,24 +52,41 @@ export async function processSiteAudit(testRun: TestRunWithRelations): Promise<n
   console.log(`[SITE_AUDIT] Audit completed. Score: ${result.score}, Pages: ${result.pagesScanned}`);
   console.log(`[SITE_AUDIT] Issues: ${result.summary.criticalCount} critical, ${result.summary.warningsCount} warnings, ${result.summary.noticesCount} notices`);
 
-  // Store issues in database
-  if (result.issues.length > 0) {
-    await storeIssues(testRun.id, result.issues, siteUrl);
-    console.log(`[SITE_AUDIT] Stored ${result.issues.length} issues`);
-  }
-
-  // Store URL results for pages scanned
-  await prisma.urlResult.create({
+  // Create UrlResult first
+  const urlResult = await prisma.urlResult.create({
     data: {
       testRunId: testRun.id,
       url: siteUrl,
-      issueCount: result.issues.length,
+      issueCount: result.issues.filter(i => i.severity !== 'passed').length,
       criticalIssues: result.summary.criticalCount,
       additionalMetrics: {
         pagesScanned: result.pagesScanned,
         passedChecks: result.summary.passedCount,
         seRankingProjectId: result.projectId,
         seRankingAuditId: result.auditId,
+        summary: result.summary,
+      },
+    },
+  });
+
+  // Store all results (pass + fail) as ResultItems
+  if (result.issues.length > 0) {
+    await storeResultItems(urlResult.id, result.issues);
+    console.log(`[SITE_AUDIT] Stored ${result.issues.length} result items`);
+  }
+
+  // Update TestRun with rawPayload
+  await prisma.testRun.update({
+    where: { id: testRun.id },
+    data: {
+      rawPayload: {
+        seRanking: {
+          projectId: result.projectId,
+          auditId: result.auditId,
+          score: result.score,
+          pagesScanned: result.pagesScanned,
+          summary: result.summary,
+        },
       },
     },
   });
@@ -78,21 +95,20 @@ export async function processSiteAudit(testRun: TestRunWithRelations): Promise<n
 }
 
 /**
- * Store SE Ranking issues in the database
+ * Store SE Ranking results as ResultItems in the database
  */
-async function storeIssues(
-  testRunId: string,
-  issues: SeRankingIssue[],
-  siteUrl: string
+async function storeResultItems(
+  urlResultId: string,
+  issues: SeRankingIssue[]
 ): Promise<void> {
-  const issuesToCreate = issues.map(issue => ({
-    testRunId,
-    url: siteUrl,  // Site-level issues are associated with the main URL
+  const resultItems = issues.map(issue => ({
+    urlResultId,
     provider: IssueProvider.SE_RANKING,
-    code: `SE_${issue.id.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`,
-    summary: issue.name,
-    severity: mapSeverity(issue.severity),
-    impact: mapImpact(issue.severity),
+    code: issue.id,
+    name: issue.name,
+    status: issue.severity === 'passed' ? ResultStatus.PASS : ResultStatus.FAIL,
+    severity: issue.severity === 'passed' ? null : mapSeverity(issue.severity),
+    impact: issue.severity === 'passed' ? null : mapImpact(issue.severity),
     meta: {
       category: issue.category,
       affectedCount: issue.affectedCount,
@@ -101,8 +117,8 @@ async function storeIssues(
     },
   }));
 
-  await prisma.issue.createMany({
-    data: issuesToCreate,
+  await prisma.resultItem.createMany({
+    data: resultItems,
   });
 }
 

@@ -183,9 +183,9 @@ A **Release Run** represents a single launch candidate tested as a cohesive unit
 **Site-Level Tests (NOT part of Release Runs):**
 * **Site Audit (Full Crawl)** — numeric score (0-100) from SE Ranking (v1.2)
 
-### Issue Impact Levels
+### ResultItem Impact Levels
 
-Issues include an `impact` field that determines their effect on release readiness:
+Failed ResultItems include an `impact` field that determines their effect on release readiness:
 * **BLOCKER** — Prevents release readiness (causes Release Run status = FAIL)
 * **WARNING** — Flagged for attention but does not block release
 * **INFO** — Informational only, no effect on readiness
@@ -260,12 +260,20 @@ General rules:
   * startedAt — datetime (nullable until run starts)
   * finishedAt — datetime (nullable until run finishes)
   * lastHeartbeat — datetime (nullable; updated by worker during processing)
-  * rawPayload — JSON (raw API response for debugging; current run only)
+  * rawPayload — JSON (structured with provider keys; see below)
   * error — text (nullable; error message or summary if failed/partial)
   * createdAt — datetime
   * updatedAt — datetime
 
   TestRun belongs to a ReleaseRun for page-level tests. Multiple TestRuns of the same type may exist within a ReleaseRun; only the latest per type is considered "current". Re-running a test creates a new TestRun within the same ReleaseRun.
+
+  **rawPayload structure**: For multi-provider tests (e.g., PAGE_PREFLIGHT), rawPayload stores structured JSON with provider keys:
+  ```json
+  {
+    "lighthouse": { /* full PageSpeed API response */ },
+    "linkinator": { /* full link check results */ }
+  }
+  ```
 
 * UrlResult
   * id — UUID
@@ -275,35 +283,41 @@ General rules:
   * cls — number (nullable)
   * inp — number (nullable)
   * performanceScore — integer (nullable)
-  * additionalMetrics — JSON (nullable; for provider-specific metrics)
+  * additionalMetrics — JSON (nullable; for provider-specific summary metrics)
   * createdAt — datetime
   * updatedAt — datetime
+  * → resultItems — one-to-many relation to ResultItem
 
-  UrlResult represents per-URL metrics for a given TestRun. Fields are sparsely populated depending on the test type (e.g., Performance vs Site Audit).
+  UrlResult represents per-URL metrics for a given TestRun. Fields are sparsely populated depending on the test type (e.g., Performance vs Site Audit). Each UrlResult contains multiple ResultItems representing individual check results.
 
-* Issue
+* ResultItem
   * id — UUID
-  * testRunId — UUID (FK to TestRun.id)
-  * url — string
+  * urlResultId — UUID (FK to UrlResult.id)
   * provider — string/enum (e.g., `LIGHTHOUSE`, `LINKINATOR`, `CUSTOM_RULE`, `SE_RANKING`, `LANGUAGETOOL`, `INTERNAL`)
-  * code — string (normalized issue code, e.g. `LIGHTHOUSE_NO_TITLE`, `LINK_BROKEN_INTERNAL`, `MISSING_OG_IMAGE`, `SPELLING_ERROR`)
-  * summary — string (short human-readable description)
-  * severity — string/enum (e.g., `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
-  * impact — enum (`BLOCKER`, `WARNING`, `INFO`)
-  * meta — JSON (nullable; additional context such as selectors, offsets, raw messages)
+  * code — string (normalized check code, e.g. `document-title`, `BROKEN_INTERNAL_LINK`, `MISSING_OG_IMAGE`, `SPELLING_ERROR`)
+  * name — string (human-readable title of the check)
+  * status — enum (`PASS`, `FAIL`, `SKIP`)
+  * severity — string/enum (nullable; only for FAIL status: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
+  * impact — enum (nullable; only for FAIL status: `BLOCKER`, `WARNING`, `INFO`)
+  * meta — JSON (nullable; additional context such as description, selectors, raw audit data)
   * createdAt — datetime
   * updatedAt — datetime
 
-  Issue is a generic issue table used across test types (Page Preflight, Spelling, possible future tools).
+  ResultItem stores all check results (both passing and failing) from test providers. Each ResultItem belongs to a UrlResult, representing a single audit/check that was run for that URL.
 
-  **Impact vs Severity**: `severity` indicates the technical severity of the issue. `impact` determines the effect on release readiness:
+  **Status**: Indicates the outcome of the check:
+  * **PASS** — Check passed successfully
+  * **FAIL** — Check failed; severity and impact fields are populated
+  * **SKIP** — Check was skipped (e.g., not applicable)
+
+  **Impact vs Severity** (only for FAIL status): `severity` indicates the technical severity of the failure. `impact` determines the effect on release readiness:
   * **BLOCKER** — Prevents release readiness (causes Release Run status = FAIL)
   * **WARNING** — Flagged for attention but does not block release
   * **INFO** — Informational only, no effect on readiness
 
   **MVP Providers**: LIGHTHOUSE (PageSpeed SEO), LINKINATOR (link checking), CUSTOM_RULE (custom validation rules), LANGUAGETOOL (spelling/grammar).
 
-  **Future Providers**: SE_RANKING (full site crawl), INTERNAL (system-generated issues).
+  **Future Providers**: SE_RANKING (full site crawl), INTERNAL (system-generated checks).
 
 * ScreenshotSet
   * id — UUID
@@ -334,7 +348,7 @@ General rules:
 
 Release Readiness itself is a derived object computed at runtime **per Release Run** from:
 * All TestRuns within the Release Run, and
-* Issue impact levels (BLOCKER issues cause FAIL), and
+* ResultItem impact levels (BLOCKER items cause FAIL), and
 * ManualTestStatus entries for that Release Run.
 
 No dedicated `Readiness` table is required in MVP.

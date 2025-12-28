@@ -28,12 +28,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         testRuns: {
           include: {
-            urlResults: true,
-            issues: {
-              orderBy: [{ impact: 'asc' }, { severity: 'desc' }],
+            urlResults: {
+              include: {
+                resultItems: {
+                  orderBy: [{ impact: 'asc' }, { severity: 'desc' }],
+                },
+              },
             },
             _count: {
-              select: { issues: true, urlResults: true },
+              select: { urlResults: true },
             },
           },
           orderBy: { createdAt: 'desc' },

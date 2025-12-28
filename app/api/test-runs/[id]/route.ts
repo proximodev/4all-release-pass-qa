@@ -35,10 +35,12 @@ export async function GET(
           },
         },
         urlResults: {
+          include: {
+            resultItems: {
+              orderBy: [{ status: 'asc' }, { severity: 'desc' }],
+            },
+          },
           orderBy: { createdAt: 'desc' },
-        },
-        issues: {
-          orderBy: { severity: 'desc' },
         },
         screenshotSets: {
           orderBy: { createdAt: 'desc' },

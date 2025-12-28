@@ -12,8 +12,8 @@
 
 import { prisma } from '../../lib/prisma';
 import { IssueProvider, IssueSeverity, IssueImpact } from '@prisma/client';
-import { runPageSpeed, SeoAudit } from '../pagespeed/client';
-import { checkLinks, LinkCheckResult } from '../linkinator/client';
+import { runPageSpeed, SeoAudit, PageSpeedResult } from '../pagespeed/client';
+import { checkLinks, LinkCheckResult, LinkCheckSummary } from '../linkinator/client';
 
 interface TestRunWithRelations {
   id: string;
@@ -31,6 +31,16 @@ interface IssueToCreate {
   severity: IssueSeverity;
   impact: IssueImpact;
   meta?: any;
+}
+
+interface UrlResultToCreate {
+  url: string;
+  seoScore: number | null;
+  issueCount: number;
+  linkCount: number;
+  brokenLinkCount: number;
+  lighthouseRaw?: any;
+  linkinatorRaw?: any;
 }
 
 /**
@@ -57,23 +67,52 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
   }
 
   const allIssues: IssueToCreate[] = [];
+  const allUrlResults: UrlResultToCreate[] = [];
 
   // Process each URL
   for (const url of limitedUrls) {
     console.log(`[PAGE_PREFLIGHT] Checking: ${url}`);
 
+    let urlResult: UrlResultToCreate = {
+      url,
+      seoScore: null,
+      issueCount: 0,
+      linkCount: 0,
+      brokenLinkCount: 0,
+    };
+
     try {
       // Run Lighthouse SEO checks
-      const seoIssues = await runLighthouseSeo(url);
+      const { issues: seoIssues, result: lighthouseResult } = await runLighthouseSeo(url);
       allIssues.push(...seoIssues);
 
+      if (lighthouseResult) {
+        urlResult.seoScore = lighthouseResult.seoScore;
+        urlResult.lighthouseRaw = {
+          seoScore: lighthouseResult.seoScore,
+          performanceScore: lighthouseResult.performanceScore,
+          accessibilityScore: lighthouseResult.accessibilityScore,
+          auditsChecked: lighthouseResult.seoAudits.length,
+          auditsFailed: seoIssues.length,
+        };
+      }
+
       // Run Linkinator checks
-      const linkIssues = await runLinkinator(url);
+      const { issues: linkIssues, result: linkinatorResult } = await runLinkinator(url);
       allIssues.push(...linkIssues);
 
-      // TODO: Run custom rules
-      // const customIssues = await runCustomRules(url);
-      // allIssues.push(...customIssues);
+      if (linkinatorResult) {
+        urlResult.linkCount = linkinatorResult.totalLinks;
+        urlResult.brokenLinkCount = linkinatorResult.brokenLinks.length;
+        urlResult.linkinatorRaw = {
+          totalLinks: linkinatorResult.totalLinks,
+          brokenLinks: linkinatorResult.brokenLinks.length,
+          redirects: linkinatorResult.redirects.length,
+          skipped: linkinatorResult.skipped.length,
+        };
+      }
+
+      urlResult.issueCount = seoIssues.length + linkIssues.length;
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -89,7 +128,11 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
         impact: IssueImpact.WARNING,
         meta: { error: errorMessage },
       });
+
+      urlResult.issueCount = 1;
     }
+
+    allUrlResults.push(urlResult);
   }
 
   // Store all issues in database
@@ -108,6 +151,26 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
     });
 
     console.log(`[PAGE_PREFLIGHT] Stored ${allIssues.length} issues`);
+  }
+
+  // Store URL results in database
+  if (allUrlResults.length > 0) {
+    await prisma.urlResult.createMany({
+      data: allUrlResults.map(result => ({
+        testRunId: testRun.id,
+        url: result.url,
+        issueCount: result.issueCount,
+        additionalMetrics: {
+          seoScore: result.seoScore,
+          linkCount: result.linkCount,
+          brokenLinkCount: result.brokenLinkCount,
+          lighthouse: result.lighthouseRaw,
+          linkinator: result.linkinatorRaw,
+        },
+      })),
+    });
+
+    console.log(`[PAGE_PREFLIGHT] Stored ${allUrlResults.length} URL results`);
   }
 
   // Calculate score
@@ -152,11 +215,20 @@ function getUrlsToTest(testRun: TestRunWithRelations): string[] {
 /**
  * Run Lighthouse SEO audits via PageSpeed API
  */
-async function runLighthouseSeo(url: string): Promise<IssueToCreate[]> {
+async function runLighthouseSeo(url: string): Promise<{ issues: IssueToCreate[]; result: PageSpeedResult | null }> {
   const issues: IssueToCreate[] = [];
+  let result: PageSpeedResult | null = null;
 
   try {
-    const result = await runPageSpeed(url, 'mobile', ['seo']);
+    console.log(`[PAGE_PREFLIGHT] Running Lighthouse SEO for ${url}...`);
+    result = await runPageSpeed(url, 'mobile', ['seo']);
+
+    console.log(`[PAGE_PREFLIGHT] Lighthouse SEO response: seoScore=${result.seoScore}, audits=${result.seoAudits.length}`);
+
+    // Log all audits for debugging
+    for (const audit of result.seoAudits) {
+      console.log(`[PAGE_PREFLIGHT]   Audit: ${audit.id} score=${audit.score} title="${audit.title}"`);
+    }
 
     for (const audit of result.seoAudits) {
       // Only create issues for failed audits (score < 1)
@@ -174,33 +246,54 @@ async function runLighthouseSeo(url: string): Promise<IssueToCreate[]> {
             description: audit.description,
             displayValue: audit.displayValue,
             score: audit.score,
+            rawAudit: audit,  // Store full audit data
           },
         });
       }
     }
 
-    console.log(`[PAGE_PREFLIGHT] Lighthouse SEO: ${issues.length} issues for ${url}`);
+    // If no issues but we got audits, log that all passed
+    if (issues.length === 0 && result.seoAudits.length > 0) {
+      console.log(`[PAGE_PREFLIGHT] Lighthouse SEO: All ${result.seoAudits.length} audits passed for ${url}`);
+    } else {
+      console.log(`[PAGE_PREFLIGHT] Lighthouse SEO: ${issues.length} issues for ${url}`);
+    }
 
   } catch (error) {
-    console.error(`[PAGE_PREFLIGHT] Lighthouse SEO failed for ${url}:`, error);
-    // Don't throw - let other checks continue
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[PAGE_PREFLIGHT] Lighthouse SEO failed for ${url}:`, errorMsg);
+
+    // Create an issue to record the failure
+    issues.push({
+      url,
+      provider: IssueProvider.LIGHTHOUSE,
+      code: 'LIGHTHOUSE_API_ERROR',
+      summary: `Lighthouse SEO check failed: ${errorMsg}`,
+      severity: IssueSeverity.HIGH,
+      impact: IssueImpact.WARNING,
+      meta: { error: errorMsg },
+    });
   }
 
-  return issues;
+  return { issues, result };
 }
 
 /**
  * Run Linkinator link validation
  */
-async function runLinkinator(url: string): Promise<IssueToCreate[]> {
+async function runLinkinator(url: string): Promise<{ issues: IssueToCreate[]; result: LinkCheckSummary | null }> {
   const issues: IssueToCreate[] = [];
+  let result: LinkCheckSummary | null = null;
 
   try {
-    const result = await checkLinks(url, {
+    console.log(`[PAGE_PREFLIGHT] Running Linkinator for ${url}...`);
+    result = await checkLinks(url, {
       timeout: 30000,
       retryCount: 2,
       checkExternal: true,
     });
+
+    console.log(`[PAGE_PREFLIGHT] Linkinator response: ${result.totalLinks} links, ${result.brokenLinks.length} broken`);
 
     // Create issues for broken links
     for (const link of result.brokenLinks) {
@@ -244,11 +337,22 @@ async function runLinkinator(url: string): Promise<IssueToCreate[]> {
     console.log(`[PAGE_PREFLIGHT] Linkinator: ${issues.length} issues for ${url} (checked ${result.totalLinks} links)`);
 
   } catch (error) {
-    console.error(`[PAGE_PREFLIGHT] Linkinator failed for ${url}:`, error);
-    // Don't throw - let other checks continue
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[PAGE_PREFLIGHT] Linkinator failed for ${url}:`, errorMsg);
+
+    // Create an issue to record the failure
+    issues.push({
+      url,
+      provider: IssueProvider.LINKINATOR,
+      code: 'LINKINATOR_ERROR',
+      summary: `Link check failed: ${errorMsg}`,
+      severity: IssueSeverity.MEDIUM,
+      impact: IssueImpact.WARNING,
+      meta: { error: errorMsg },
+    });
   }
 
-  return issues;
+  return { issues, result };
 }
 
 /**

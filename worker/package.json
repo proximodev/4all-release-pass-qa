@@ -4,18 +4,20 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --exec ts-node index.ts",
-    "start": "ts-node index.ts",
-    "build": "tsc",
+    "start": "node dist/index.js",
+    "build": "prisma generate && tsc",
+    "postinstall": "prisma generate",
     "test:providers": "ts-node scripts/test-providers.ts"
   },
   "dependencies": {
-    "@prisma/client": "file:../node_modules/@prisma/client",
+    "@prisma/client": "^6.19.1",
     "@supabase/supabase-js": "^2.87.1",
     "dotenv": "^16.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.0.2",
     "nodemon": "^3.1.11",
+    "prisma": "^6.19.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

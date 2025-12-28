@@ -1,0 +1,313 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+
+  // TEMPORARY: Binary engine mode for Windows ARM64 compatibility
+  // Prisma doesn't ship native ARM64 binaries for Windows, so we use binary mode
+  // which runs the query engine as a separate process (works via Windows translation)
+  //
+  // TO REVERT (when ARM64 support no longer needed):
+  //   1. Remove the line below (engineType = "binary")
+  //   2. Run: npx prisma generate
+  //   3. Restart dev server
+  //
+  // More info: https://github.com/prisma/prisma/issues/25206
+  engineType = "binary"
+}
+
+/// ---- ENUMS ----
+
+enum UserRole {
+  ADMIN
+}
+
+enum TestType {
+  PAGE_PREFLIGHT // Page-level SEO + link checking + custom rules
+  SITE_AUDIT     // Full site crawl (site-level, v1.2)
+  PERFORMANCE
+  SCREENSHOTS
+  SPELLING
+}
+
+enum TestStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+enum TestScope {
+  SINGLE_URL
+  CUSTOM_URLS
+  SITEMAP
+}
+
+enum IssueProvider {
+  SE_RANKING
+  LANGUAGETOOL
+  LIGHTHOUSE
+  LINKINATOR
+  CUSTOM_RULE
+  INTERNAL
+}
+
+enum IssueSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ScreenshotRole {
+  CURRENT
+  PREVIOUS
+  BASELINE
+}
+
+enum ManualTestType {
+  SCREENSHOTS
+  SPELLING
+}
+
+enum ManualStatusLabel {
+  PASS
+  REVIEW
+  FAIL
+}
+
+enum ReleaseRunStatus {
+  PENDING
+  READY
+  FAIL
+}
+
+enum IssueImpact {
+  BLOCKER
+  WARNING
+  INFO
+}
+
+/// ---- CORE ENTITIES ----
+
+model Company {
+  id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String
+
+  projects Project[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId  String? @db.Uuid
+  name       String
+  siteUrl    String
+  sitemapUrl String?
+  notes      String?
+
+  company        Company?           @relation(fields: [companyId], references: [id])
+  releaseRuns    ReleaseRun[]
+  testRuns       TestRun[]
+  screenshotSets ScreenshotSet[]
+  manualStatuses ManualTestStatus[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft delete timestamp
+
+  @@index([companyId])
+  @@index([siteUrl])
+  @@index([deletedAt])
+}
+
+model User {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String   @unique
+  firstName      String?
+  lastName       String?
+  role           UserRole @default(ADMIN)
+  supabaseUserId String   @unique @db.Uuid
+
+  manualTestStatuses ManualTestStatus[] @relation("ManualStatusUpdatedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supabaseUserId])
+}
+
+/// A frozen snapshot representing a single launch candidate
+model ReleaseRun {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId     String           @db.Uuid
+  name          String?          // Optional label (e.g., "v2.1 Launch", "December Release")
+  status        ReleaseRunStatus @default(PENDING)
+  urls          Json             // Frozen string array: ["https://example.com/page1", "https://example.com/page2"]
+  selectedTests Json             // TestType array: ["PAGE_PREFLIGHT", "PERFORMANCE", "SCREENSHOTS", "SPELLING"]
+
+  project        Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  testRuns       TestRun[]
+  manualStatuses ManualTestStatus[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, status])
+  @@index([createdAt])
+}
+
+model TestRun {
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  releaseRunId  String?    @db.Uuid // Nullable for site-level tests (SITE_AUDIT)
+  projectId     String     @db.Uuid
+  type          TestType
+  status        TestStatus @default(QUEUED)
+  score         Int? // 0-100 for Site Audit & Performance, null for Screenshots/Spelling
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  lastHeartbeat DateTime? // Worker updates every 30s to detect stuck runs
+  rawPayload    Json?
+  error         String?
+
+  releaseRun     ReleaseRun?     @relation(fields: [releaseRunId], references: [id], onDelete: Cascade)
+  project        Project         @relation(fields: [projectId], references: [id])
+  urlResults     UrlResult[]
+  issues         Issue[]
+  screenshotSets ScreenshotSet[]
+  config         TestRunConfig?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([releaseRunId])
+  @@index([projectId, type, createdAt])
+  @@index([status, createdAt])
+}
+
+model TestRunConfig {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  testRunId String    @unique @db.Uuid
+  scope     TestScope
+  urls      String[] // Array of URLs for CUSTOM_URLS, empty for SITEMAP
+
+  testRun TestRun @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([testRunId])
+}
+
+model UrlResult {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  testRunId String @db.Uuid
+  url       String
+
+  // Core Web Vitals (Performance only)
+  lcp Float? // Largest Contentful Paint (seconds)
+  cls Float? // Cumulative Layout Shift (score)
+  inp Float? // Interaction to Next Paint (ms)
+  fcp Float? // First Contentful Paint (seconds)
+  tbt Float? // Total Blocking Time (ms)
+  tti Float? // Time to Interactive (seconds)
+
+  // Scores
+  performanceScore   Int? // PageSpeed performance score (0-100)
+  accessibilityScore Int? // Lighthouse accessibility score (0-100)
+
+  // Site Audit specific
+  issueCount     Int? // Total issues for this URL
+  criticalIssues Int? // Count of CRITICAL severity issues
+
+  // Viewport/device (for Performance tests)
+  viewport String? // "mobile" or "desktop"
+
+  // Raw data
+  additionalMetrics Json? // Provider-specific extras
+
+  testRun TestRun @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([testRunId])
+  @@index([url])
+  @@index([performanceScore])
+}
+
+model Issue {
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  testRunId String        @db.Uuid
+  url       String
+  provider  IssueProvider
+  code      String
+  summary   String
+  severity  IssueSeverity
+  impact    IssueImpact   // BLOCKER prevents release, WARNING flags attention, INFO informational
+  meta      Json?
+
+  testRun TestRun @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([testRunId])
+  @@index([provider])
+  @@index([severity])
+  @@index([impact])
+  @@index([url])
+}
+
+model ScreenshotSet {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  testRunId  String         @db.Uuid
+  projectId  String         @db.Uuid
+  url        String
+  viewport   String
+  storageKey String
+  role       ScreenshotRole
+
+  testRun TestRun @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([testRunId])
+  @@index([url])
+  @@index([role])
+}
+
+model ManualTestStatus {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  releaseRunId    String            @db.Uuid // Required - manual statuses are per Release Run
+  projectId       String            @db.Uuid
+  testType        ManualTestType
+  statusLabel     ManualStatusLabel
+  updatedByUserId String            @db.Uuid
+
+  releaseRun ReleaseRun @relation(fields: [releaseRunId], references: [id], onDelete: Cascade)
+  project    Project    @relation(fields: [projectId], references: [id])
+  updatedBy  User       @relation("ManualStatusUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([releaseRunId])
+  @@index([projectId, testType])
+  @@index([updatedByUserId])
+}

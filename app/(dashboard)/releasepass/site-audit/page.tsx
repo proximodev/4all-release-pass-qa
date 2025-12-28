@@ -29,12 +29,14 @@ export default function SiteAuditPage() {
             projectId={projectId}
             onTestChange={setTestId}
             newTestPath="/releasepass/site-audit/new"
+            mode="testRun"
+            testType="SITE_AUDIT"
           />
         </div>
       </Card>
       <Card title="Latest Results">
         {testId ? (
-          <TestResultsSummary testId={testId} />
+          <TestResultsSummary testId={testId} mode="testRun" />
         ) : (
           <p className="text-black/60">
             {projectId

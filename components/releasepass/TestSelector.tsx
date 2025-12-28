@@ -8,6 +8,7 @@ interface TestRun {
   type: string
   status: string
   score: number | null
+  createdAt: string
 }
 
 interface ReleaseRun {
@@ -18,28 +19,40 @@ interface ReleaseRun {
   testRuns: TestRun[]
 }
 
+type SelectableItem = ReleaseRun | TestRun
+
 interface TestSelectorProps {
   projectId: string | null
   onTestChange?: (testId: string | null) => void
   newTestPath: string
+  /** 'releaseRun' for Preflight tests, 'testRun' for Site Audit */
+  mode?: 'releaseRun' | 'testRun'
+  /** Required when mode is 'testRun' - filters by test type */
+  testType?: string
 }
 
-export default function TestSelector({ projectId, onTestChange, newTestPath }: TestSelectorProps) {
+export default function TestSelector({
+  projectId,
+  onTestChange,
+  newTestPath,
+  mode = 'releaseRun',
+  testType,
+}: TestSelectorProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [releaseRuns, setReleaseRuns] = useState<ReleaseRun[]>([])
+  const [items, setItems] = useState<SelectableItem[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedTest, setSelectedTest] = useState<string>('')
 
   useEffect(() => {
     if (projectId) {
-      fetchReleaseRuns(projectId)
+      fetchItems(projectId)
     } else {
-      setReleaseRuns([])
+      setItems([])
       setSelectedTest('')
     }
-  }, [projectId])
+  }, [projectId, mode, testType])
 
   useEffect(() => {
     const testId = searchParams.get('test')
@@ -48,25 +61,40 @@ export default function TestSelector({ projectId, onTestChange, newTestPath }: T
     }
   }, [searchParams])
 
-  const fetchReleaseRuns = async (projectId: string) => {
+  const fetchItems = async (projectId: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/release-runs?projectId=${projectId}`)
+      let url: string
+      if (mode === 'testRun' && testType) {
+        url = `/api/test-runs?projectId=${projectId}&type=${testType}`
+      } else {
+        url = `/api/release-runs?projectId=${projectId}`
+      }
+
+      const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
-        setReleaseRuns(data)
+        setItems(data)
       }
     } catch (error) {
-      console.error('Failed to fetch release runs:', error)
+      console.error('Failed to fetch items:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const formatTestName = (releaseRun: ReleaseRun) => {
-    if (releaseRun.name) return releaseRun.name
-    const date = new Date(releaseRun.createdAt)
-    return `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)} Test`
+  const formatItemName = (item: SelectableItem) => {
+    // ReleaseRun has a name field
+    if ('name' in item && item.name) return item.name
+
+    const date = new Date(item.createdAt)
+    const dateStr = `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`
+
+    // For testRun mode, include the type
+    if (mode === 'testRun') {
+      return `${dateStr} Site Audit`
+    }
+    return `${dateStr} Test`
   }
 
   const handleTestChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -131,9 +159,9 @@ export default function TestSelector({ projectId, onTestChange, newTestPath }: T
       >
         <option value="">Select</option>
         <option value="new-test">(+) New Test</option>
-        {releaseRuns.map((run) => (
-          <option key={run.id} value={run.id}>
-            {formatTestName(run)}
+        {items.map((item) => (
+          <option key={item.id} value={item.id}>
+            {formatItemName(item)}
           </option>
         ))}
       </select>

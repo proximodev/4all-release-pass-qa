@@ -24,7 +24,8 @@
       "Bash(dir \"K:\\\\Repos\\\\4all-release-pass-qa\\\\Documentation\")",
       "Bash(npx prisma migrate:*)",
       "Bash(npx prisma studio:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(npx tsc)"
     ]
   }
 }

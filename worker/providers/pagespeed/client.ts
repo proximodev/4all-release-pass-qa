@@ -79,7 +79,12 @@ export async function runPageSpeed(
 
   const response = await retryWithBackoff(
     async () => {
-      const res = await fetch(apiUrl);
+      const res = await fetch(apiUrl, {
+        headers: {
+          // Required for API keys with HTTP referrer restrictions
+          'Referer': 'https://releasepass.app/',
+        },
+      });
 
       if (!res.ok) {
         const errorBody = await res.text();

@@ -100,11 +100,19 @@ All check results are stored in the `ResultItem` table, which belongs to `UrlRes
 - `name`: Human-readable title of the check
 - `code`: Normalized check code (e.g., `document-title`, `BROKEN_INTERNAL_LINK`)
 - `provider`: Source of the check (LIGHTHOUSE, LINKINATOR, CUSTOM_RULE, etc.)
-- `severity`: Only for FAIL status - LOW, MEDIUM, HIGH, CRITICAL
-- `impact`: Only for FAIL status - determines effect on release readiness:
-  - **BLOCKER**: Prevents release readiness (causes Release Run status = FAIL)
-  - **WARNING**: Flagged for attention but does not block release
-  - **INFO**: Informational only, no effect on readiness
+- `severity`: Only for FAIL status - determines score penalty:
+  - **BLOCKER**: -40 points (e.g., broken internal links, page not crawlable)
+  - **CRITICAL**: -20 points (e.g., missing title, meta description)
+  - **HIGH**: -10 points (e.g., missing canonical)
+  - **MEDIUM**: -5 points (e.g., external broken links)
+  - **LOW**: -2 points (e.g., redirect chains)
+
+### Scoring Model
+
+Test scores are calculated by the worker and determine pass/fail status:
+- Score starts at 100, deducts based on severity of failed items
+- **Pass threshold**: score >= 50 (configurable in `lib/config/scoring.ts`)
+- Score colors: green (80+), yellow (50-79), red (<50)
 
 ### Data Storage
 

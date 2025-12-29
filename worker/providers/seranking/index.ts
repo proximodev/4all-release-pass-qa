@@ -11,7 +11,7 @@
  */
 
 import { prisma } from '../../lib/prisma';
-import { IssueProvider, IssueSeverity, IssueImpact, ResultStatus } from '@prisma/client';
+import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { runFullAudit, SeRankingIssue } from './client';
 
 interface TestRunWithRelations {
@@ -108,7 +108,6 @@ async function storeResultItems(
     name: issue.name,
     status: issue.severity === 'passed' ? ResultStatus.PASS : ResultStatus.FAIL,
     severity: issue.severity === 'passed' ? null : mapSeverity(issue.severity),
-    impact: issue.severity === 'passed' ? null : mapImpact(issue.severity),
     meta: {
       category: issue.category,
       affectedCount: issue.affectedCount,
@@ -128,7 +127,7 @@ async function storeResultItems(
 function mapSeverity(severity: 'critical' | 'warning' | 'notice' | 'passed'): IssueSeverity {
   switch (severity) {
     case 'critical':
-      return IssueSeverity.CRITICAL;
+      return IssueSeverity.BLOCKER;
     case 'warning':
       return IssueSeverity.HIGH;
     case 'notice':
@@ -138,20 +137,5 @@ function mapSeverity(severity: 'critical' | 'warning' | 'notice' | 'passed'): Is
   }
 }
 
-/**
- * Map SE Ranking severity to impact level
- */
-function mapImpact(severity: 'critical' | 'warning' | 'notice' | 'passed'): IssueImpact {
-  switch (severity) {
-    case 'critical':
-      return IssueImpact.BLOCKER;
-    case 'warning':
-      return IssueImpact.WARNING;
-    case 'notice':
-    case 'passed':
-      return IssueImpact.INFO;
-  }
-}
-
 // Re-export types
-export { SeRankingAuditResult, SeRankingIssue, SeRankingProject } from './client';
+export type { SeRankingAuditResult, SeRankingIssue, SeRankingProject } from './client';

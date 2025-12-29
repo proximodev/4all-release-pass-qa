@@ -169,13 +169,13 @@ A **Release Run** represents a single launch candidate tested as a cohesive unit
 ### Release Run Status
 
 * **PENDING** — One or more tests not yet completed, or manual review tests not marked PASS
-* **READY** — All tests completed, no BLOCKER issues, all manual reviews marked PASS
-* **FAIL** — One or more BLOCKER issues present, or manual review marked FAIL
+* **READY** — All tests completed, all scores >= threshold, all manual reviews marked PASS
+* **FAIL** — One or more scores below threshold, or manual review marked FAIL
 
 ### Test Scoring Model
 
 **Page-Level Tests (Part of Release Runs):**
-* **Page Preflight** — pass/fail based on issue impact levels (BLOCKER issues cause FAIL)
+* **Page Preflight** — score (0-100) calculated from severity penalties; pass/fail based on score threshold
 * **Performance** — numeric score (0-100) averaged across tested URLs (mobile + desktop)
 * **Screenshots** — manual status (Pass / Needs Review / Fail)
 * **Spelling/Grammar** — manual status (Pass / Needs Review / Fail)
@@ -183,18 +183,25 @@ A **Release Run** represents a single launch candidate tested as a cohesive unit
 **Site-Level Tests (NOT part of Release Runs):**
 * **Site Audit (Full Crawl)** — numeric score (0-100) from SE Ranking (v1.2)
 
-### ResultItem Impact Levels
+### ResultItem Severity Levels
 
-Failed ResultItems include an `impact` field that determines their effect on release readiness:
-* **BLOCKER** — Prevents release readiness (causes Release Run status = FAIL)
-* **WARNING** — Flagged for attention but does not block release
-* **INFO** — Informational only, no effect on readiness
+Failed ResultItems include a `severity` field that determines score penalties:
+* **BLOCKER** — -40 points (e.g., broken internal links, page not crawlable)
+* **CRITICAL** — -20 points (e.g., missing title, meta description)
+* **HIGH** — -10 points (e.g., missing canonical)
+* **MEDIUM** — -5 points (e.g., external broken links)
+* **LOW** — -2 points (e.g., redirect chains)
+
+### Pass/Fail Threshold
+
+* **Pass threshold**: score >= 50 (configurable in `lib/config/scoring.ts`)
+* Score starts at 100 and deducts based on severity of failed items
 
 ### Color Mapping
 
-* Green — Passing / READY
-* Yellow — Moderate concern / WARNING issues present
-* Red — Failing / FAIL
+* Green — score >= 80
+* Yellow — score 50-79 (passing but has issues)
+* Red — score < 50 (failing)
 * Grey — Not reviewed or needs manual verification / PENDING
 
 ### Behavior

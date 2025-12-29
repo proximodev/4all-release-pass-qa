@@ -8,12 +8,14 @@
  *
  * Stores all check results (pass + fail) in ResultItem table via UrlResult.
  * Returns a calculated score (0-100) based on failed item severity.
+ * Pass/fail is determined by score threshold (see lib/scoring.ts).
  */
 
 import { prisma } from '../../lib/prisma';
-import { IssueProvider, IssueSeverity, IssueImpact, ResultStatus } from '@prisma/client';
+import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { runPageSpeed, SeoAudit, PageSpeedResult } from '../pagespeed/client';
 import { checkLinks, LinkCheckResult, LinkCheckSummary } from '../linkinator/client';
+import { SCORING_CONFIG, getScoreStatus } from '../../lib/scoring';
 
 interface TestRunWithRelations {
   id: string;
@@ -29,7 +31,6 @@ interface ResultItemToCreate {
   name: string;
   status: ResultStatus;
   severity?: IssueSeverity;
-  impact?: IssueImpact;
   meta?: any;
 }
 
@@ -117,7 +118,6 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
         name: 'URL Check Failed',
         status: ResultStatus.FAIL,
         severity: IssueSeverity.HIGH,
-        impact: IssueImpact.WARNING,
         meta: { error: errorMessage },
       });
     }
@@ -164,7 +164,6 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
           name: item.name,
           status: item.status,
           severity: item.severity,
-          impact: item.impact,
           meta: item.meta,
         })),
       });
@@ -186,15 +185,17 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
 
   // Calculate score based on failed items only
   const failedItems = allUrlResults.flatMap(r => r.resultItems.filter(i => i.status === ResultStatus.FAIL));
-  const score = calculateScore(failedItems, limitedUrls.length);
+  const score = calculateScore(failedItems);
 
-  // Log summary
-  const blockerCount = failedItems.filter(i => i.impact === IssueImpact.BLOCKER).length;
-  const warningCount = failedItems.filter(i => i.impact === IssueImpact.WARNING).length;
-  const infoCount = failedItems.filter(i => i.impact === IssueImpact.INFO).length;
+  // Log summary by severity
+  const blockerCount = failedItems.filter(i => i.severity === IssueSeverity.BLOCKER).length;
+  const criticalCount = failedItems.filter(i => i.severity === IssueSeverity.CRITICAL).length;
+  const highCount = failedItems.filter(i => i.severity === IssueSeverity.HIGH).length;
+  const mediumCount = failedItems.filter(i => i.severity === IssueSeverity.MEDIUM).length;
+  const lowCount = failedItems.filter(i => i.severity === IssueSeverity.LOW).length;
 
-  console.log(`[PAGE_PREFLIGHT] Completed. Score: ${score}`);
-  console.log(`[PAGE_PREFLIGHT] Failed items: ${blockerCount} blockers, ${warningCount} warnings, ${infoCount} info`);
+  console.log(`[PAGE_PREFLIGHT] Completed. Score: ${score} (${getScoreStatus(score)})`);
+  console.log(`[PAGE_PREFLIGHT] Failed by severity: ${blockerCount} blocker, ${criticalCount} critical, ${highCount} high, ${mediumCount} medium, ${lowCount} low`);
 
   return score;
 }
@@ -241,7 +242,7 @@ async function runLighthouseSeo(url: string): Promise<{ resultItems: ResultItemT
     // Create ResultItems for ALL audits (pass + fail)
     for (const audit of result.seoAudits) {
       const isPassing = audit.score === null || audit.score >= 1;
-      const { severity, impact } = mapSeoAuditSeverity(audit);
+      const severity = mapSeoAuditSeverity(audit);
 
       resultItems.push({
         provider: IssueProvider.LIGHTHOUSE,
@@ -249,7 +250,6 @@ async function runLighthouseSeo(url: string): Promise<{ resultItems: ResultItemT
         name: audit.title,
         status: isPassing ? ResultStatus.PASS : ResultStatus.FAIL,
         severity: isPassing ? undefined : severity,
-        impact: isPassing ? undefined : impact,
         meta: {
           description: audit.description,
           displayValue: audit.displayValue,
@@ -275,7 +275,6 @@ async function runLighthouseSeo(url: string): Promise<{ resultItems: ResultItemT
       name: 'Lighthouse SEO Check Failed',
       status: ResultStatus.FAIL,
       severity: IssueSeverity.HIGH,
-      impact: IssueImpact.WARNING,
       meta: { error: errorMsg },
     });
   }
@@ -315,7 +314,7 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
     // Create ResultItems for broken links
     for (const link of result.brokenLinks) {
       const isInternal = isInternalLink(url, link.url);
-      const { severity, impact } = mapLinkSeverity(link, isInternal);
+      const severity = mapLinkSeverity(link, isInternal);
 
       resultItems.push({
         provider: IssueProvider.LINKINATOR,
@@ -323,7 +322,6 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
         name: `Broken ${isInternal ? 'internal' : 'external'} link: ${link.url}`,
         status: ResultStatus.FAIL,
         severity,
-        impact,
         meta: {
           brokenUrl: link.url,
           status: link.status,
@@ -342,7 +340,6 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
           name: `Internal redirect: ${redirect.url}`,
           status: ResultStatus.FAIL,
           severity: IssueSeverity.LOW,
-          impact: IssueImpact.INFO,
           meta: {
             redirectUrl: redirect.url,
             status: redirect.status,
@@ -364,7 +361,6 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
       name: 'Link Check Failed',
       status: ResultStatus.FAIL,
       severity: IssueSeverity.MEDIUM,
-      impact: IssueImpact.WARNING,
       meta: { error: errorMsg },
     });
   }
@@ -386,90 +382,68 @@ function isInternalLink(pageUrl: string, linkUrl: string): boolean {
 }
 
 /**
- * Map SEO audit to severity and impact
+ * Map SEO audit to severity level
  */
-function mapSeoAuditSeverity(audit: SeoAudit): { severity: IssueSeverity; impact: IssueImpact } {
-  // Critical SEO issues that block launch
+function mapSeoAuditSeverity(audit: SeoAudit): IssueSeverity {
+  // Blocker SEO issues - page not crawlable or server error
   const blockerAudits = ['is-crawlable', 'http-status-code'];
+  // Critical SEO issues - missing essential elements
+  const criticalAudits = ['document-title', 'meta-description'];
   // High-impact SEO issues
-  const highAudits = ['document-title', 'meta-description', 'canonical'];
+  const highAudits = ['canonical', 'robots-txt'];
   // Medium-impact SEO issues
-  const mediumAudits = ['image-alt', 'link-text', 'robots-txt'];
+  const mediumAudits = ['image-alt', 'link-text'];
 
   if (blockerAudits.includes(audit.id)) {
-    return { severity: IssueSeverity.CRITICAL, impact: IssueImpact.BLOCKER };
+    return IssueSeverity.BLOCKER;
+  }
+  if (criticalAudits.includes(audit.id)) {
+    return IssueSeverity.CRITICAL;
   }
   if (highAudits.includes(audit.id)) {
-    return { severity: IssueSeverity.HIGH, impact: IssueImpact.WARNING };
+    return IssueSeverity.HIGH;
   }
   if (mediumAudits.includes(audit.id)) {
-    return { severity: IssueSeverity.MEDIUM, impact: IssueImpact.WARNING };
+    return IssueSeverity.MEDIUM;
   }
 
-  return { severity: IssueSeverity.LOW, impact: IssueImpact.INFO };
+  return IssueSeverity.LOW;
 }
 
 /**
- * Map link check result to severity and impact
+ * Map link check result to severity level
  */
-function mapLinkSeverity(
-  link: LinkCheckResult,
-  isInternal: boolean
-): { severity: IssueSeverity; impact: IssueImpact } {
-  // Internal broken links are critical
+function mapLinkSeverity(link: LinkCheckResult, isInternal: boolean): IssueSeverity {
+  // Internal broken links are blockers (404) or critical (5xx)
   if (isInternal) {
     if (link.status === 404) {
-      return { severity: IssueSeverity.CRITICAL, impact: IssueImpact.BLOCKER };
+      return IssueSeverity.BLOCKER;
     }
     if (link.status >= 500) {
-      return { severity: IssueSeverity.HIGH, impact: IssueImpact.BLOCKER };
+      return IssueSeverity.CRITICAL;
     }
-    return { severity: IssueSeverity.MEDIUM, impact: IssueImpact.WARNING };
+    return IssueSeverity.HIGH;
   }
 
-  // External broken links are warnings
-  return { severity: IssueSeverity.MEDIUM, impact: IssueImpact.WARNING };
+  // External broken links are medium severity
+  return IssueSeverity.MEDIUM;
 }
 
 /**
  * Calculate score based on failed items
  *
- * Scoring algorithm:
- * - Start with 100 points
- * - Deduct based on severity:
- *   - CRITICAL: -10 points each
- *   - HIGH: -5 points each
- *   - MEDIUM: -2 points each
- *   - LOW: -1 point each
- * - Normalize by URL count (more URLs = proportionally more tolerance)
- * - Clamp to 0-100
+ * Uses severity penalties from SCORING_CONFIG.
+ * Score starts at 100 and deducts based on severity.
  */
-function calculateScore(failedItems: ResultItemToCreate[], urlCount: number): number {
+function calculateScore(failedItems: ResultItemToCreate[]): number {
   let score = 100;
 
   for (const item of failedItems) {
     if (!item.severity) continue;
 
-    switch (item.severity) {
-      case IssueSeverity.CRITICAL:
-        score -= 10;
-        break;
-      case IssueSeverity.HIGH:
-        score -= 5;
-        break;
-      case IssueSeverity.MEDIUM:
-        score -= 2;
-        break;
-      case IssueSeverity.LOW:
-        score -= 1;
-        break;
-    }
+    const penalty = SCORING_CONFIG.severityPenalties[item.severity] || 0;
+    score -= penalty;
   }
-
-  // Normalize by URL count (more URLs = more tolerance)
-  // For every 5 URLs, reduce the penalty impact by ~50%
-  const normalizationFactor = Math.max(1, urlCount / 5);
-  score = score + (100 - score) * (1 - 1 / normalizationFactor) * 0.5;
 
   return Math.max(0, Math.min(100, Math.round(score)));
 }

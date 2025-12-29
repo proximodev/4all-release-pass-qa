@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             urlResults: {
               include: {
                 resultItems: {
-                  orderBy: [{ impact: 'asc' }, { severity: 'desc' }],
+                  orderBy: { severity: 'asc' },
                 },
               },
             },

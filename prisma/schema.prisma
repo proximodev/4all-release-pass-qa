@@ -67,6 +67,7 @@ enum IssueSeverity {
   MEDIUM
   HIGH
   CRITICAL
+  BLOCKER
 }
 
 enum ScreenshotRole {
@@ -90,12 +91,6 @@ enum ReleaseRunStatus {
   PENDING
   READY
   FAIL
-}
-
-enum IssueImpact {
-  BLOCKER
-  WARNING
-  INFO
 }
 
 enum ResultStatus {
@@ -262,7 +257,6 @@ model ResultItem {
   name        String         // Human-readable title of the check
   status      ResultStatus
   severity    IssueSeverity? // Only for FAIL status
-  impact      IssueImpact?   // Only for FAIL status: BLOCKER prevents release, WARNING flags attention, INFO informational
   meta        Json?
 
   urlResult UrlResult @relation(fields: [urlResultId], references: [id], onDelete: Cascade)
@@ -274,7 +268,6 @@ model ResultItem {
   @@index([provider])
   @@index([status])
   @@index([severity])
-  @@index([impact])
 }
 
 model ScreenshotSet {

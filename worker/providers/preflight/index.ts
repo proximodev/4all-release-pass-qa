@@ -15,7 +15,7 @@ import { prisma } from '../../lib/prisma';
 import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { runPageSpeed, SeoAudit, PageSpeedResult } from '../pagespeed/client';
 import { checkLinks, LinkCheckResult, LinkCheckSummary } from '../linkinator/client';
-import { SCORING_CONFIG, getScoreStatus } from '../../lib/scoring';
+import { SCORING_CONFIG, getScoreStatus, isWhitelistedCdn } from '../../lib/scoring';
 
 interface TestRunWithRelations {
   id: string;
@@ -375,39 +375,6 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
   }
 
   return { resultItems, result };
-}
-
-/**
- * Known CDN domains that often return false positives due to CORS/auth requirements
- * These are skipped during external link validation
- */
-const CDN_WHITELIST = [
-  'kit.fontawesome.com',
-  'use.fontawesome.com',
-  'cdnjs.cloudflare.com',
-  'cdn.jsdelivr.net',
-  'unpkg.com',
-  'ajax.googleapis.com',
-  'fonts.googleapis.com',
-  'fonts.gstatic.com',
-  'code.jquery.com',
-  'stackpath.bootstrapcdn.com',
-  'maxcdn.bootstrapcdn.com',
-  'use.typekit.net',
-  'cdn.tailwindcss.com',
-  'cdn.ampproject.org',
-];
-
-/**
- * Check if a URL is from a whitelisted CDN
- */
-function isWhitelistedCdn(linkUrl: string): boolean {
-  try {
-    const hostname = new URL(linkUrl).hostname;
-    return CDN_WHITELIST.some(cdn => hostname === cdn || hostname.endsWith('.' + cdn));
-  } catch {
-    return false;
-  }
 }
 
 /**

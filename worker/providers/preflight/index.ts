@@ -102,7 +102,10 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
 
       if (linkinatorResult) {
         urlCheckResult.linkCount = linkinatorResult.totalLinks;
-        urlCheckResult.brokenLinkCount = linkinatorResult.brokenLinks.length;
+        // Count actual broken links from ResultItems (excludes whitelisted CDNs)
+        urlCheckResult.brokenLinkCount = linkItems.filter(
+          item => item.code === 'BROKEN_INTERNAL_LINK' || item.code === 'BROKEN_EXTERNAL_LINK'
+        ).length;
         urlCheckResult.linkinatorRaw = linkinatorResult;
         rawPayload.linkinator.push({ url, result: linkinatorResult });
       }

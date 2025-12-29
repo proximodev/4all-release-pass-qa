@@ -456,15 +456,8 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
                     const urlResult = testRun?.urlResults?.find(ur => ur.url === url)
                     const route = TEST_TYPE_ROUTES[testType]
 
-                    // Calculate score for this URL from result items
-                    let score: number | null = testRun?.score ?? null
-                    if (urlResult?.resultItems) {
-                      const passCount = urlResult.resultItems.filter(i => i.status === 'PASS').length
-                      const totalCount = urlResult.resultItems.length
-                      if (totalCount > 0) {
-                        score = Math.round((passCount / totalCount) * 100)
-                      }
-                    }
+                    // Use the worker-calculated score (severity-based)
+                    const score: number | null = testRun?.score ?? null
 
                     // Build link - use urlResultId if available
                     const linkHref = urlResult?.id

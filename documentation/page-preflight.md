@@ -22,7 +22,7 @@ Page Preflight aggregates results from three providers, each with a distinct dat
 
 The UI **must respect these differences**. Attempting to present all results as a single "issue list" will reduce clarity and trust.
 
-**Data Model**: All check results are stored as `ResultItem` records linked to `UrlResult`. Each ResultItem has a `status` (PASS/FAIL/SKIP) and, for failures, `severity` and `impact` fields.
+**Data Model**: All check results are stored as `ResultItem` records linked to `UrlResult`. Each ResultItem has a `status` (PASS/FAIL/SKIP) and, for failures, a `severity` field (BLOCKER, CRITICAL, HIGH, MEDIUM, LOW) that determines score penalties.
 
 ---
 
@@ -148,15 +148,16 @@ Custom rules allow project-specific or future checks without redesigning the UI.
 ## 7. Severity & Scoring Visibility
 
 ### Severity Levels
-- Critical
-- High
-- Medium
-- Low
+- **BLOCKER** — -40 points (e.g., broken internal links, page not crawlable)
+- **CRITICAL** — -20 points (e.g., missing title, meta description)
+- **HIGH** — -10 points (e.g., missing canonical)
+- **MEDIUM** — -5 points (e.g., external broken links)
+- **LOW** — -2 points (e.g., redirect chains)
 
-Severity is used to:
-- Weight Preflight scoring
-- Visually prioritize fixes
-- Inform Release Readiness
+Severity determines:
+- Score penalties (deducted from base score of 100)
+- Visual prioritization of fixes
+- Pass/fail status (score >= 50 = pass)
 
 ### UX Guidance
 - Severity should be visually distinct

@@ -313,6 +313,12 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
 
     // Create ResultItems for broken links
     for (const link of result.brokenLinks) {
+      // Skip whitelisted CDNs (often return false positives due to CORS)
+      if (isWhitelistedCdn(link.url)) {
+        console.log(`[PAGE_PREFLIGHT] Skipping whitelisted CDN: ${link.url}`);
+        continue;
+      }
+
       const isInternal = isInternalLink(url, link.url);
       const severity = mapLinkSeverity(link, isInternal);
 
@@ -369,15 +375,54 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
 }
 
 /**
+ * Known CDN domains that often return false positives due to CORS/auth requirements
+ * These are skipped during external link validation
+ */
+const CDN_WHITELIST = [
+  'kit.fontawesome.com',
+  'use.fontawesome.com',
+  'cdnjs.cloudflare.com',
+  'cdn.jsdelivr.net',
+  'unpkg.com',
+  'ajax.googleapis.com',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+  'code.jquery.com',
+  'stackpath.bootstrapcdn.com',
+  'maxcdn.bootstrapcdn.com',
+  'use.typekit.net',
+  'cdn.tailwindcss.com',
+  'cdn.ampproject.org',
+];
+
+/**
+ * Check if a URL is from a whitelisted CDN
+ */
+function isWhitelistedCdn(linkUrl: string): boolean {
+  try {
+    const hostname = new URL(linkUrl).hostname;
+    return CDN_WHITELIST.some(cdn => hostname === cdn || hostname.endsWith('.' + cdn));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check if a link is internal to the same domain
  */
 function isInternalLink(pageUrl: string, linkUrl: string): boolean {
   try {
     const pageOrigin = new URL(pageUrl).origin;
-    const linkOrigin = new URL(linkUrl).origin;
+
+    // Handle relative URLs by resolving against page URL
+    // This makes "htc.php", "/path/file", etc. resolve correctly
+    const resolvedUrl = new URL(linkUrl, pageUrl);
+    const linkOrigin = resolvedUrl.origin;
+
     return pageOrigin === linkOrigin;
   } catch {
-    return false;
+    // If we can't parse at all, assume internal (safer - will be flagged as BLOCKER)
+    return true;
   }
 }
 
@@ -414,18 +459,13 @@ function mapSeoAuditSeverity(audit: SeoAudit): IssueSeverity {
  * Map link check result to severity level
  */
 function mapLinkSeverity(link: LinkCheckResult, isInternal: boolean): IssueSeverity {
-  // Internal broken links are blockers (404) or critical (5xx)
+  // ALL internal broken links are blockers (any status - 404, 403, 0, etc.)
+  // These indicate broken functionality that must be fixed before release
   if (isInternal) {
-    if (link.status === 404) {
-      return IssueSeverity.BLOCKER;
-    }
-    if (link.status >= 500) {
-      return IssueSeverity.CRITICAL;
-    }
-    return IssueSeverity.HIGH;
+    return IssueSeverity.BLOCKER;
   }
 
-  // External broken links are medium severity
+  // External broken links are medium severity (not our fault, but should fix)
   return IssueSeverity.MEDIUM;
 }
 

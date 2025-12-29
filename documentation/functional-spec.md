@@ -122,7 +122,7 @@ Empty states, no tests yet, partial failures, and manual review indicators are c
   * URLs are immutable once execution begins
   * Release Run status: PENDING → READY or FAIL
 * Supported test types (page-level, part of Release Runs):
-  * Page Preflight - automated with pass/fail based on issue impact (Lighthouse SEO + Linkinator + Custom Rules)
+  * Page Preflight - automated with score-based pass/fail (Lighthouse SEO + Linkinator + Custom Rules)
   * Performance - automated with numeric score (PageSpeed)
   * Screenshots - automated capture with manual status review
   * Spelling/Grammar - automated detection with manual status review
@@ -138,7 +138,7 @@ Empty states, no tests yet, partial failures, and manual review indicators are c
   * **IMPORTANT**: `TestRun.status` represents the **operational execution status** of the test run itself (whether the worker successfully completed processing), NOT the quality assessment of the test results.
   * Quality assessment for Screenshots and Spelling is stored separately in `ManualTestStatus` (PASS / REVIEW / FAIL).
   * For Performance, quality is determined by the numeric `score` field combined with configured thresholds.
-  * For Page Preflight, quality is determined by issue impact levels (BLOCKER issues cause Release Run FAIL).
+  * For Page Preflight, quality is determined by score (calculated from severity penalties; score >= 50 = pass).
 * Partial test success must be supported.
 * Background worker:
   * Atomic job locking
@@ -304,8 +304,7 @@ General rules:
   * code — string (normalized check code, e.g. `document-title`, `BROKEN_INTERNAL_LINK`, `MISSING_OG_IMAGE`, `SPELLING_ERROR`)
   * name — string (human-readable title of the check)
   * status — enum (`PASS`, `FAIL`, `SKIP`)
-  * severity — string/enum (nullable; only for FAIL status: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
-  * impact — enum (nullable; only for FAIL status: `BLOCKER`, `WARNING`, `INFO`)
+  * severity — string/enum (nullable; only for FAIL status: `BLOCKER`, `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`)
   * meta — JSON (nullable; additional context such as description, selectors, raw audit data)
   * createdAt — datetime
   * updatedAt — datetime
@@ -314,13 +313,15 @@ General rules:
 
   **Status**: Indicates the outcome of the check:
   * **PASS** — Check passed successfully
-  * **FAIL** — Check failed; severity and impact fields are populated
+  * **FAIL** — Check failed; severity field is populated
   * **SKIP** — Check was skipped (e.g., not applicable)
 
-  **Impact vs Severity** (only for FAIL status): `severity` indicates the technical severity of the failure. `impact` determines the effect on release readiness:
-  * **BLOCKER** — Prevents release readiness (causes Release Run status = FAIL)
-  * **WARNING** — Flagged for attention but does not block release
-  * **INFO** — Informational only, no effect on readiness
+  **Severity** (only for FAIL status): Determines score penalty and release readiness:
+  * **BLOCKER** — -40 points (e.g., broken internal links, page not crawlable)
+  * **CRITICAL** — -20 points (e.g., missing title, meta description)
+  * **HIGH** — -10 points (e.g., missing canonical)
+  * **MEDIUM** — -5 points (e.g., external broken links)
+  * **LOW** — -2 points (e.g., redirect chains)
 
   **MVP Providers**: LIGHTHOUSE (PageSpeed SEO), LINKINATOR (link checking), CUSTOM_RULE (custom validation rules), LANGUAGETOOL (spelling/grammar).
 
@@ -354,8 +355,8 @@ General rules:
   **MVP Note**: Only the current status is stored per Release Run; updates overwrite the previous status. Change history/audit trail will be added in v1.5.
 
 Release Readiness itself is a derived object computed at runtime **per Release Run** from:
-* All TestRuns within the Release Run, and
-* ResultItem impact levels (BLOCKER items cause FAIL), and
+* All TestRuns within the Release Run (score >= 50 = pass), and
+* ResultItem severity levels (BLOCKER items heavily penalize score), and
 * ManualTestStatus entries for that Release Run.
 
 No dedicated `Readiness` table is required in MVP.
@@ -472,12 +473,13 @@ Tests are categorized as **page-level** (included in Release Runs) or **site-lev
 
 **Scoring for Page Preflight**:
 * Base score: 100 points
-* Deductions:
-  * CRITICAL issues: -10 points each
-  * HIGH issues: -5 points each
-  * MEDIUM issues: -2 points each
-  * LOW issues: -1 point each
-* Normalized by URL count (more URLs = proportionally more tolerance)
+* Deductions per failed item (based on severity):
+  * BLOCKER: -40 points (e.g., broken internal links, page not crawlable)
+  * CRITICAL: -20 points (e.g., missing title, meta description)
+  * HIGH: -10 points (e.g., missing canonical)
+  * MEDIUM: -5 points (e.g., external broken links)
+  * LOW: -2 points (e.g., redirect chains)
+* Pass threshold: score >= 50 (configurable in `lib/config/scoring.ts`)
 * Final score: 0-100
 
 ### Site Audit Full Crawl (Site-Level, NOT Part of Release Runs) - Future v1.2

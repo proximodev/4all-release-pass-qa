@@ -287,7 +287,7 @@ QUEUED → RUNNING → (SUCCESS | FAILED | PARTIAL)
 
 **Quality Assessment** is stored separately:
 - Performance: `TestRun.score` field (0-100) + configured thresholds
-- Page Preflight: Issue impact levels (BLOCKER issues cause Release Run FAIL)
+- Page Preflight: `TestRun.score` field calculated from severity penalties (score >= 50 = pass)
 - Screenshots & Spelling: `ManualTestStatus.statusLabel` (PASS/REVIEW/FAIL)
 
 ### Data Flow
@@ -317,8 +317,7 @@ QUEUED → RUNNING → (SUCCESS | FAILED | PARTIAL)
 - UI fetches ReleaseRun with related TestRuns and data
 - Displays per-test scores, issues, screenshots
 - Shows Release Run status (PENDING/READY/FAIL) computed from:
-  - All TestRun completion states
-  - Issue impact levels (BLOCKER causes FAIL)
+  - All TestRun completion states and scores (score >= 50 = pass)
   - ManualTestStatus entries
 
 **4. User Re-runs Test** (optional):
@@ -709,8 +708,7 @@ async function cleanupOldScreenshots(projectId: string, testType: TestType) {
       passCount: 2,
       failCount: 1,
       affectedUrls: ["url3"],  // URLs where it failed
-      severity: "HIGH",
-      impact: "WARNING"
+      severity: "CRITICAL"
     },
     {
       code: "BROKEN_INTERNAL_LINK",
@@ -719,14 +717,14 @@ async function cleanupOldScreenshots(projectId: string, testType: TestType) {
       passCount: 0,
       failCount: 5,
       affectedUrls: ["url1", "url2", ...],
-      severity: "HIGH",
-      impact: "BLOCKER"
+      severity: "BLOCKER"
     }
   ],
   summary: {
     totalChecks: 150,
     passCount: 103,
     failCount: 47,
+    blockerCount: 5,
     criticalCount: 2,
     highCount: 18,
     mediumCount: 22,
@@ -765,22 +763,15 @@ export const SCREENSHOT_VIEWPORTS = [
 ```typescript
 // lib/release-readiness.ts
 import { prisma } from '@/lib/prisma';
-import { ReleaseRunStatus, TestStatus, ManualTestType, IssueImpact } from '@prisma/client';
+import { ReleaseRunStatus, TestStatus, ManualTestType } from '@prisma/client';
+import { isPassingScore } from '@/lib/config/scoring';
 
 export async function getReleaseRunStatus(releaseRunId: string): Promise<ReleaseRunStatus> {
-  // Get the Release Run with all related TestRuns and ResultItems
+  // Get the Release Run with all related TestRuns
   const releaseRun = await prisma.releaseRun.findUnique({
     where: { id: releaseRunId },
     include: {
-      testRuns: {
-        include: {
-          urlResults: {
-            include: {
-              resultItems: true,
-            },
-          },
-        },
-      },
+      testRuns: true,
     },
   });
 
@@ -794,13 +785,11 @@ export async function getReleaseRunStatus(releaseRunId: string): Promise<Release
     return ReleaseRunStatus.PENDING;
   }
 
-  // Check for BLOCKER ResultItems (causes FAIL)
-  const hasBlockers = releaseRun.testRuns.some((run) =>
-    run.urlResults.some((urlResult) =>
-      urlResult.resultItems.some((item) => item.impact === IssueImpact.BLOCKER)
-    )
+  // Check if any test has a failing score (score < 50)
+  const hasFailingScore = releaseRun.testRuns.some(
+    (run) => run.score !== null && !isPassingScore(run.score)
   );
-  if (hasBlockers) {
+  if (hasFailingScore) {
     return ReleaseRunStatus.FAIL;
   }
 
@@ -824,7 +813,7 @@ export async function getReleaseRunStatus(releaseRunId: string): Promise<Release
     return ReleaseRunStatus.PENDING;
   }
 
-  // All tests complete, no blockers, all manual tests passed
+  // All tests complete, all scores passing, all manual tests passed
   return ReleaseRunStatus.READY;
 }
 ```
@@ -912,7 +901,7 @@ See `prisma/schema.prisma` for complete schema. Key entities:
 - **TestRun** - Test execution records within a Release Run; has lifecycle states (QUEUED/RUNNING/SUCCESS/FAILED/PARTIAL), score (0-100), lastHeartbeat for stuck run detection
 - **TestRunConfig** - Stores URL selection for each test run (scope: CUSTOM_URLS, SITEMAP, or SINGLE_URL)
 - **UrlResult** - Per-URL metrics (Core Web Vitals, scores, issue counts, viewport)
-- **ResultItem** - Individual check results (pass/fail) from all test providers; belongs to UrlResult; failed items have impact level (BLOCKER, WARNING, INFO)
+- **ResultItem** - Individual check results (pass/fail) from all test providers; belongs to UrlResult; failed items have severity level (BLOCKER, CRITICAL, HIGH, MEDIUM, LOW) for score penalties
 - **ScreenshotSet** - Screenshot metadata and storage keys
 - **ManualTestStatus** - User-entered pass/fail/review statuses per Release Run (no history in MVP)
 

@@ -68,6 +68,8 @@ export const SCORING_CONFIG = {
     'wp-admin/admin-post.php',
     // WordPress comments handler
     'wp-comments-post.php',
+    // Cloudflare services (email protection, challenge pages, scripts, etc.)
+    '/cdn-cgi/',
   ],
 } as const
 

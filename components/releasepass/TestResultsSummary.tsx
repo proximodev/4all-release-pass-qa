@@ -393,7 +393,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
           <div
             className="w-[40px] aspect-[4] mr-2 animate-progress-dots"
             style={{
-              background: 'radial-gradient(circle closest-side, currentColor 50%, transparent) 0/calc(100%/3) 100% space',
+              background: 'radial-gradient(circle closest-side, bg-gray-400 80%, transparent) 0/calc(100%/3) 100% space',
             }}
           />
         </div>

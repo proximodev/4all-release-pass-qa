@@ -150,7 +150,6 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
           } : null,
           linkinator: urlResult.linkinatorRaw ? {
             totalLinks: urlResult.linkinatorRaw.totalLinks,
-            brokenLinks: urlResult.linkinatorRaw.brokenLinks?.length || 0,
             redirects: urlResult.linkinatorRaw.redirects?.length || 0,
           } : null,
         },

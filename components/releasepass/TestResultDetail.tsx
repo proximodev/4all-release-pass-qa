@@ -143,8 +143,8 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
     // Get additional metrics based on test type
     let additionalInfo: string[] = []
     if (testType === 'PAGE_PREFLIGHT') {
-      const linkCount = urlResult.additionalMetrics?.linkinator?.totalLinks || 0
-      const brokenLinkCount = urlResult.additionalMetrics?.linkinator?.brokenLinks || 0
+      const linkCount = urlResult.additionalMetrics?.linkCount || 0
+      const brokenLinkCount = urlResult.additionalMetrics?.brokenLinkCount || 0
       if (linkCount > 0) {
         additionalInfo.push(
           brokenLinkCount === 0

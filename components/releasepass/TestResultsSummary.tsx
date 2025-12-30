@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { getScoreColor } from '@/lib/config/scoring'
+import { getScoreColor, calculateScoreFromItems } from '@/lib/config/scoring'
 
 interface ResultItem {
   id: string
@@ -18,6 +18,7 @@ interface UrlResultData {
   url: string
   issueCount?: number
   resultItems?: ResultItem[]
+  performanceScore?: number | null
 }
 
 interface TestRunData {
@@ -387,12 +388,12 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     return (
       <div className="space-y-4">
         {/* Header with progress dots */}
-        <div className="flex items-center justify-between">
-          <h3>Test Status</h3>
+        <div className="flex items-center justify-between mb-0.5">
+          <h2>Test Status</h2>
           <div
             className="w-[40px] aspect-[4] mr-2 animate-progress-dots"
             style={{
-              background: 'radial-gradient(circle closest-side, currentColor 90%, transparent) 0/calc(100%/3) 100% space',
+              background: 'radial-gradient(circle closest-side, currentColor 50%, transparent) 0/calc(100%/3) 100% space',
             }}
           />
         </div>
@@ -418,7 +419,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
 
         {/* Pages Submitted */}
         <div className="space-y-2 pt-4">
-          <h3>Pages Submitted:</h3>
+          <h2>Pages Submitted</h2>
             <ul className="space-y-1 text-black/70">
               {releaseRun.urls.map((url, index) => (
                   <li key={index} className="truncate">
@@ -486,8 +487,15 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
                     const urlResult = testRun?.urlResults?.find(ur => ur.url === url)
                     const route = TEST_TYPE_ROUTES[testType]
 
-                    // Use the worker-calculated score (severity-based)
-                    const score: number | null = testRun?.score ?? null
+                    // Calculate per-URL score based on test type
+                    let score: number | null = null
+                    if (testType === 'PAGE_PREFLIGHT' && urlResult?.resultItems) {
+                      // Baseline: calculate from ResultItems
+                      score = calculateScoreFromItems(urlResult.resultItems)
+                    } else if (testType === 'PERFORMANCE' && urlResult?.performanceScore != null) {
+                      // Performance: use stored per-URL score
+                      score = urlResult.performanceScore
+                    }
 
                     // Build link - use urlResultId if available
                     const linkHref = urlResult?.id

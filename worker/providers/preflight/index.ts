@@ -40,6 +40,7 @@ interface UrlCheckResults {
   resultItems: ResultItemToCreate[];
   linkCount: number;
   brokenLinkCount: number;
+  score: number;  // Per-URL score calculated from failed items
   lighthouseRaw?: any;
   linkinatorRaw?: any;
 }
@@ -83,6 +84,7 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
       resultItems: [],
       linkCount: 0,
       brokenLinkCount: 0,
+      score: 100,  // Will be calculated after processing
     };
 
     try {
@@ -124,6 +126,12 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
         meta: { error: errorMessage },
       });
     }
+
+    // Calculate per-URL score from failed items
+    urlCheckResult.score = calculateScore(
+      urlCheckResult.resultItems.filter(i => i.status === ResultStatus.FAIL)
+    );
+    console.log(`[PAGE_PREFLIGHT] URL score for ${url}: ${urlCheckResult.score}`);
 
     allUrlResults.push(urlCheckResult);
   }
@@ -185,21 +193,25 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
     data: { rawPayload },
   });
 
-  // Calculate score based on failed items only
-  const failedItems = allUrlResults.flatMap(r => r.resultItems.filter(i => i.status === ResultStatus.FAIL));
-  const score = calculateScore(failedItems);
+  // Calculate average score across all URLs
+  const urlScores = allUrlResults.map(r => r.score);
+  const averageScore = urlScores.length > 0
+    ? Math.round(urlScores.reduce((sum, s) => sum + s, 0) / urlScores.length)
+    : 100;
 
-  // Log summary by severity
+  // Log summary
+  const failedItems = allUrlResults.flatMap(r => r.resultItems.filter(i => i.status === ResultStatus.FAIL));
   const blockerCount = failedItems.filter(i => i.severity === IssueSeverity.BLOCKER).length;
   const criticalCount = failedItems.filter(i => i.severity === IssueSeverity.CRITICAL).length;
   const highCount = failedItems.filter(i => i.severity === IssueSeverity.HIGH).length;
   const mediumCount = failedItems.filter(i => i.severity === IssueSeverity.MEDIUM).length;
   const lowCount = failedItems.filter(i => i.severity === IssueSeverity.LOW).length;
 
-  console.log(`[PAGE_PREFLIGHT] Completed. Score: ${score} (${getScoreStatus(score)})`);
+  console.log(`[PAGE_PREFLIGHT] Completed. Average score: ${averageScore} (${getScoreStatus(averageScore)})`);
+  console.log(`[PAGE_PREFLIGHT] Per-URL scores: ${urlScores.join(', ')}`);
   console.log(`[PAGE_PREFLIGHT] Failed by severity: ${blockerCount} blocker, ${criticalCount} critical, ${highCount} high, ${mediumCount} medium, ${lowCount} low`);
 
-  return score;
+  return averageScore;
 }
 
 /**

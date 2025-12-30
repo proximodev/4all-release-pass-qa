@@ -4,7 +4,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Card from '@/components/ui/card/Card'
-import { isPassingScore, getScoreColor } from '@/lib/config/scoring'
+import { isPassingScore, getScoreColor, calculateScoreFromItems } from '@/lib/config/scoring'
+import PageContainer from "@/components/layout/PageContainer";
+import TabPanel from "@/components/layout/TabPanel";
 
 interface ResultItem {
   id: string
@@ -22,6 +24,7 @@ interface UrlResultData {
   issueCount?: number
   additionalMetrics?: Record<string, any>
   resultItems?: ResultItem[]
+  performanceScore?: number | null
 }
 
 interface TestRunData {
@@ -133,8 +136,18 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
     const failCount = items.filter(i => i.status === 'FAIL').length
     const totalCount = items.length
 
-    // Use the testRun score (calculated by worker using severity penalties)
-    const score = testRun.score ?? 0
+    // Calculate per-URL score based on test type
+    let score: number
+    if (testType === 'PAGE_PREFLIGHT') {
+      // Baseline: calculate from ResultItems
+      score = calculateScoreFromItems(items)
+    } else if (testType === 'PERFORMANCE' && urlResult.performanceScore != null) {
+      // Performance: use stored per-URL score
+      score = urlResult.performanceScore
+    } else {
+      // Fallback to testRun score
+      score = testRun.score ?? 0
+    }
 
     // Determine pass/fail based on score threshold
     const status = isPassingScore(score) ? 'Passed' : 'Failed'
@@ -258,14 +271,16 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
 
   if (!testRun) {
     return (
-      <Card>
-        <div className="p-8 text-center text-black/60">
-          No {title} test was run for this release.
-          <Link href={`/releasepass/preflight?project=${releaseRun.project.id}&test=${releaseRun.id}`} className="text-brand-cyan underline ml-1">
-            Go back to results
-          </Link>
-        </div>
-      </Card>
+      <TabPanel>
+        <Card>
+          <div className="p-8 text-center text-black/60">
+            No {title} test was run for this release.
+            <Link href={`/releasepass/preflight?project=${releaseRun.project.id}&test=${releaseRun.id}`} className="text-brand-cyan underline ml-1">
+              Go back to results
+            </Link>
+          </div>
+        </Card>
+      </TabPanel>
     )
   }
 
@@ -274,167 +289,169 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
   )
 
   return (
-    <Card>
-      {/* Header with dropdowns */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <h2>{title} Results</h2>
-        <div className="flex gap-3">
-          {/* URL Selector */}
-          <select
-            value={selectedUrlResultId}
-            onChange={(e) => handleUrlChange(e.target.value)}
-            className="px-3 py-2 border border-medium-gray rounded text-sm bg-white min-w-[200px]"
-          >
-            {urlResults.map((ur) => (
-              <option key={ur.id} value={ur.id}>
-                {ur.url}
-              </option>
-            ))}
-          </select>
+    <TabPanel className={'min-h=[440px]'}>
+      <Card>
+        {/* Header with dropdowns */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <h2>{title} Results</h2>
+          <div className="flex gap-3">
+            {/* URL Selector */}
+            <select
+              value={selectedUrlResultId}
+              onChange={(e) => handleUrlChange(e.target.value)}
+              className="px-3 py-2 border border-medium-gray rounded text-sm bg-white min-w-[200px]"
+            >
+              {urlResults.map((ur) => (
+                <option key={ur.id} value={ur.id}>
+                  {ur.url}
+                </option>
+              ))}
+            </select>
 
-          {/* Test Type Selector */}
-          <select
-            value={testType}
-            onChange={(e) => handleTestTypeChange(e.target.value)}
-            className="px-3 py-2 border border-medium-gray rounded text-sm bg-white"
-          >
-            {availableTestTypes.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            {/* Test Type Selector */}
+            <select
+              value={testType}
+              onChange={(e) => handleTestTypeChange(e.target.value)}
+              className="px-3 py-2 border border-medium-gray rounded text-sm bg-white"
+            >
+              {availableTestTypes.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-      </div>
 
-      <hr className="border-medium-gray mb-6" />
+        <hr className="border-medium-gray mb-6" />
 
-      {/* Summary Section */}
-      {summary && urlResult ? (
-        <>
-          <div className="mb-6">
-            <h3>Summary</h3>
-            <div className="flex flex-wrap gap-x-12 gap-y-4">
-              {/* Status & Score */}
-              <div className="flex items-center gap-6">
-                <div>
-                  <span className="text-sm text-black/60">Status</span>
-                  <div className="mt-1">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      summary.status === 'Passed'
-                        ? 'bg-brand-cyan text-white'
-                        : 'bg-red text-white'
-                    }`}>
-                      {summary.status}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <span className="text-sm text-black/60">Score</span>
-                  <div className="mt-1">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      summary.scoreColor === 'green'
-                        ? 'bg-brand-cyan text-white'
-                        : summary.scoreColor === 'yellow'
-                          ? 'bg-brand-yellow text-black'
+        {/* Summary Section */}
+        {summary && urlResult ? (
+          <>
+            <div className="mb-6">
+              <h3>Summary</h3>
+              <div className="flex flex-wrap gap-x-12 gap-y-4">
+                {/* Status & Score */}
+                <div className="flex items-center gap-6">
+                  <div>
+                    <span className="text-sm text-black/60">Status</span>
+                    <div className="mt-1">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        summary.status === 'Passed'
+                          ? 'bg-brand-cyan text-white'
                           : 'bg-red text-white'
-                    }`}>
-                      {summary.score}
-                    </span>
+                      }`}>
+                        {summary.status}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-sm text-black/60">Score</span>
+                    <div className="mt-1">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        summary.scoreColor === 'green'
+                          ? 'bg-brand-cyan text-white'
+                          : summary.scoreColor === 'yellow'
+                            ? 'bg-brand-yellow text-black'
+                            : 'bg-red text-white'
+                      }`}>
+                        {summary.score}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Stats */}
-              <div className="text-sm">
-                <p>
-                  Passed {summary.passCount}/{summary.totalCount} checks
-                </p>
-                {summary.additionalInfo.map((info, i) => (
-                  <p key={i}>{info}</p>
-                ))}
-              </div>
+                {/* Stats */}
+                <div className="text-sm">
+                  <p>
+                    Passed {summary.passCount}/{summary.totalCount} checks
+                  </p>
+                  {summary.additionalInfo.map((info, i) => (
+                    <p key={i}>{info}</p>
+                  ))}
+                </div>
 
-              {/* Analysis placeholder */}
-              <div className="flex-1 min-w-[300px] text-sm text-black/60 italic">
-                [Analysis text - future] AI-generated summary of the test results will appear here.
+                {/* Analysis placeholder */}
+                <div className="flex-1 min-w-[300px] text-sm text-black/60 italic">
+                  [Analysis text - future] AI-generated summary of the test results will appear here.
+                </div>
               </div>
             </div>
-          </div>
 
-          <hr className="border-medium-gray mb-6" />
+            <hr className="border-medium-gray mb-6" />
 
-          {/* Details Table */}
-          <div>
-            <h3>Details</h3>
+            {/* Details Table */}
+            <div>
+              <h3>Details</h3>
 
-            {resultItems.length === 0 ? (
-              <p>No results available for this URL.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-medium-gray">
-                      <th className="text-left py-2 px-2 font-medium text-black/70">Provider</th>
-                      <th className="text-left py-2 px-2 font-medium text-black/70">Code</th>
-                      <th className="text-left py-2 px-2 font-medium text-black/70">Name</th>
-                      <th className="text-left py-2 px-2 font-medium text-black/70">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {resultItems.map((item) => (
-                      <tr key={item.id} className="border-b border-medium-gray/50 last:border-0">
-                        <td className="py-2 px-2 text-black/70">
-                          {item.provider === 'LIGHTHOUSE' ? 'Lighthouse' :
-                           item.provider === 'LINKINATOR' ? 'Linkinator' :
-                           item.provider === 'LANGUAGETOOL' ? 'LanguageTool' :
-                           item.provider}
-                        </td>
-                        <td className="py-2 px-2 text-black/70">{item.code}</td>
-                        <td className="py-2 px-2">{item.name}</td>
-                        <td className="py-2 px-2">
-                          <span className={
-                            item.status === 'PASS'
-                              ? 'text-brand-cyan'
-                              : item.status === 'FAIL'
-                                ? 'text-red'
-                                : 'text-black/60'
-                          }>
-                            {item.status === 'PASS' ? 'Pass' :
-                             item.status === 'FAIL' ? 'Fail' :
-                             item.status}
-                          </span>
-                        </td>
+              {resultItems.length === 0 ? (
+                <p>No results available for this URL.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-medium-gray">
+                        <th className="text-left py-2 px-2 font-medium text-black/70">Provider</th>
+                        <th className="text-left py-2 px-2 font-medium text-black/70">Code</th>
+                        <th className="text-left py-2 px-2 font-medium text-black/70">Name</th>
+                        <th className="text-left py-2 px-2 font-medium text-black/70">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    </thead>
+                    <tbody>
+                      {resultItems.map((item) => (
+                        <tr key={item.id} className="border-b border-medium-gray/50 last:border-0">
+                          <td className="py-2 px-2 text-black/70">
+                            {item.provider === 'LIGHTHOUSE' ? 'Lighthouse' :
+                             item.provider === 'LINKINATOR' ? 'Linkinator' :
+                             item.provider === 'LANGUAGETOOL' ? 'LanguageTool' :
+                             item.provider}
+                          </td>
+                          <td className="py-2 px-2 text-black/70">{item.code}</td>
+                          <td className="py-2 px-2">{item.name}</td>
+                          <td className="py-2 px-2">
+                            <span className={
+                              item.status === 'PASS'
+                                ? 'text-brand-cyan'
+                                : item.status === 'FAIL'
+                                  ? 'text-red'
+                                  : 'text-black/60'
+                            }>
+                              {item.status === 'PASS' ? 'Pass' :
+                               item.status === 'FAIL' ? 'Fail' :
+                               item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="text-black/60 text-sm">
+            No results available for the selected URL.
           </div>
-        </>
-      ) : (
-        <div className="text-black/60 text-sm">
-          No results available for the selected URL.
-        </div>
-      )}
+        )}
 
-      {/* Bottom Actions */}
-      <div className="flex gap-3 mt-8 pt-6 border-t border-medium-gray">
-        <Link
-          href={`/releasepass/preflight?project=${releaseRun.project.id}&test=${releaseRun.id}`}
-          className="px-4 py-2 border border-medium-gray rounded text-sm hover:bg-light-gray"
-        >
-          &larr; Back to All Results
-        </Link>
-        <button
-          className="px-4 py-2 bg-black text-white rounded text-sm hover:bg-black/80 disabled:opacity-50"
-          onClick={handleRerunTest}
-          disabled={rerunning}
-        >
-          {rerunning ? 'Rerunning...' : 'Rerun Test'}
-        </button>
-      </div>
-    </Card>
+        {/* Bottom Actions */}
+        <div className="flex gap-3 mt-8 pt-6 border-t border-medium-gray">
+          <Link
+            href={`/releasepass/preflight?project=${releaseRun.project.id}&test=${releaseRun.id}`}
+            className="px-4 py-2 border border-medium-gray rounded text-sm bg-white hover:bg-white/80"
+          >
+            &larr; Back to All Results
+          </Link>
+          <button
+            className="px-4 py-2 bg-black text-white rounded text-sm hover:bg-black/80 disabled:opacity-50"
+            onClick={handleRerunTest}
+            disabled={rerunning}
+          >
+            {rerunning ? 'Rerunning...' : 'Rerun Test'}
+          </button>
+        </div>
+      </Card>
+    </TabPanel>
   )
 }

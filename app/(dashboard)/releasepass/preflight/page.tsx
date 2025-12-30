@@ -22,7 +22,7 @@ export default function PreflightPage() {
   }, [searchParams])
 
   return (
-    <TwoColumnGrid>
+    <TwoColumnGrid className={'min-h-[440px]'}>
       <Card title="Get Started" className="select border-r-1 border-gray-400 pr-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <ProjectSelectorWithAdd onProjectChange={setProjectId} />

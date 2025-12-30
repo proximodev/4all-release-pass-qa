@@ -51,3 +51,25 @@ export function getScoreColor(score: number): 'green' | 'yellow' | 'red' {
   if (score >= SCORING_CONFIG.passThreshold) return 'yellow'
   return 'red'
 }
+
+/**
+ * Calculate score from an array of result items.
+ * Score starts at 100 and deducts based on failed item severity.
+ * Used by UI to calculate per-URL scores from ResultItems.
+ */
+export function calculateScoreFromItems(
+  items: Array<{ status: string; severity?: string }>
+): number {
+  let score = 100
+
+  for (const item of items) {
+    if (item.status !== 'FAIL' || !item.severity) continue
+
+    const penalty = SCORING_CONFIG.severityPenalties[
+      item.severity as keyof typeof SCORING_CONFIG.severityPenalties
+    ] || 0
+    score -= penalty
+  }
+
+  return Math.max(0, Math.min(100, Math.round(score)))
+}

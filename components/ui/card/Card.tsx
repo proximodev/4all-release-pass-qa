@@ -9,7 +9,7 @@ export default function Card({ children, title, className = '', ...props }: Card
   return (
     <div className={`${className}`} {...props}>
       {title && (
-        <h2 className="text-xl font-heading font-bold text-black mb-4">{title}</h2>
+        <h2>{title}</h2>
       )}
       {children}
     </div>

@@ -14,7 +14,7 @@ export default function Footer() {
             height={40}
             className="h-8 w-auto"
           />
-          <p className="text-white/60 text-sm">
+          <p>
             Copyright © {currentYear} 4All Digital, LLC
           </p>
         </div>

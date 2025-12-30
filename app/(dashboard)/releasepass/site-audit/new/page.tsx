@@ -92,7 +92,7 @@ export default function NewSiteAuditPage() {
     return (
       <TabPanel>
         <Card>
-          <p className="text-black/60">Loading...</p>
+          <p>Loading...</p>
         </Card>
       </TabPanel>
     )
@@ -102,7 +102,7 @@ export default function NewSiteAuditPage() {
     return (
       <TabPanel>
         <Card>
-          <p className="text-black/60 mb-4">
+          <p>
             Please select a project first to create a new site audit.
           </p>
           <Link
@@ -135,18 +135,18 @@ export default function NewSiteAuditPage() {
 
           <div className="space-y-2">
             <label className="block font-medium">Site URL</label>
-            <p className="text-black/70">{project.siteUrl}</p>
+            <p>{project.siteUrl}</p>
           </div>
 
           {project.sitemapUrl && (
             <div className="space-y-2">
               <label className="block font-medium">Sitemap URL</label>
-              <p className="text-black/70">{project.sitemapUrl}</p>
+              <p>{project.sitemapUrl}</p>
             </div>
           )}
 
           <div className="p-4 bg-light-gray rounded">
-            <p className="text-sm text-black/70">
+            <p>
               Site Audit uses SE Ranking to crawl up to 500 pages from your sitemap
               and analyze technical SEO, security, and performance issues.
             </p>

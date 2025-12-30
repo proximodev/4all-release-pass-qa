@@ -15,7 +15,7 @@ import { prisma } from '../../lib/prisma';
 import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { runPageSpeed, SeoAudit, PageSpeedResult } from '../pagespeed/client';
 import { checkLinks, LinkCheckResult, LinkCheckSummary } from '../linkinator/client';
-import { SCORING_CONFIG, getScoreStatus, isWhitelistedCdn } from '../../lib/scoring';
+import { SCORING_CONFIG, getScoreStatus, isWhitelistedCdn, isExcludedEndpoint } from '../../lib/scoring';
 
 interface TestRunWithRelations {
   id: string;
@@ -319,6 +319,12 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
       // Skip whitelisted CDNs (often return false positives due to CORS)
       if (isWhitelistedCdn(link.url)) {
         console.log(`[PAGE_PREFLIGHT] Skipping whitelisted CDN: ${link.url}`);
+        continue;
+      }
+
+      // Skip excluded endpoints (e.g., WordPress API endpoints that require POST)
+      if (isExcludedEndpoint(link.url)) {
+        console.log(`[PAGE_PREFLIGHT] Skipping excluded endpoint: ${link.url}`);
         continue;
       }
 

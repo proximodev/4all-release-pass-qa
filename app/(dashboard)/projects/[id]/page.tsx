@@ -65,7 +65,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
       <PageContainer>
         <Tabs tabs={projectTabs} />
         <div className="flex justify-center items-center py-12">
-          <p className="text-black/60">Loading project...</p>
+          <p>Loading project...</p>
         </div>
       </PageContainer>
     )
@@ -77,7 +77,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
         <Tabs tabs={projectTabs} />
         <Card title="Error">
           <div className="space-y-4">
-            <p className="text-red">{error || 'Project not found'}</p>
+            <p>{error || 'Project not found'}</p>
             <Button onClick={() => router.push('/projects')}>
               Back to Projects
             </Button>
@@ -98,7 +98,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
               <label className="block text-sm font-medium text-black/70 mb-1">
                 Project Name
               </label>
-              <p className="text-black">{project.name}</p>
+              <p>{project.name}</p>
             </div>
 
             <div>
@@ -134,7 +134,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
                 <label className="block text-sm font-medium text-black/70 mb-1">
                   Notes
                 </label>
-                <p className="text-black whitespace-pre-wrap">{project.notes}</p>
+                <p>{project.notes}</p>
               </div>
             )}
 
@@ -143,7 +143,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
                 <label className="block text-sm font-medium text-black/70 mb-1">
                   Created
                 </label>
-                <p className="text-black/60 text-sm">
+                <p>
                   {new Date(project.createdAt).toLocaleString()}
                 </p>
               </div>
@@ -151,7 +151,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
                 <label className="block text-sm font-medium text-black/70 mb-1">
                   Last Updated
                 </label>
-                <p className="text-black/60 text-sm">
+                <p>
                   {new Date(project.updatedAt).toLocaleString()}
                 </p>
               </div>

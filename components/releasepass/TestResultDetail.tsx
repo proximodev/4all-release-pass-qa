@@ -277,7 +277,7 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
     <Card>
       {/* Header with dropdowns */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <h2 className="text-xl font-heading font-bold">{title} Results</h2>
+        <h2>{title} Results</h2>
         <div className="flex gap-3">
           {/* URL Selector */}
           <select
@@ -313,7 +313,7 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
       {summary && urlResult ? (
         <>
           <div className="mb-6">
-            <h3 className="font-heading font-bold text-lg mb-4">Summary</h3>
+            <h3>Summary</h3>
             <div className="flex flex-wrap gap-x-12 gap-y-4">
               {/* Status & Score */}
               <div className="flex items-center gap-6">
@@ -347,11 +347,11 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
 
               {/* Stats */}
               <div className="text-sm">
-                <p className="text-black/80">
+                <p>
                   Passed {summary.passCount}/{summary.totalCount} checks
                 </p>
                 {summary.additionalInfo.map((info, i) => (
-                  <p key={i} className="text-black/80">{info}</p>
+                  <p key={i}>{info}</p>
                 ))}
               </div>
 
@@ -366,10 +366,10 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
 
           {/* Details Table */}
           <div>
-            <h3 className="font-heading font-bold text-lg mb-4">Details</h3>
+            <h3>Details</h3>
 
             {resultItems.length === 0 ? (
-              <p className="text-black/60 text-sm">No results available for this URL.</p>
+              <p>No results available for this URL.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

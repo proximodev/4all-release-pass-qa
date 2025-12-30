@@ -22,34 +22,35 @@ export async function POST(request: NextRequest) {
     const now = new Date()
     const defaultName = `${now.getMonth() + 1}/${now.getDate()}/${String(now.getFullYear()).slice(-2)} Preflight Test`
 
-    const releaseRun = await prisma.releaseRun.create({
-      data: {
-        projectId: validatedData.projectId,
-        name: validatedData.name || defaultName,
-        urls: validatedData.urls,
-        selectedTests: validatedData.selectedTests,
-        status: 'PENDING',
-      },
-      include: {
-        project: {
-          select: { id: true, name: true, siteUrl: true },
-        },
-      },
-    })
-
-    // Create queued TestRuns for each selected test type
-    const testRunPromises = validatedData.selectedTests.map((testType) =>
-      prisma.testRun.create({
+    // Use transaction to avoid connection pool exhaustion
+    const releaseRun = await prisma.$transaction(async (tx) => {
+      const run = await tx.releaseRun.create({
         data: {
-          releaseRunId: releaseRun.id,
+          projectId: validatedData.projectId,
+          name: validatedData.name || defaultName,
+          urls: validatedData.urls,
+          selectedTests: validatedData.selectedTests,
+          status: 'PENDING',
+        },
+        include: {
+          project: {
+            select: { id: true, name: true, siteUrl: true },
+          },
+        },
+      })
+
+      // Create queued TestRuns for each selected test type
+      await tx.testRun.createMany({
+        data: validatedData.selectedTests.map((testType) => ({
+          releaseRunId: run.id,
           projectId: validatedData.projectId,
           type: testType,
           status: 'QUEUED',
-        },
+        })),
       })
-    )
 
-    await Promise.all(testRunPromises)
+      return run
+    })
 
     return NextResponse.json(releaseRun, { status: 201 })
   } catch (error: any) {

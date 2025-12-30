@@ -5,7 +5,7 @@ export default function SettingsPage() {
   return (
     <PageContainer>
       <Card title="Settings">
-        <p className="text-black/60">Settings features will be implemented in a future phase.</p>
+        <p>Settings features will be implemented in a future phase.</p>
       </Card>
     </PageContainer>
   )

@@ -62,9 +62,9 @@ export default function ProjectsPage() {
 
       <Card>
         {loading ? (
-          <p className="text-center py-8 text-black/60">Loading projects...</p>
+          <p>Loading projects...</p>
         ) : filteredProjects.length === 0 ? (
-          <p className="text-center py-8 text-black/60">
+          <p>
             {filter ? 'No projects match your filter.' : 'No projects yet. Create your first project to get started.'}
           </p>
         ) : (

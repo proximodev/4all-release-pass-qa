@@ -23,7 +23,7 @@ export default function PreflightPage() {
 
   return (
     <TwoColumnGrid>
-      <Card>
+      <Card title="Get Started">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           <ProjectSelectorWithAdd onProjectChange={setProjectId} />
           <TestSelector
@@ -33,17 +33,10 @@ export default function PreflightPage() {
           />
         </div>
       </Card>
-      <Card title="Status">
-        {testId ? (
-          <TestResultsSummary testId={testId} />
-        ) : (
-          <p className="text-black/60">
-            {projectId
-              ? 'Select a test to view results, or create a new test.'
-              : 'Select a project to get started.'}
-          </p>
-        )}
+      <Card>
+        {testId && <TestResultsSummary testId={testId} />}
       </Card>
+
     </TwoColumnGrid>
   )
 }

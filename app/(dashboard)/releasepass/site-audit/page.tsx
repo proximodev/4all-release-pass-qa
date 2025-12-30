@@ -38,7 +38,7 @@ export default function SiteAuditPage() {
         {testId ? (
           <TestResultsSummary testId={testId} mode="testRun" />
         ) : (
-          <p className="text-black/60">
+          <p>
             {projectId
               ? 'Select a test to view results, or create a new site audit.'
               : 'Select a project to get started.'}

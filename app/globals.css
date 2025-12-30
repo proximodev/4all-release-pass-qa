@@ -91,6 +91,31 @@
 
 @layer base {
 
+  /* Progress dots animation */
+  @keyframes progress-dots {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 -34% 0 0); }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .animate-progress-dots {
+    animation: fade-in 0.3s ease-out, progress-dots 1s steps(4) infinite;
+  }
+
+  html, body { overflow-x: hidden; }
+  @supports (overflow: clip) {
+    html, body { overflow-x: clip; }
+  }
+
+  html {
+    font-size: 100%;
+    scroll-behavior: smooth;
+  }
+
   body {
     font-family: var(--font-body);
     color: var(--color-text-black);
@@ -99,11 +124,31 @@
   /** Heading **/
   h1, h2, h3, h4, h5 {
     font-family: var(--font-heading, sans-serif);
+    color: var(--color-text-black);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  h2 {
+    font-size: 1.375rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
   }
 
   p, ul, ol, dl, blockquote, pre {
     font-size: var(--text-m);
     margin: 0 0 1em;
+  }
+
+  strong {
+    font-family: var(--font-heading, sans-serif);
+    font-weight: 600 !important;
   }
 
   p.small, .text-s {
@@ -148,6 +193,18 @@
   nav a.active {
     color: var(--color-brand-yellow);
     border-bottom: 1px solid var(--color-brand-yellow);
+  }
+
+  button, .btn {
+    @apply inline-flex items-center px-4 py-1.5 no-underline transition ease-in-out duration-300;
+    font-size: var(--text-m);
+    border-width: 1.5px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  header .btn {
+    border-width: 1px;
   }
 
   input, textarea, select {

@@ -80,7 +80,7 @@ export default function Breadcrumb() {
   return (
     <div className="bg-white border-b border-medium-gray">
       <div className="container mx-auto px-6 py-4">
-        <h1 className="text-2xl font-heading font-bold text-black">
+        <h1>
           {getBreadcrumb()}
         </h1>
       </div>

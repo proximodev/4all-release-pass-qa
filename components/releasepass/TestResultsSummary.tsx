@@ -68,7 +68,7 @@ const TEST_STATUS_STYLES: Record<string, { bg: string; text: string; border?: st
 }
 
 const TEST_TYPE_LABELS: Record<string, string> = {
-  PAGE_PREFLIGHT: 'Baseline',
+  PAGE_PREFLIGHT: 'Technical Baseline',
   PERFORMANCE: 'Performance',
   SCREENSHOTS: 'Browser',
   SPELLING: 'Spelling',
@@ -82,6 +82,8 @@ const TEST_TYPE_ROUTES: Record<string, string> = {
   SPELLING: 'spelling',
 }
 
+const POLL_INTERVAL_MS = 5000
+
 export default function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryProps) {
   const router = useRouter()
   const [releaseRun, setReleaseRun] = useState<ReleaseRun | null>(null)
@@ -91,6 +93,11 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
   const [cancelling, setCancelling] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [expandedUrls, setExpandedUrls] = useState<Set<string>>(new Set())
+
+  // Check if any tests are still in progress (for polling)
+  const hasInProgressTests = (runs: TestRunData[]) => {
+    return runs.some(run => run.status === 'QUEUED' || run.status === 'RUNNING')
+  }
 
   useEffect(() => {
     if (testId) {
@@ -102,6 +109,20 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     }
   }, [testId, mode])
 
+  // Polling for in-progress tests
+  useEffect(() => {
+    if (mode !== 'releaseRun' || !releaseRun) return
+
+    // Only poll if there are in-progress tests
+    if (!hasInProgressTests(releaseRun.testRuns)) return
+
+    const intervalId = setInterval(() => {
+      fetchReleaseRun(releaseRun.id, false)
+    }, POLL_INTERVAL_MS)
+
+    return () => clearInterval(intervalId)
+  }, [releaseRun, mode])
+
   // Auto-expand first URL when data loads
   useEffect(() => {
     if (releaseRun && releaseRun.urls.length > 0 && expandedUrls.size === 0) {
@@ -109,9 +130,11 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     }
   }, [releaseRun])
 
-  const fetchReleaseRun = async (id: string) => {
-    setLoading(true)
-    setError(null)
+  const fetchReleaseRun = async (id: string, showLoading = true) => {
+    if (showLoading) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const res = await fetch(`/api/release-runs/${id}`)
       if (!res.ok) {
@@ -122,7 +145,9 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     } catch (err: any) {
       setError(err.message)
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
     }
   }
 
@@ -299,22 +324,22 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
       <div className="space-y-4">
         {/* Test Header */}
         <div className="flex items-center justify-between">
-          <h3 className="font-heading font-bold text-lg">
+          <h3>
             {dateStr} Site Audit
           </h3>
           {getStatusBadge(testRun.status)}
         </div>
 
         {/* Meta Info */}
-        <div className="text-sm text-black/60">
-          <p>Created: {formatDate(testRun.createdAt)}</p>
+        <div>
+          <p><strong>Created:</strong> {formatDate(testRun.createdAt)}</p>
           {testRun.finishedAt && <p>Completed: {formatDate(testRun.finishedAt)}</p>}
         </div>
 
         {/* Score */}
         {testRun.score !== null && (
           <div className="space-y-2">
-            <h4 className="font-medium text-sm">Score</h4>
+            <h3>Score</h3>
             <div className="text-2xl font-bold">
               {testRun.score}<span className="text-sm font-normal text-black/60">/100</span>
             </div>
@@ -324,7 +349,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
         {/* Results Summary */}
         {testRun.urlResults && (
           <div className="space-y-2">
-            <h4 className="font-medium text-sm">Summary</h4>
+            <h3>Summary</h3>
             <div className="text-sm text-black/70">
               {(() => {
                 const allItems = testRun.urlResults.flatMap(r => r.resultItems || [])
@@ -361,21 +386,20 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
   if (inProgress) {
     return (
       <div className="space-y-4">
-        {/* Header */}
+        {/* Header with progress dots */}
         <div className="flex items-center justify-between">
-          <h3 className="font-heading font-bold text-lg">Test Status</h3>
-          <button
-            onClick={handleCancel}
-            disabled={cancelling}
-            className="text-sm text-red hover:text-red/80 disabled:opacity-50"
-          >
-            {cancelling ? 'Cancelling...' : 'Cancel Test'}
-          </button>
+          <h3>Test Status</h3>
+          <div
+            className="w-[40px] aspect-[4] mr-2 animate-progress-dots"
+            style={{
+              background: 'radial-gradient(circle closest-side, currentColor 90%, transparent) 0/calc(100%/3) 100% space',
+            }}
+          />
         </div>
 
         {/* Created Date */}
-        <p className="text-sm text-black/60">
-          <span className="font-medium text-black">Created:</span> {formatDate(releaseRun.createdAt)}
+        <p>
+          <strong>Created:</strong> {formatDate(releaseRun.createdAt)}
         </p>
 
         {/* Test Status List */}
@@ -385,7 +409,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
             const status = testRun?.status || 'QUEUED'
             return (
               <div key={testType} className="flex items-center justify-between py-1 border-b border-medium-gray last:border-0">
-                <span className="text-sm">{TEST_TYPE_LABELS[testType] || testType}</span>
+                <span>{TEST_TYPE_LABELS[testType] || testType}</span>
                 {getStatusBadge(status)}
               </div>
             )
@@ -394,14 +418,25 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
 
         {/* Pages Submitted */}
         <div className="space-y-2 pt-4">
-          <h4 className="font-medium text-sm">Pages Submitted:</h4>
-          <ul className="text-sm space-y-1 text-black/70">
-            {releaseRun.urls.map((url, index) => (
-              <li key={index} className="truncate">
-                {url}
-              </li>
-            ))}
-          </ul>
+          <h3>Pages Submitted:</h3>
+            <ul className="space-y-1 text-black/70">
+              {releaseRun.urls.map((url, index) => (
+                  <li key={index} className="truncate">
+                    {url}
+                  </li>
+              ))}
+            </ul>
+        </div>
+
+        {/* Cancel Button - at bottom for consistency with Delete button */}
+        <div className="pt-4">
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            className="text-sm text-white bg-red hover:bg-red/80 disabled:opacity-50"
+          >
+            {cancelling ? 'Cancelling...' : 'Cancel Test'}
+          </button>
         </div>
       </div>
     )
@@ -412,45 +447,40 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="font-heading font-bold text-lg">
+        <h2>
           Results: {releaseRun.name || 'Untitled Test'}
-        </h3>
-        <span className="px-2 py-0.5 rounded text-xs font-medium bg-medium-gray text-black">
-          Review
-        </span>
+        </h2>
       </div>
 
       {/* Created Date */}
-      <p className="text-sm text-black/60">
-        <span className="font-medium text-black">Created:</span> {formatDate(releaseRun.createdAt)}
+      <p>
+        <strong>Created:</strong> {formatDate(releaseRun.createdAt)}
       </p>
 
       {/* URL Results with Expandable Sections */}
-      <div className="space-y-2 border-t border-medium-gray pt-4">
+      <div className="space-y-2 border-t border-medium-gray pt-4 pb-2 mb-0">
         {releaseRun.urls.map((url) => {
           const isExpanded = expandedUrls.has(url)
 
           return (
             <div key={url} className="border-b border-medium-gray last:border-0">
-              {/* URL Header - Clickable to expand/collapse */}
               <button
                 onClick={() => toggleUrlExpanded(url)}
-                className="w-full flex items-center justify-between py-2 text-left hover:bg-light-gray/50 -mx-2 px-2 rounded"
-              >
-                <span className="font-medium text-sm">{url}</span>
-                <svg
-                  className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                className="w-full flex border-0 items-center justify-between text-left p-0">
+                <p><strong>{url}</strong></p>
+                  <svg
+                      className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+                  </svg>
               </button>
 
               {/* Expanded Content - Test Results */}
               {isExpanded && (
-                <div className="pl-4 pb-3 space-y-2">
+                <div className="pb-3 space-y-2">
                   {releaseRun.selectedTests.map((testType) => {
                     const testRun = releaseRun.testRuns.find(r => r.type === testType)
                     const urlResult = testRun?.urlResults?.find(ur => ur.url === url)
@@ -465,10 +495,10 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
                       : `/releasepass/preflight/${route}?test=${releaseRun.id}`
 
                     return (
-                      <div key={testType} className="flex items-center justify-between py-1">
+                      <div key={testType} className="flex items-center justify-between py-0.5">
                         <Link
                           href={linkHref}
-                          className="text-sm underline hover:text-brand-cyan"
+                          className="underline hover:text-brand-cyan"
                         >
                           {TEST_TYPE_LABELS[testType] || testType}
                         </Link>
@@ -485,11 +515,11 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
 
       {/* Delete Button - Show if test failed or completed */}
       {(failed || !inProgress) && (
-        <div className="pt-4 border-t border-medium-gray">
+        <div className="pt-4">
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="text-sm text-red hover:text-red/80 disabled:opacity-50"
+            className="text-sm text-white bg-red hover:bg-red/80 disabled:opacity-50"
           >
             {deleting ? 'Deleting...' : 'Delete Test'}
           </button>

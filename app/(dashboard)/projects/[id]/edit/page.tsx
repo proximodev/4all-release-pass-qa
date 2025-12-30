@@ -139,7 +139,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       <PageContainer>
         <Tabs tabs={projectTabs} />
         <div className="flex justify-center items-center py-12">
-          <p className="text-black/60">Loading project...</p>
+          <p>Loading project...</p>
         </div>
       </PageContainer>
     )
@@ -151,7 +151,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
         <Tabs tabs={projectTabs} />
         <Card title="Error">
           <div className="space-y-4">
-            <p className="text-red">{errors.general || 'Project not found'}</p>
+            <p>{errors.general || 'Project not found'}</p>
             <Button onClick={() => router.push('/projects')}>
               Back to Projects
             </Button>
@@ -241,10 +241,10 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
           {showDeleteConfirm && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                <h3 className="text-xl font-heading font-semibold mb-4">
+                <h3>
                   Confirm Deletion
                 </h3>
-                <p className="text-black/70 mb-6">
+                <p>
                   Are you sure you want to delete <strong>{project.name}</strong>?
                   This action cannot be undone.
                 </p>

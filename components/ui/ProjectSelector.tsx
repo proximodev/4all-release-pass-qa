@@ -76,7 +76,7 @@ export default function ProjectSelector() {
           disabled
           options={[{ value: '', label: 'No projects available' }]}
         />
-        <p className="text-sm text-black/60 mt-2">
+        <p>
           Create a project first to run tests.
         </p>
       </div>

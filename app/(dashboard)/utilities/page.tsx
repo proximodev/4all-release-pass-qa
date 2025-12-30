@@ -5,7 +5,7 @@ export default function UtilitiesPage() {
   return (
     <PageContainer>
       <Card title="Utilities">
-        <p className="text-black/60">Utilities will be implemented in a future phase.</p>
+        <p>Utilities will be implemented in a future phase.</p>
       </Card>
     </PageContainer>
   )

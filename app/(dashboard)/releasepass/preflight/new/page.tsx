@@ -46,7 +46,7 @@ export default function NewPreflightTestPage() {
       <TabPanel>
         <div className="max-w-2xl">
           <Card>
-            <p className="text-black/60">Loading...</p>
+            <p>Loading...</p>
           </Card>
         </div>
       </TabPanel>
@@ -57,7 +57,7 @@ export default function NewPreflightTestPage() {
     return (
         <TabPanel>
           <Card>
-            <p className="text-black/60 mb-4">
+            <p>
               Please select a project first to create a new test.
             </p>
             <Link

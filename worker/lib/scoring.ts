@@ -51,6 +51,24 @@ export const SCORING_CONFIG = {
     'cdn.tailwindcss.com',
     'cdn.ampproject.org',
   ],
+
+  /**
+   * URL patterns to exclude from link validation.
+   * These are API endpoints that return errors for GET/HEAD requests
+   * but are not user-facing broken links (e.g., WordPress endpoints).
+   */
+  excludedEndpoints: [
+    // WordPress XML-RPC - requires POST with XML payload, returns 405 for GET/HEAD
+    'xmlrpc.php',
+    // WordPress REST API - may require authentication or specific methods
+    'wp-json',
+    // WordPress admin AJAX - requires POST with specific parameters
+    'wp-admin/admin-ajax.php',
+    // WordPress admin post handler
+    'wp-admin/admin-post.php',
+    // WordPress comments handler
+    'wp-comments-post.php',
+  ],
 } as const
 
 /**
@@ -75,6 +93,22 @@ export function isWhitelistedCdn(url: string): boolean {
     const hostname = new URL(url).hostname
     return SCORING_CONFIG.cdnWhitelist.some(
       cdn => hostname === cdn || hostname.endsWith('.' + cdn)
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Check if a URL matches an excluded endpoint pattern.
+ * These are API endpoints (e.g., WordPress) that return errors for GET/HEAD
+ * but are not user-facing broken links.
+ */
+export function isExcludedEndpoint(url: string): boolean {
+  try {
+    const pathname = new URL(url).pathname
+    return SCORING_CONFIG.excludedEndpoints.some(
+      pattern => pathname.includes(pattern)
     )
   } catch {
     return false

@@ -23,8 +23,8 @@ export default function PreflightPage() {
 
   return (
     <TwoColumnGrid>
-      <Card title="Get Started">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+      <Card title="Get Started" className="select border-r-1 border-gray-400 pr-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <ProjectSelectorWithAdd onProjectChange={setProjectId} />
           <TestSelector
             projectId={projectId}

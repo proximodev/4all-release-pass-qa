@@ -90,7 +90,7 @@ export default function ProjectSelectorWithAdd({ onProjectChange }: ProjectSelec
       <select
         value={selectedProject}
         onChange={handleProjectChange}
-        className="w-full px-3 py-2 border border-medium-gray rounded focus:outline-none focus:ring-2 focus:ring-brand-cyan focus:border-transparent bg-white"
+        className="w-full px-3 py-2 border border-medium-gray rounded focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent bg-white"
       >
         <option value="">Select</option>
         <option value="add-new">(+) Add New Project</option>

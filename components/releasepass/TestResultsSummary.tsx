@@ -408,7 +408,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
             const testRun = releaseRun.testRuns.find(r => r.type === testType)
             const status = testRun?.status || 'QUEUED'
             return (
-              <div key={testType} className="flex items-center justify-between py-1 border-b border-medium-gray last:border-0">
+              <div key={testType} className="flex items-center justify-between pb-3 pt-0 border-b border-medium-gray last:border-0">
                 <span>{TEST_TYPE_LABELS[testType] || testType}</span>
                 {getStatusBadge(status)}
               </div>

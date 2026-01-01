@@ -146,6 +146,7 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
       data: {
         testRunId: testRun.id,
         url: urlResult.url,
+        preflightScore: urlResult.score,  // Store calculated score for summary display
         issueCount: urlResult.resultItems.filter(r => r.status === ResultStatus.FAIL).length,
         additionalMetrics: {
           seoScore: urlResult.seoScore,

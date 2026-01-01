@@ -27,6 +27,21 @@ export const SCORING_CONFIG = {
 } as const
 
 /**
+ * Badge styling configuration.
+ * Centralized Tailwind classes for score and status badges.
+ */
+export const SCORE_BADGE_STYLES = {
+  green: { bg: 'bg-green-600', text: 'text-white' },
+  yellow: { bg: 'bg-brand-yellow', text: 'text-black' },
+  red: { bg: 'bg-red', text: 'text-white' },
+} as const
+
+export const STATUS_BADGE_STYLES = {
+  pass: { bg: 'bg-green-600', text: 'text-white' },
+  fail: { bg: 'bg-red', text: 'text-white' },
+} as const
+
+/**
  * Determine if a score passes the threshold
  */
 export function isPassingScore(score: number): boolean {
@@ -50,6 +65,25 @@ export function getScoreColor(score: number): 'green' | 'yellow' | 'red' {
   if (score >= 80) return 'green'
   if (score >= SCORING_CONFIG.passThreshold) return 'yellow'
   return 'red'
+}
+
+/**
+ * Get Tailwind classes for a score badge based on score value.
+ * Returns combined bg and text classes.
+ */
+export function getScoreBadgeClasses(score: number): string {
+  const color = getScoreColor(score)
+  const style = SCORE_BADGE_STYLES[color]
+  return `${style.bg} ${style.text}`
+}
+
+/**
+ * Get Tailwind classes for a status badge (pass/fail).
+ * Returns combined bg and text classes.
+ */
+export function getStatusBadgeClasses(status: 'pass' | 'fail'): string {
+  const style = STATUS_BADGE_STYLES[status]
+  return `${style.bg} ${style.text}`
 }
 
 /**

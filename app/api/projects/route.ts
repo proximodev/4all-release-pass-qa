@@ -30,7 +30,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(project, { status: 201 })
   } catch (error: any) {
-    console.error('Create project error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Create project error:', error)
+    }
 
     if (error.name === 'ZodError') {
       return NextResponse.json(
@@ -71,7 +73,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(projects)
   } catch (error) {
-    console.error('List projects error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('List projects error:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to fetch projects' },
       { status: 500 }

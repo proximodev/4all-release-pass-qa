@@ -7,7 +7,10 @@ interface RouteParams {
 }
 
 /**
- * GET /api/release-runs/[id] - Get a specific release run with full details
+ * GET /api/release-runs/[id] - Get a specific release run with summary data
+ *
+ * Returns release run with test runs and URL results, but NOT resultItems.
+ * Use GET /api/release-runs/[id]/url-results/[urlResultId] for detailed results.
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
@@ -18,6 +21,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // TODO: Add resource-level authorization when multi-tenant is implemented
+    // Verify user has access via: releaseRun.project.companyId === user.companyId
+
     const { id } = await params
 
     const releaseRun = await prisma.releaseRun.findUnique({
@@ -27,11 +33,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           select: { id: true, name: true, siteUrl: true, sitemapUrl: true },
         },
         testRuns: {
-          include: {
+          select: {
+            id: true,
+            type: true,
+            status: true,
+            score: true,
+            createdAt: true,
+            finishedAt: true,
+            // Exclude rawPayload - large JSON blob not needed for summary
             urlResults: {
-              include: {
-                resultItems: {
-                  orderBy: { severity: 'asc' },
+              select: {
+                id: true,
+                url: true,
+                issueCount: true,
+                preflightScore: true,
+                performanceScore: true,
+                additionalMetrics: true,
+                // resultItems excluded - fetch via /url-results/[id] endpoint
+                _count: {
+                  select: { resultItems: true },
                 },
               },
             },
@@ -57,7 +77,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json(releaseRun)
   } catch (error) {
-    console.error('Get release run error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Get release run error:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to fetch release run' },
       { status: 500 }
@@ -77,6 +99,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // TODO: Add resource-level authorization when multi-tenant is implemented
+    // Verify user has access via: releaseRun.project.companyId === user.companyId
+
     const { id } = await params
 
     // Check if release run exists
@@ -95,7 +120,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Delete release run error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Delete release run error:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to delete release run' },
       { status: 500 }

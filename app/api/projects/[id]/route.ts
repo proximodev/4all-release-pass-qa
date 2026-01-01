@@ -21,6 +21,9 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // TODO: Add resource-level authorization when multi-tenant is implemented
+    // Verify user has access: project.companyId === user.companyId
+
     const project = await prisma.project.findUnique({
       where: {
         id,
@@ -34,7 +37,9 @@ export async function GET(
 
     return NextResponse.json(project)
   } catch (error) {
-    console.error('Get project error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Get project error:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to fetch project' },
       { status: 500 }
@@ -60,6 +65,9 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // TODO: Add resource-level authorization when multi-tenant is implemented
+    // Verify user has access: project.companyId === user.companyId
+
     // Parse and validate request body
     const body = await request.json()
     const validatedData = projectSchema.partial().parse(body)
@@ -75,7 +83,9 @@ export async function PATCH(
 
     return NextResponse.json(project)
   } catch (error: any) {
-    console.error('Update project error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Update project error:', error)
+    }
 
     if (error.name === 'ZodError') {
       return NextResponse.json(
@@ -113,6 +123,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // TODO: Add resource-level authorization when multi-tenant is implemented
+    // Verify user has access: project.companyId === user.companyId
+
     // Soft delete by setting deletedAt timestamp
     await prisma.project.update({
       where: {
@@ -126,7 +139,9 @@ export async function DELETE(
 
     return NextResponse.json({ message: 'Project deleted successfully' })
   } catch (error: any) {
-    console.error('Delete project error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Delete project error:', error)
+    }
 
     if (error.code === 'P2025') {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })

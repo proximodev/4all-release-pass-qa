@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Card from '@/components/ui/card/Card'
-import { isPassingScore, getScoreColor, calculateScoreFromItems } from '@/lib/config/scoring'
+import { isPassingScore, getScoreBadgeClasses, getStatusBadgeClasses, calculateScoreFromItems } from '@/lib/config/scoring'
 import PageContainer from "@/components/layout/PageContainer";
 import TabPanel from "@/components/layout/TabPanel";
 
@@ -76,6 +76,10 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
   const [selectedUrlResultId, setSelectedUrlResultId] = useState<string>('')
   const [rerunning, setRerunning] = useState(false)
 
+  // Separate state for result items (fetched on demand)
+  const [resultItems, setResultItems] = useState<ResultItem[]>([])
+  const [loadingItems, setLoadingItems] = useState(false)
+
   useEffect(() => {
     if (testId) {
       fetchReleaseRun(testId)
@@ -96,6 +100,13 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
     }
   }, [releaseRun, urlResultId, testType])
 
+  // Fetch result items when selected URL changes
+  useEffect(() => {
+    if (testId && selectedUrlResultId) {
+      fetchResultItems(testId, selectedUrlResultId)
+    }
+  }, [testId, selectedUrlResultId])
+
   const fetchReleaseRun = async (id: string) => {
     setLoading(true)
     setError(null)
@@ -113,34 +124,54 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
     }
   }
 
-  // Get the test run and URL result data
-  const { testRun, urlResult, urlResults, resultItems, summary } = useMemo(() => {
+  const fetchResultItems = async (releaseRunId: string, urlResultId: string) => {
+    setLoadingItems(true)
+    try {
+      const res = await fetch(`/api/release-runs/${releaseRunId}/url-results/${urlResultId}`)
+      if (!res.ok) {
+        throw new Error('Failed to fetch result details')
+      }
+      const data = await res.json()
+      setResultItems(data.resultItems || [])
+    } catch (err: any) {
+      // Don't set error state - just log it, the summary still works
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to fetch result items:', err)
+      }
+      setResultItems([])
+    } finally {
+      setLoadingItems(false)
+    }
+  }
+
+  // Get the test run and URL result data (resultItems come from separate state)
+  const { testRun, urlResult, urlResults, summary } = useMemo(() => {
     if (!releaseRun) {
-      return { testRun: null, urlResult: null, urlResults: [], resultItems: [], summary: null }
+      return { testRun: null, urlResult: null, urlResults: [], summary: null }
     }
 
     const testRun = releaseRun.testRuns.find(r => r.type === testType)
     if (!testRun) {
-      return { testRun: null, urlResult: null, urlResults: [], resultItems: [], summary: null }
+      return { testRun: null, urlResult: null, urlResults: [], summary: null }
     }
 
     const urlResults = testRun.urlResults || []
     const urlResult = urlResults.find(ur => ur.id === selectedUrlResultId)
 
     if (!urlResult) {
-      return { testRun, urlResult: null, urlResults, resultItems: [], summary: null }
+      return { testRun, urlResult: null, urlResults, summary: null }
     }
 
-    const items = urlResult.resultItems || []
-    const passCount = items.filter(i => i.status === 'PASS').length
-    const failCount = items.filter(i => i.status === 'FAIL').length
-    const totalCount = items.length
+    // Use resultItems from state (fetched separately)
+    const passCount = resultItems.filter(i => i.status === 'PASS').length
+    const failCount = resultItems.filter(i => i.status === 'FAIL').length
+    const totalCount = resultItems.length
 
     // Calculate per-URL score based on test type
     let score: number
     if (testType === 'PAGE_PREFLIGHT') {
       // Baseline: calculate from ResultItems
-      score = calculateScoreFromItems(items)
+      score = calculateScoreFromItems(resultItems)
     } else if (testType === 'PERFORMANCE' && urlResult.performanceScore != null) {
       // Performance: use stored per-URL score
       score = urlResult.performanceScore
@@ -151,7 +182,6 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
 
     // Determine pass/fail based on score threshold
     const status = isPassingScore(score) ? 'Passed' : 'Failed'
-    const scoreColor = getScoreColor(score)
 
     // Get additional metrics based on test type
     let additionalInfo: string[] = []
@@ -171,18 +201,16 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
       testRun,
       urlResult,
       urlResults,
-      resultItems: items,
       summary: {
         score,
         passCount,
         failCount,
         totalCount,
         status,
-        scoreColor,
         additionalInfo,
       }
     }
-  }, [releaseRun, selectedUrlResultId, testType])
+  }, [releaseRun, selectedUrlResultId, testType, resultItems])
 
   const handleUrlChange = (newUrlResultId: string) => {
     setSelectedUrlResultId(newUrlResultId)
@@ -330,50 +358,34 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
           <>
             <div className="mb-6">
               <h3>Summary</h3>
-              <div className="flex flex-wrap gap-x-12 gap-y-4">
+              <div className="flex flex-wrap gap-x-12 gap-y-4 items-center">
                 {/* Status & Score */}
-                <div className="flex items-center gap-6">
-                  <div>
-                    <span className="text-sm text-black/60">Status</span>
-                    <div className="mt-1">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        summary.status === 'Passed'
-                          ? 'bg-brand-cyan text-white'
-                          : 'bg-red text-white'
-                      }`}>
+                <div className="flex flex-row gap-3">
+                  <div className="flex gap-2">
+                    <span>Status</span>
+                      <span className={`px-2 py-0.5 text-s font-medium ${getStatusBadgeClasses(summary.status === 'Passed' ? 'pass' : 'fail')}`}>
                         {summary.status}
                       </span>
-                    </div>
                   </div>
                   <div>
-                    <span className="text-sm text-black/60">Score</span>
-                    <div className="mt-1">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        summary.scoreColor === 'green'
-                          ? 'bg-brand-cyan text-white'
-                          : summary.scoreColor === 'yellow'
-                            ? 'bg-brand-yellow text-black'
-                            : 'bg-red text-white'
-                      }`}>
+                    <span className="mr-2">Score</span>
+                      <span className={`px-2 py-1 text-s font-medium ${getScoreBadgeClasses(summary.score)}`}>
                         {summary.score}
                       </span>
-                    </div>
                   </div>
                 </div>
 
                 {/* Stats */}
-                <div className="text-sm">
-                  <p>
-                    Passed {summary.passCount}/{summary.totalCount} checks
-                  </p>
+                <div className="flex flex-col gap-0">
+                  <div className="mb-0.5">Passed {summary.passCount}/{summary.totalCount} checks</div>
                   {summary.additionalInfo.map((info, i) => (
-                    <p key={i}>{info}</p>
+                    <span key={i}>{info}</span>
                   ))}
                 </div>
 
                 {/* Analysis placeholder */}
                 <div className="flex-1 min-w-[300px] text-sm text-black/60 italic">
-                  [Analysis text - future] AI-generated summary of the test results will appear here.
+
                 </div>
               </div>
             </div>
@@ -384,7 +396,9 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
             <div>
               <h3>Details</h3>
 
-              {resultItems.length === 0 ? (
+              {loadingItems ? (
+                <p className="text-black/60">Loading details...</p>
+              ) : resultItems.length === 0 ? (
                 <p>No results available for this URL.</p>
               ) : (
                 <div className="overflow-x-auto">

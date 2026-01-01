@@ -61,7 +61,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(testRun, { status: 201 })
   } catch (error: any) {
-    console.error('Create test run error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Create test run error:', error)
+    }
 
     if (error.name === 'ZodError') {
       return NextResponse.json(
@@ -130,7 +132,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(testRuns)
   } catch (error) {
-    console.error('List test runs error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('List test runs error:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to fetch test runs' },
       { status: 500 }

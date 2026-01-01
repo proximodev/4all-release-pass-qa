@@ -23,6 +23,9 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // TODO: Add resource-level authorization when multi-tenant is implemented
+    // Verify user has access via: testRun.project.companyId === user.companyId
+
     const testRun = await prisma.testRun.findUnique({
       where: { id },
       include: {
@@ -57,7 +60,9 @@ export async function GET(
 
     return NextResponse.json(testRun)
   } catch (error) {
-    console.error('Get test run error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Get test run error:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to fetch test run' },
       { status: 500 }

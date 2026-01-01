@@ -225,6 +225,7 @@ model UrlResult {
   tti Float? // Time to Interactive (seconds)
 
   // Scores
+  preflightScore     Int? // Calculated score for PAGE_PREFLIGHT (0-100)
   performanceScore   Int? // PageSpeed performance score (0-100)
   accessibilityScore Int? // Lighthouse accessibility score (0-100)
 

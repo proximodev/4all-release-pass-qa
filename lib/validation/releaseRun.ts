@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { safeUrlSchema } from './url'
 
 export const TestType = z.enum([
   'PAGE_PREFLIGHT',
@@ -11,7 +12,7 @@ export const releaseRunSchema = z.object({
   projectId: z.string().uuid('Project ID must be a valid UUID'),
   name: z.string().min(1, 'Test name is required').optional(),
   urls: z
-    .array(z.string().url('Each URL must be valid'))
+    .array(safeUrlSchema)
     .min(1, 'At least one URL is required'),
   selectedTests: z
     .array(TestType)

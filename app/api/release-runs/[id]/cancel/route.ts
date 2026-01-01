@@ -21,6 +21,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // TODO: Add resource-level authorization when multi-tenant is implemented
+    // Verify user has access via: releaseRun.project.companyId === user.companyId
+
     const { id } = await params
 
     // Check if release run exists
@@ -59,7 +62,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Cancel release run error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Cancel release run error:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to cancel release run' },
       { status: 500 }

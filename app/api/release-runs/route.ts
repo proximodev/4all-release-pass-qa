@@ -54,7 +54,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(releaseRun, { status: 201 })
   } catch (error: any) {
-    console.error('Create release run error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Create release run error:', error)
+    }
 
     if (error.name === 'ZodError') {
       return NextResponse.json({ error: error.errors }, { status: 400 })
@@ -110,7 +112,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(releaseRuns)
   } catch (error) {
-    console.error('List release runs error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('List release runs error:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to fetch release runs' },
       { status: 500 }

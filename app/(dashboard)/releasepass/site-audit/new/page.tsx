@@ -1,26 +1,15 @@
 'use client'
 
-import { useSearchParams, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Card from '@/components/ui/card/Card'
 import Button from '@/components/ui/button/Button'
 import Input from '@/components/ui/input/Input'
-import Link from 'next/link'
-import TabPanel from "@/components/layout/TabPanel"
+import TabPanel from '@/components/layout/TabPanel'
+import NewTestPageWrapper, { Project } from '@/components/releasepass/NewTestPageWrapper'
 
-interface Project {
-  id: string
-  name: string
-  siteUrl: string
-  sitemapUrl: string | null
-}
-
-export default function NewSiteAuditPage() {
-  const searchParams = useSearchParams()
+function SiteAuditForm({ project }: { project: Project }) {
   const router = useRouter()
-  const projectId = searchParams.get('project')
-  const [project, setProject] = useState<Project | null>(null)
-  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -29,37 +18,13 @@ export default function NewSiteAuditPage() {
   const defaultName = `${now.getMonth() + 1}/${now.getDate()}/${String(now.getFullYear()).slice(-2)} Site Audit`
   const [testName, setTestName] = useState(defaultName)
 
-  useEffect(() => {
-    if (projectId) {
-      fetchProject(projectId)
-    } else {
-      setLoading(false)
-    }
-  }, [projectId])
-
-  const fetchProject = async (id: string) => {
-    try {
-      const res = await fetch(`/api/projects/${id}`)
-      if (res.ok) {
-        const data = await res.json()
-        setProject(data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch project:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!project) return
 
     setSubmitting(true)
     setError(null)
 
     try {
-      // Create a site audit test run directly (not a release run)
       const res = await fetch('/api/test-runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,35 +50,7 @@ export default function NewSiteAuditPage() {
   }
 
   const handleCancel = () => {
-    router.push(`/releasepass/site-audit?project=${projectId}`)
-  }
-
-  if (loading) {
-    return (
-      <TabPanel>
-        <Card>
-          <p>Loading...</p>
-        </Card>
-      </TabPanel>
-    )
-  }
-
-  if (!projectId || !project) {
-    return (
-      <TabPanel>
-        <Card>
-          <p>
-            Please select a project first to create a new site audit.
-          </p>
-          <Link
-            href="/releasepass/site-audit"
-            className="text-brand-cyan hover:underline"
-          >
-            Go back to Site Audit
-          </Link>
-        </Card>
-      </TabPanel>
-    )
+    router.push(`/releasepass/site-audit?project=${project.id}`)
   }
 
   return (
@@ -128,19 +65,20 @@ export default function NewSiteAuditPage() {
 
           <Input
             label="Test Name"
+            className="block"
             value={testName}
             onChange={(e) => setTestName(e.target.value)}
             placeholder="Enter test name"
           />
 
           <div className="space-y-2">
-            <label className="block font-medium">Site URL</label>
+            <label className="block">Site URL</label>
             <p>{project.siteUrl}</p>
           </div>
 
           {project.sitemapUrl && (
             <div className="space-y-2">
-              <label className="block font-medium">Sitemap URL</label>
+              <label className="block">Sitemap URL</label>
               <p>{project.sitemapUrl}</p>
             </div>
           )}
@@ -163,5 +101,16 @@ export default function NewSiteAuditPage() {
         </form>
       </Card>
     </TabPanel>
+  )
+}
+
+export default function NewSiteAuditPage() {
+  return (
+    <NewTestPageWrapper
+      backPath="/releasepass/site-audit"
+      testTypeLabel="Site Audit"
+    >
+      {(project) => <SiteAuditForm project={project} />}
+    </NewTestPageWrapper>
   )
 }

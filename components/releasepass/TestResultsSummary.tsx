@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { getScoreColor, calculateScoreFromItems } from '@/lib/config/scoring'
+import { getScoreBadgeClasses } from '@/lib/config/scoring'
 
 interface ResultItem {
   id: string
@@ -18,6 +18,7 @@ interface UrlResultData {
   url: string
   issueCount?: number
   resultItems?: ResultItem[]
+  preflightScore?: number | null
   performanceScore?: number | null
 }
 
@@ -62,7 +63,7 @@ interface TestResultsSummaryProps {
 
 const TEST_STATUS_STYLES: Record<string, { bg: string; text: string; border?: string }> = {
   QUEUED: { bg: 'bg-medium-gray', text: 'text-black' },
-  RUNNING: { bg: 'bg-brand-yellow', text: 'text-black', border: 'border border-black' },
+  RUNNING: { bg: 'bg-brand-yellow', text: 'text-black'},
   SUCCESS: { bg: 'bg-brand-cyan', text: 'text-white' },
   FAILED: { bg: 'bg-red', text: 'text-white' },
   PARTIAL: { bg: 'bg-brand-yellow', text: 'text-black' },
@@ -250,7 +251,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     const styles = TEST_STATUS_STYLES[status] || { bg: 'bg-medium-gray', text: 'text-black' }
     const label = status === 'RUNNING' ? 'In Progress' : status.charAt(0) + status.slice(1).toLowerCase()
     return (
-      <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles.bg} ${styles.text} ${styles.border || ''}`}>
+      <span className={`px-2 py-0.5 text-xs font-medium ${styles.bg} ${styles.text} ${styles.border || ''}`}>
         {label}
       </span>
     )
@@ -260,24 +261,23 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     if (testType === 'SCREENSHOTS') {
       // Browser tests show "Review" badge
       return (
-        <span className="px-2 py-0.5 rounded text-xs font-medium bg-medium-gray text-black">
+        <span className="px-2 py-0.5 text-xs font-medium bg-medium-gray text-black">
           Review
         </span>
       )
     }
 
-    if (score === null) return null
-
-    // Determine color based on score using config
-    const color = getScoreColor(score)
-    const bgColor = color === 'green'
-      ? 'bg-brand-cyan'
-      : color === 'yellow'
-        ? 'bg-brand-yellow text-black'
-        : 'bg-red'
+    if (score === null) {
+      // No score available (e.g., PAGE_PREFLIGHT - score shown in detail view)
+      return (
+        <span className="px-2 py-0.5 text-xs font-medium bg-medium-gray text-black">
+          View
+        </span>
+      )
+    }
 
     return (
-      <span className={`px-2 py-0.5 rounded text-xs font-medium ${bgColor} ${color !== 'yellow' ? 'text-white' : ''}`}>
+      <span className={`px-2 py-0.5 text-xs font-medium ${getScoreBadgeClasses(score)}`}>
         {score}
       </span>
     )
@@ -393,7 +393,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
           <div
             className="w-[40px] aspect-[4] mr-2 animate-progress-dots"
             style={{
-              background: 'radial-gradient(circle closest-side, bg-gray-400 80%, transparent) 0/calc(100%/3) 100% space',
+              background: 'radial-gradient(circle closest-side, currentColor 80%, transparent) 0/calc(100%/3) 100% space',
             }}
           />
         </div>
@@ -489,9 +489,9 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
 
                     // Calculate per-URL score based on test type
                     let score: number | null = null
-                    if (testType === 'PAGE_PREFLIGHT' && urlResult?.resultItems) {
-                      // Baseline: calculate from ResultItems
-                      score = calculateScoreFromItems(urlResult.resultItems)
+                    if (testType === 'PAGE_PREFLIGHT' && urlResult?.preflightScore != null) {
+                      // Preflight: use stored per-URL score
+                      score = urlResult.preflightScore
                     } else if (testType === 'PERFORMANCE' && urlResult?.performanceScore != null) {
                       // Performance: use stored per-URL score
                       score = urlResult.performanceScore

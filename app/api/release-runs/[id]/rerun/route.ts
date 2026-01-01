@@ -26,6 +26,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // TODO: Add resource-level authorization when multi-tenant is implemented
+    // Verify user has access via: releaseRun.project.companyId === user.companyId
+
     const { id } = await params
     const body = await request.json()
 
@@ -95,7 +98,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       message: `${testType} test queued for rerun`
     })
   } catch (error) {
-    console.error('Rerun test error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Rerun test error:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to rerun test' },
       { status: 500 }

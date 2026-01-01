@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Card from '@/components/ui/card/Card'
-import { isPassingScore, getScoreBadgeClasses, getStatusBadgeClasses, calculateScoreFromItems } from '@/lib/config/scoring'
+import { isPassingScore, getScoreBadgeClasses, getStatusBadgeClasses } from '@/lib/config/scoring'
 import PageContainer from "@/components/layout/PageContainer";
 import TabPanel from "@/components/layout/TabPanel";
 
@@ -24,6 +24,7 @@ interface UrlResultData {
   issueCount?: number
   additionalMetrics?: Record<string, any>
   resultItems?: ResultItem[]
+  preflightScore?: number | null
   performanceScore?: number | null
 }
 
@@ -169,9 +170,9 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
 
     // Calculate per-URL score based on test type
     let score: number
-    if (testType === 'PAGE_PREFLIGHT') {
-      // Baseline: calculate from ResultItems
-      score = calculateScoreFromItems(resultItems)
+    if (testType === 'PAGE_PREFLIGHT' && urlResult.preflightScore != null) {
+      // Preflight: use stored per-URL score
+      score = urlResult.preflightScore
     } else if (testType === 'PERFORMANCE' && urlResult.performanceScore != null) {
       // Performance: use stored per-URL score
       score = urlResult.performanceScore

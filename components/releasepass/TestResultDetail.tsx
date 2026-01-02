@@ -1,57 +1,14 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, memo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Card from '@/components/ui/card/Card'
-import { isPassingScore, getScoreBadgeClasses, getStatusBadgeClasses } from '@/lib/config/scoring'
+import { getScoreBadgeClasses, getStatusBadgeClasses } from '@/lib/config/scoring'
+import { calculateUrlResultSummary } from '@/lib/services/testResults'
 import PageContainer from "@/components/layout/PageContainer";
 import TabPanel from "@/components/layout/TabPanel";
-
-interface ResultItem {
-  id: string
-  provider: string
-  code: string
-  name: string
-  status: string
-  severity?: string
-  meta?: Record<string, any>
-}
-
-interface UrlResultData {
-  id: string
-  url: string
-  issueCount?: number
-  additionalMetrics?: Record<string, any>
-  resultItems?: ResultItem[]
-  preflightScore?: number | null
-  performanceScore?: number | null
-}
-
-interface TestRunData {
-  id: string
-  type: string
-  status: string
-  score: number | null
-  createdAt: string
-  finishedAt: string | null
-  urlResults?: UrlResultData[]
-}
-
-interface ReleaseRun {
-  id: string
-  name: string | null
-  status: string
-  urls: string[]
-  selectedTests: string[]
-  createdAt: string
-  testRuns: TestRunData[]
-  project: {
-    id: string
-    name: string
-    siteUrl: string
-  }
-}
+import type { ResultItem, UrlResultData, TestRunData, ReleaseRun } from '@/lib/types/releasepass'
 
 const TEST_TYPE_OPTIONS = [
   { value: 'PAGE_PREFLIGHT', label: 'Technical Baseline', route: 'baseline' },
@@ -65,7 +22,7 @@ interface TestResultDetailProps {
   title: string
 }
 
-export default function TestResultDetail({ testType, title }: TestResultDetailProps) {
+function TestResultDetail({ testType, title }: TestResultDetailProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const testId = searchParams.get('test')
@@ -108,7 +65,7 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
     }
   }, [testId, selectedUrlResultId])
 
-  const fetchReleaseRun = async (id: string) => {
+  const fetchReleaseRun = useCallback(async (id: string) => {
     setLoading(true)
     setError(null)
     try {
@@ -123,9 +80,9 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const fetchResultItems = async (releaseRunId: string, urlResultId: string) => {
+  const fetchResultItems = useCallback(async (releaseRunId: string, urlResultId: string) => {
     setLoadingItems(true)
     try {
       const res = await fetch(`/api/release-runs/${releaseRunId}/url-results/${urlResultId}`)
@@ -133,7 +90,14 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
         throw new Error('Failed to fetch result details')
       }
       const data = await res.json()
-      setResultItems(data.resultItems || [])
+      // Sort by status (FAIL first) then by provider
+      const statusOrder: Record<string, number> = { FAIL: 0, PASS: 1, SKIP: 2 }
+      const sorted = (data.resultItems || []).sort((a: ResultItem, b: ResultItem) => {
+        const statusDiff = (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3)
+        if (statusDiff !== 0) return statusDiff
+        return (a.provider || '').localeCompare(b.provider || '')
+      })
+      setResultItems(sorted)
     } catch (err: any) {
       // Don't set error state - just log it, the summary still works
       if (process.env.NODE_ENV === 'development') {
@@ -143,7 +107,7 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
     } finally {
       setLoadingItems(false)
     }
-  }
+  }, [])
 
   // Get the test run and URL result data (resultItems come from separate state)
   const { testRun, urlResult, urlResults, summary } = useMemo(() => {
@@ -163,66 +127,28 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
       return { testRun, urlResult: null, urlResults, summary: null }
     }
 
-    // Use resultItems from state (fetched separately)
-    const passCount = resultItems.filter(i => i.status === 'PASS').length
-    const failCount = resultItems.filter(i => i.status === 'FAIL').length
-    const totalCount = resultItems.length
-
-    // Calculate per-URL score based on test type
-    let score: number
-    if (testType === 'PAGE_PREFLIGHT' && urlResult.preflightScore != null) {
-      // Preflight: use stored per-URL score
-      score = urlResult.preflightScore
-    } else if (testType === 'PERFORMANCE' && urlResult.performanceScore != null) {
-      // Performance: use stored per-URL score
-      score = urlResult.performanceScore
-    } else {
-      // Fallback to testRun score
-      score = testRun.score ?? 0
-    }
-
-    // Determine pass/fail based on score threshold
-    const status = isPassingScore(score) ? 'Passed' : 'Failed'
-
-    // Get additional metrics based on test type
-    let additionalInfo: string[] = []
-    if (testType === 'PAGE_PREFLIGHT') {
-      const linkCount = urlResult.additionalMetrics?.linkCount || 0
-      const brokenLinkCount = urlResult.additionalMetrics?.brokenLinkCount || 0
-      if (linkCount > 0) {
-        additionalInfo.push(
-          brokenLinkCount === 0
-            ? `No broken links (${linkCount} links tested)`
-            : `${brokenLinkCount} broken links (${linkCount} links tested)`
-        )
-      }
-    }
-
-    return {
-      testRun,
+    // Calculate summary using extracted service function
+    const summary = calculateUrlResultSummary(
+      testType,
       urlResult,
       urlResults,
-      summary: {
-        score,
-        passCount,
-        failCount,
-        totalCount,
-        status,
-        additionalInfo,
-      }
-    }
+      resultItems,
+      testRun.score ?? 0
+    )
+
+    return { testRun, urlResult, urlResults, summary }
   }, [releaseRun, selectedUrlResultId, testType, resultItems])
 
-  const handleUrlChange = (newUrlResultId: string) => {
+  const handleUrlChange = useCallback((newUrlResultId: string) => {
     setSelectedUrlResultId(newUrlResultId)
     // Update URL param
     const params = new URLSearchParams(searchParams.toString())
     params.set('urlResult', newUrlResultId)
     const currentRoute = TEST_TYPE_OPTIONS.find(o => o.value === testType)?.route || 'baseline'
     router.replace(`/releasepass/preflight/${currentRoute}?${params.toString()}`)
-  }
+  }, [searchParams, testType, router])
 
-  const handleTestTypeChange = (newTestType: string) => {
+  const handleTestTypeChange = useCallback((newTestType: string) => {
     const option = TEST_TYPE_OPTIONS.find(o => o.value === newTestType)
     if (!option) return
 
@@ -238,9 +164,9 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
     }
 
     router.push(`/releasepass/preflight/${option.route}?${params.toString()}`)
-  }
+  }, [releaseRun, urlResult?.url, testId, router])
 
-  const handleRerunTest = async () => {
+  const handleRerunTest = useCallback(async () => {
     if (!releaseRun || !testRun) return
 
     const confirmed = window.confirm(
@@ -266,7 +192,7 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
       setError(err.message)
       setRerunning(false)
     }
-  }
+  }, [releaseRun, testRun, title, testType, router])
 
   if (loading) {
     return (
@@ -324,15 +250,22 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <h2>{title} Results</h2>
           <div className="flex gap-3">
-            {/* URL Selector */}
+            {/* URL Selector - show unique URLs only */}
             <select
-              value={selectedUrlResultId}
-              onChange={(e) => handleUrlChange(e.target.value)}
+              value={urlResult?.url || ''}
+              onChange={(e) => {
+                // Find the first urlResult for this URL (prefer mobile for Performance)
+                const selectedUrl = e.target.value
+                const match = urlResults.find(ur => ur.url === selectedUrl && ur.viewport === 'mobile')
+                  || urlResults.find(ur => ur.url === selectedUrl)
+                if (match) handleUrlChange(match.id)
+              }}
               className="px-3 py-2 border border-medium-gray rounded text-sm bg-white min-w-[200px]"
             >
-              {urlResults.map((ur) => (
-                <option key={ur.id} value={ur.id}>
-                  {ur.url}
+              {/* Get unique URLs */}
+              {[...new Set(urlResults.map(ur => ur.url))].map((url) => (
+                <option key={url} value={url}>
+                  {url}
                 </option>
               ))}
             </select>
@@ -360,29 +293,48 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
             <div className="mb-6">
               <h3>Summary</h3>
               <div className="flex flex-wrap gap-x-12 gap-y-4 items-center">
-                {/* Status & Score */}
-                <div className="flex flex-row gap-3">
-                  <div className="flex gap-2">
-                    <span>Status</span>
-                      <span className={`px-2 py-0.5 text-s font-medium ${getStatusBadgeClasses(summary.status === 'Passed' ? 'pass' : 'fail')}`}>
-                        {summary.status}
-                      </span>
-                  </div>
-                  <div>
-                    <span className="mr-2">Score</span>
-                      <span className={`px-2 py-1 text-s font-medium ${getScoreBadgeClasses(summary.score)}`}>
-                        {summary.score}
-                      </span>
-                  </div>
+                {/* Status */}
+                <div className="flex gap-2">
+                  <span>Status</span>
+                  <span className={`px-2 py-0.5 text-s font-medium ${getStatusBadgeClasses(summary.status === 'Passed' ? 'pass' : 'fail')}`}>
+                    {summary.status}
+                  </span>
                 </div>
 
-                {/* Stats */}
-                <div className="flex flex-col gap-0">
-                  <div className="mb-0.5">Passed {summary.passCount}/{summary.totalCount} checks</div>
-                  {summary.additionalInfo.map((info, i) => (
-                    <span key={i}>{info}</span>
-                  ))}
-                </div>
+                {/* Score(s) - different display for Performance vs other tests */}
+                {testType === 'PERFORMANCE' ? (
+                  <div className="flex flex-row gap-6">
+                    <div className="flex gap-2">
+                      <span>Mobile Score</span>
+                      <span className={`px-2 py-0.5 text-s font-medium ${summary.mobileScore !== null ? getScoreBadgeClasses(summary.mobileScore) : 'bg-medium-gray text-black'}`}>
+                        {summary.mobileScore !== null ? summary.mobileScore : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span>Desktop Score</span>
+                      <span className={`px-2 py-0.5 text-s font-medium ${summary.desktopScore !== null ? getScoreBadgeClasses(summary.desktopScore) : 'bg-medium-gray text-black'}`}>
+                        {summary.desktopScore !== null ? summary.desktopScore : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <span>Score</span>
+                    <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(summary.score)}`}>
+                      {summary.score}
+                    </span>
+                  </div>
+                )}
+
+                {/* Stats - hide for Performance tests */}
+                {testType !== 'PERFORMANCE' && (
+                  <div className="flex flex-col gap-0">
+                    <div className="mb-0.5">Passed {summary.passCount}/{summary.totalCount} checks</div>
+                    {summary.additionalInfo.map((info, i) => (
+                      <span key={i}>{info}</span>
+                    ))}
+                  </div>
+                )}
 
                 {/* Analysis placeholder */}
                 <div className="flex-1 min-w-[300px] text-sm text-black/60 italic">
@@ -403,27 +355,27 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
                 <p>No results available for this URL.</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-m">
                     <thead>
                       <tr className="border-b border-medium-gray">
-                        <th className="text-left py-2 px-2 font-medium text-black/70">Provider</th>
-                        <th className="text-left py-2 px-2 font-medium text-black/70">Code</th>
-                        <th className="text-left py-2 px-2 font-medium text-black/70">Name</th>
-                        <th className="text-left py-2 px-2 font-medium text-black/70">Status</th>
+                        <th className="text-left py-2">Provider</th>
+                        <th className="text-left py-2">Code</th>
+                        <th className="text-left py-2">Name</th>
+                        <th className="text-left py-2">Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {resultItems.map((item) => (
                         <tr key={item.id} className="border-b border-medium-gray/50 last:border-0">
-                          <td className="py-2 px-2 text-black/70">
+                          <td className="py-2">
                             {item.provider === 'LIGHTHOUSE' ? 'Lighthouse' :
                              item.provider === 'LINKINATOR' ? 'Linkinator' :
                              item.provider === 'LANGUAGETOOL' ? 'LanguageTool' :
                              item.provider}
                           </td>
-                          <td className="py-2 px-2 text-black/70">{item.code}</td>
-                          <td className="py-2 px-2">{item.name}</td>
-                          <td className="py-2 px-2">
+                          <td className="py-2">{item.code}</td>
+                          <td className="py-2">{item.name}</td>
+                          <td className="py-2">
                             <span className={
                               item.status === 'PASS'
                                 ? 'text-brand-cyan'
@@ -470,3 +422,5 @@ export default function TestResultDetail({ testType, title }: TestResultDetailPr
     </TabPanel>
   )
 }
+
+export default memo(TestResultDetail)

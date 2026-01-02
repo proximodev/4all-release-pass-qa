@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/auth'
 
 /**
  * GET /api/test-runs/[id] - Get test run details
@@ -13,15 +13,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await requireAuth()
+    if (error) return error
+
     const { id } = await params
-
-    // Verify authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     // TODO: Add resource-level authorization when multi-tenant is implemented
     // Verify user has access via: testRun.project.companyId === user.companyId

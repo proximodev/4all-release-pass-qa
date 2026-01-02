@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { testRunSchema } from '@/lib/validation/testRun'
-import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/auth'
+import { isValidUuid } from '@/lib/validation/common'
 
 /**
  * POST /api/test-runs - Create a new test run
@@ -12,13 +13,8 @@ import { createClient } from '@/lib/supabase/server'
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error } = await requireAuth()
+    if (error) return error
 
     // Parse and validate request body
     const body = await request.json()
@@ -87,13 +83,8 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    // Verify authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error } = await requireAuth()
+    if (error) return error
 
     // Get query parameters
     const searchParams = request.nextUrl.searchParams
@@ -103,6 +94,13 @@ export async function GET(request: NextRequest) {
     if (!projectId) {
       return NextResponse.json(
         { error: 'projectId query parameter is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!isValidUuid(projectId)) {
+      return NextResponse.json(
+        { error: 'Invalid projectId format' },
         { status: 400 }
       )
     }

@@ -1,8 +1,15 @@
 /**
- * Scoring & Validation Configuration for Worker
+ * Scoring & Validation Configuration (Worker)
  *
  * Controls how test scores are calculated and how pass/fail is determined.
- * This should stay in sync with lib/config/scoring.ts in the main app.
+ *
+ * IMPORTANT: Core scoring values (passThreshold, severityPenalties) are imported
+ * from shared/scoring-config.json to ensure consistency with the app.
+ * DO NOT duplicate these values here - update the JSON file instead.
+ *
+ * This file contains:
+ * - Shared config import (passThreshold, severityPenalties)
+ * - Worker-specific validation helpers (CDN whitelist, excluded endpoints)
  *
  * Post-MVP: Move to database table for GUI configuration:
  * - Pass/fail thresholds (global or per-project)
@@ -10,25 +17,20 @@
  * - CDN whitelist
  */
 
+import sharedConfig from '../../shared/scoring-config.json'
+
 export const SCORING_CONFIG = {
   /**
    * Score threshold for pass/fail determination.
-   * score >= passThreshold → PASS
-   * score < passThreshold → FAIL
+   * Imported from shared/scoring-config.json
    */
-  passThreshold: 50,
+  passThreshold: sharedConfig.passThreshold,
 
   /**
    * Point deductions by severity level.
-   * Score starts at 100 and deducts based on failed items.
+   * Imported from shared/scoring-config.json
    */
-  severityPenalties: {
-    BLOCKER: 40,
-    CRITICAL: 20,
-    HIGH: 10,
-    MEDIUM: 5,
-    LOW: 2,
-  },
+  severityPenalties: sharedConfig.severityPenalties,
 
   /**
    * CDN domains to skip during link validation.

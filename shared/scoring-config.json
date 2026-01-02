@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Shared scoring configuration - single source of truth for app and worker. See lib/config/scoring.ts and worker/lib/scoring.ts for usage.",
+
+  "passThreshold": 50,
+
+  "severityPenalties": {
+    "BLOCKER": 40,
+    "CRITICAL": 20,
+    "HIGH": 10,
+    "MEDIUM": 5,
+    "LOW": 2
+  }
+}

@@ -11,6 +11,7 @@
  */
 
 import { retryWithBackoff } from '../../lib/retry';
+import { fetchWithTimeout } from '../../lib/fetch';
 
 const API_BASE = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
 
@@ -79,7 +80,9 @@ export async function runPageSpeed(
 
   const response = await retryWithBackoff(
     async () => {
-      const res = await fetch(apiUrl, {
+      // PageSpeed runs Lighthouse which can take time - use 60s timeout
+      const res = await fetchWithTimeout(apiUrl, {
+        timeoutMs: 60000,
         headers: {
           // Required for API keys with HTTP referrer restrictions
           'Referer': 'https://releasepass.app/',

@@ -10,6 +10,7 @@
  */
 
 import { retryWithBackoff } from '../../lib/retry';
+import { fetchWithTimeout, DEFAULT_TIMEOUT_MS } from '../../lib/fetch';
 
 const API_BASE = 'https://api4.seranking.com';
 
@@ -65,8 +66,9 @@ export async function createAuditProject(
 
   const response = await retryWithBackoff(
     async () => {
-      const res = await fetch(`${API_BASE}/audit/projects`, {
+      const res = await fetchWithTimeout(`${API_BASE}/audit/projects`, {
         method: 'POST',
+        timeoutMs: DEFAULT_TIMEOUT_MS,
         headers: {
           'Authorization': `Token ${apiKey}`,
           'Content-Type': 'application/json',
@@ -116,8 +118,9 @@ export async function startAudit(projectId: string): Promise<string> {
 
   const response = await retryWithBackoff(
     async () => {
-      const res = await fetch(`${API_BASE}/audit/projects/${projectId}/start`, {
+      const res = await fetchWithTimeout(`${API_BASE}/audit/projects/${projectId}/start`, {
         method: 'POST',
+        timeoutMs: DEFAULT_TIMEOUT_MS,
         headers: {
           'Authorization': `Token ${apiKey}`,
           'Content-Type': 'application/json',
@@ -162,7 +165,8 @@ export async function getAuditResults(
 
   const response = await retryWithBackoff(
     async () => {
-      const res = await fetch(`${API_BASE}/audit/projects/${projectId}/audits/${auditId}`, {
+      const res = await fetchWithTimeout(`${API_BASE}/audit/projects/${projectId}/audits/${auditId}`, {
+        timeoutMs: DEFAULT_TIMEOUT_MS,
         headers: {
           'Authorization': `Token ${apiKey}`,
         },
@@ -208,7 +212,8 @@ export async function getAuditIssues(
 
   const response = await retryWithBackoff(
     async () => {
-      const res = await fetch(`${API_BASE}/audit/projects/${projectId}/audits/${auditId}/issues`, {
+      const res = await fetchWithTimeout(`${API_BASE}/audit/projects/${projectId}/audits/${auditId}/issues`, {
+        timeoutMs: DEFAULT_TIMEOUT_MS,
         headers: {
           'Authorization': `Token ${apiKey}`,
         },

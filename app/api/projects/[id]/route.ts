@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { projectSchema } from '@/lib/validation/project'
-import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/auth'
 
 /**
  * GET /api/projects/[id] - Get project details
@@ -11,15 +11,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await requireAuth()
+    if (error) return error
+
     const { id } = await params
-
-    // Verify authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     // TODO: Add resource-level authorization when multi-tenant is implemented
     // Verify user has access: project.companyId === user.companyId
@@ -35,7 +30,11 @@ export async function GET(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    return NextResponse.json(project)
+    return NextResponse.json(project, {
+      headers: {
+        'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
+      },
+    })
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('Get project error:', error)
@@ -55,15 +54,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await requireAuth()
+    if (error) return error
+
     const { id } = await params
-
-    // Verify authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     // TODO: Add resource-level authorization when multi-tenant is implemented
     // Verify user has access: project.companyId === user.companyId
@@ -113,15 +107,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await requireAuth()
+    if (error) return error
+
     const { id } = await params
-
-    // Verify authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     // TODO: Add resource-level authorization when multi-tenant is implemented
     // Verify user has access: project.companyId === user.companyId

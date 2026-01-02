@@ -4,4 +4,5 @@
  * Exports link checking functionality
  */
 
-export { checkLinks, checkLinksMultiple, LinkCheckResult, LinkCheckSummary } from './client';
+export { checkLinks, checkLinksMultiple } from './client';
+export type { LinkCheckResult, LinkCheckSummary } from './client';

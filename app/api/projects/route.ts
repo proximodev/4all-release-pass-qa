@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { projectSchema } from '@/lib/validation/project'
-import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/auth'
 
 /**
  * POST /api/projects - Create a new project
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, error } = await requireAuth()
+    if (error) return error
 
     // Parse and validate request body
     const body = await request.json()
@@ -53,13 +48,8 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    // Verify authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error } = await requireAuth()
+    if (error) return error
 
     // Get all active projects (not soft deleted)
     const projects = await prisma.project.findMany({
@@ -71,7 +61,11 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(projects)
+    return NextResponse.json(projects, {
+      headers: {
+        'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
+      },
+    })
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('List projects error:', error)

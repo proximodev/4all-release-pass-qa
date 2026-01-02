@@ -8,4 +8,5 @@
  */
 
 export { processPerformance } from './performance';
-export { runPageSpeed, runPageSpeedBothViewports, PageSpeedResult, SeoAudit, Strategy } from './client';
+export { runPageSpeed, runPageSpeedBothViewports } from './client';
+export type { PageSpeedResult, SeoAudit, Strategy } from './client';

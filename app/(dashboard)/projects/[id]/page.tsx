@@ -95,14 +95,14 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
         <div className="space-y-6">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-black/70 mb-1">
+              <label className="block text-sm font-medium mb-1">
                 Project Name
               </label>
               <p>{project.name}</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-black/70 mb-1">
+              <label className="block text-sm font-medium mb-1">
                 Site URL
               </label>
               <a
@@ -116,7 +116,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-black/70 mb-1">
+              <label className="block text-sm font-medium mb-1">
                 Sitemap URL
               </label>
               <a
@@ -131,7 +131,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
 
             {project.notes && (
               <div>
-                <label className="block text-sm font-medium text-black/70 mb-1">
+                <label className="block text-sm font-medium mb-1">
                   Notes
                 </label>
                 <p>{project.notes}</p>
@@ -140,7 +140,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
 
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-medium-gray">
               <div>
-                <label className="block text-sm font-medium text-black/70 mb-1">
+                <label className="block text-sm font-medium mb-1">
                   Created
                 </label>
                 <p>
@@ -148,7 +148,7 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-black/70 mb-1">
+                <label className="block text-sm font-medium mb-1">
                   Last Updated
                 </label>
                 <p>

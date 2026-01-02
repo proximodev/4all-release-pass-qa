@@ -1,29 +1,33 @@
 /**
- * Scoring Configuration
+ * Scoring Configuration (App)
  *
  * Controls how test scores are calculated and how pass/fail is determined.
+ *
+ * IMPORTANT: Core scoring values (passThreshold, severityPenalties) are imported
+ * from shared/scoring-config.json to ensure consistency with the worker.
+ * DO NOT duplicate these values here - update the JSON file instead.
+ *
+ * This file contains:
+ * - Shared config import (passThreshold, severityPenalties)
+ * - App-specific UI helpers (badge styles, color functions)
+ *
  * Post-MVP: These values could move to a database table or project-level settings.
  */
+
+import sharedConfig from '@/shared/scoring-config.json'
 
 export const SCORING_CONFIG = {
   /**
    * Score threshold for pass/fail determination.
-   * score >= passThreshold → PASS
-   * score < passThreshold → FAIL
+   * Imported from shared/scoring-config.json
    */
-  passThreshold: 50,
+  passThreshold: sharedConfig.passThreshold,
 
   /**
    * Point deductions by severity level.
-   * Score starts at 100 and deducts based on failed items.
+   * Imported from shared/scoring-config.json
    */
-  severityPenalties: {
-    BLOCKER: 40,
-    CRITICAL: 20,
-    HIGH: 10,
-    MEDIUM: 5,
-    LOW: 2,
-  },
+  severityPenalties: sharedConfig.severityPenalties,
 } as const
 
 /**

@@ -2,24 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import type { TestRunSummary, ReleaseRunSummary } from '@/lib/types/releasepass'
 
-interface TestRun {
-  id: string
-  type: string
-  status: string
-  score: number | null
-  createdAt: string
-}
-
-interface ReleaseRun {
-  id: string
-  name: string | null
-  status: string
-  createdAt: string
-  testRuns: TestRun[]
-}
-
-type SelectableItem = ReleaseRun | TestRun
+type SelectableItem = ReleaseRunSummary | TestRunSummary
 
 interface TestSelectorProps {
   projectId: string | null

@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { releaseRunSchema } from '@/lib/validation/releaseRun'
-import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/auth'
+import { isValidUuid } from '@/lib/validation/common'
 
 /**
  * POST /api/release-runs - Create a new Release Run (displayed as "Test" in UI)
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error } = await requireAuth()
+    if (error) return error
 
     const body = await request.json()
     const validatedData = releaseRunSchema.parse(body)
@@ -74,12 +71,8 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error } = await requireAuth()
+    if (error) return error
 
     const { searchParams } = new URL(request.url)
     const projectId = searchParams.get('projectId')
@@ -87,6 +80,13 @@ export async function GET(request: NextRequest) {
     if (!projectId) {
       return NextResponse.json(
         { error: 'projectId query parameter is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!isValidUuid(projectId)) {
+      return NextResponse.json(
+        { error: 'Invalid projectId format' },
         { status: 400 }
       )
     }

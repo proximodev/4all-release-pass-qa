@@ -1,59 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getScoreBadgeClasses } from '@/lib/config/scoring'
-
-interface ResultItem {
-  id: string
-  status: string
-  code: string
-  name: string
-  severity?: string
-}
-
-interface UrlResultData {
-  id: string
-  url: string
-  issueCount?: number
-  resultItems?: ResultItem[]
-  preflightScore?: number | null
-  performanceScore?: number | null
-}
-
-interface TestRunData {
-  id: string
-  type: string
-  status: string
-  score: number | null
-  createdAt: string
-  finishedAt: string | null
-  urlResults?: UrlResultData[]
-  _count?: {
-    urlResults: number
-  }
-  project?: {
-    id: string
-    name: string
-    siteUrl: string
-  }
-}
-
-interface ReleaseRun {
-  id: string
-  name: string | null
-  status: string
-  urls: string[]
-  selectedTests: string[]
-  createdAt: string
-  testRuns: TestRunData[]
-  project: {
-    id: string
-    name: string
-    siteUrl: string
-  }
-}
+import type { ResultItem, UrlResultData, TestRunData, ReleaseRun } from '@/lib/types/releasepass'
 
 interface TestResultsSummaryProps {
   testId: string
@@ -86,7 +37,7 @@ const TEST_TYPE_ROUTES: Record<string, string> = {
 
 const POLL_INTERVAL_MS = 5000
 
-export default function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryProps) {
+function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryProps) {
   const router = useRouter()
   const [releaseRun, setReleaseRun] = useState<ReleaseRun | null>(null)
   const [testRun, setTestRun] = useState<TestRunData | null>(null)
@@ -132,7 +83,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     }
   }, [releaseRun])
 
-  const fetchReleaseRun = async (id: string, showLoading = true) => {
+  const fetchReleaseRun = useCallback(async (id: string, showLoading = true) => {
     if (showLoading) {
       setLoading(true)
       setError(null)
@@ -151,9 +102,9 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
         setLoading(false)
       }
     }
-  }
+  }, [])
 
-  const fetchTestRun = async (id: string) => {
+  const fetchTestRun = useCallback(async (id: string) => {
     setLoading(true)
     setError(null)
     try {
@@ -168,9 +119,9 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const handleCancel = async () => {
+  const handleCancel = useCallback(async () => {
     if (!releaseRun) return
 
     const confirmed = window.confirm(
@@ -196,9 +147,9 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     } finally {
       setCancelling(false)
     }
-  }
+  }, [releaseRun, fetchReleaseRun])
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!releaseRun) return
 
     const confirmed = window.confirm(
@@ -217,14 +168,15 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
         throw new Error('Failed to delete test')
       }
 
-      router.push('/releasepass/preflight')
+      // Full page reload to ensure TestSelector refetches the updated list
+      window.location.href = `/releasepass/preflight?project=${releaseRun.project.id}`
     } catch (err: any) {
       setError(err.message)
       setDeleting(false)
     }
-  }
+  }, [releaseRun])
 
-  const toggleUrlExpanded = (url: string) => {
+  const toggleUrlExpanded = useCallback((url: string) => {
     setExpandedUrls(prev => {
       const next = new Set(prev)
       if (next.has(url)) {
@@ -234,7 +186,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
       }
       return next
     })
-  }
+  }, [])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -351,7 +303,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
         {testRun.urlResults && (
           <div className="space-y-2">
             <h3>Summary</h3>
-            <div className="text-sm text-black/70">
+            <div className="text-sm">
               {(() => {
                 const allItems = testRun.urlResults.flatMap(r => r.resultItems || [])
                 const passCount = allItems.filter(i => i.status === 'PASS').length
@@ -420,7 +372,7 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
         {/* Pages Submitted */}
         <div className="space-y-2 pt-4">
           <h2>Pages Submitted</h2>
-            <ul className="space-y-1 text-black/70">
+            <ul className="space-y-1">
               {releaseRun.urls.map((url, index) => (
                   <li key={index} className="truncate">
                     {url}
@@ -484,17 +436,57 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
                 <div className="pb-3 space-y-2">
                   {releaseRun.selectedTests.map((testType) => {
                     const testRun = releaseRun.testRuns.find(r => r.type === testType)
-                    const urlResult = testRun?.urlResults?.find(ur => ur.url === url)
                     const route = TEST_TYPE_ROUTES[testType]
+
+                    // For PERFORMANCE, find both mobile and desktop results
+                    if (testType === 'PERFORMANCE') {
+                      const mobileResult = testRun?.urlResults?.find(ur => ur.url === url && ur.viewport === 'mobile')
+                      const desktopResult = testRun?.urlResults?.find(ur => ur.url === url && ur.viewport === 'desktop')
+
+                      // Build link - use mobile result ID if available
+                      const linkHref = mobileResult?.id
+                        ? `/releasepass/preflight/${route}?test=${releaseRun.id}&urlResult=${mobileResult.id}`
+                        : desktopResult?.id
+                          ? `/releasepass/preflight/${route}?test=${releaseRun.id}&urlResult=${desktopResult.id}`
+                          : `/releasepass/preflight/${route}?test=${releaseRun.id}`
+
+                      return (
+                        <div key={testType} className="flex items-center justify-between py-0.5">
+                          <Link
+                            href={linkHref}
+                            className="underline hover:text-brand-cyan"
+                          >
+                            {TEST_TYPE_LABELS[testType] || testType}
+                          </Link>
+                          <div className="flex items-center gap-2">
+                            {mobileResult?.performanceScore != null && (
+                              <span className={`px-2 py-0.5 text-xs font-medium ${getScoreBadgeClasses(mobileResult.performanceScore)}`} title="Mobile">
+                                {mobileResult.performanceScore}
+                              </span>
+                            )}
+                            {desktopResult?.performanceScore != null && (
+                              <span className={`px-2 py-0.5 text-xs font-medium ${getScoreBadgeClasses(desktopResult.performanceScore)}`} title="Desktop">
+                                {desktopResult.performanceScore}
+                              </span>
+                            )}
+                            {mobileResult?.performanceScore == null && desktopResult?.performanceScore == null && (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-medium-gray text-black">
+                                View
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // For other test types, use single urlResult
+                    const urlResult = testRun?.urlResults?.find(ur => ur.url === url)
 
                     // Calculate per-URL score based on test type
                     let score: number | null = null
                     if (testType === 'PAGE_PREFLIGHT' && urlResult?.preflightScore != null) {
                       // Preflight: use stored per-URL score
                       score = urlResult.preflightScore
-                    } else if (testType === 'PERFORMANCE' && urlResult?.performanceScore != null) {
-                      // Performance: use stored per-URL score
-                      score = urlResult.performanceScore
                     }
 
                     // Build link - use urlResultId if available
@@ -536,3 +528,5 @@ export default function TestResultsSummary({ testId, mode = 'releaseRun' }: Test
     </div>
   )
 }
+
+export default memo(TestResultsSummary)

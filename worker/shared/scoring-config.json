@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Worker copy of shared scoring configuration. Keep in sync with /shared/scoring-config.json. See #34 for future monorepo conversion.",
+
+  "passThreshold": 50,
+
+  "severityPenalties": {
+    "BLOCKER": 40,
+    "CRITICAL": 20,
+    "HIGH": 10,
+    "MEDIUM": 5,
+    "LOW": 2
+  }
+}

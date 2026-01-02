@@ -125,7 +125,9 @@ catch (error: unknown) {
 **Issue**: No rate limiting middleware. Authenticated users can spam API requests.
 **Impact**: DoS potential, database exhaustion, worker queue flooding, cost overruns on external APIs.
 **Recommendation**: Use `@upstash/ratelimit` or Vercel's rate limiting.
-**Status**: Open
+**Status**: Deferred
+- Internal tool with ~10 trusted users - abuse risk is low
+- Revisit if opening to external users or if abuse occurs
 
 ### 11. rawPayload Fetched Unnecessarily
 **Location**: `prisma/schema.prisma:183`
@@ -386,7 +388,7 @@ Verify Row-Level Security policies are enabled on all tables. The `NEXT_PUBLIC_S
 ### Phase 1 - Critical (Before Production)
 1. ~~Add resource-level authorization to API routes (#1)~~ - Deferred for MVP
 2. ~~Implement URL validation for SSRF prevention (#2)~~ - Complete
-3. Add rate limiting (#10)
+3. ~~Add rate limiting (#10)~~ - Deferred (internal tool, ~10 users)
 4. ~~Fix N+1 query with pagination (#3)~~ - Complete
 
 ### Phase 2 - High Priority
@@ -415,9 +417,9 @@ Verify Row-Level Security policies are enabled on all tables. The `NEXT_PUBLIC_S
 | Status | Count |
 |--------|-------|
 | Complete | 16 |
-| Deferred | 3 |
+| Deferred | 4 |
 | Partial | 1 |
-| Open | 12 |
+| Open | 11 |
 | **Total** | **32** |
 
 ---

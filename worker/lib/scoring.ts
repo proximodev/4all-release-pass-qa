@@ -4,8 +4,8 @@
  * Controls how test scores are calculated and how pass/fail is determined.
  *
  * IMPORTANT: Core scoring values (passThreshold, severityPenalties) are imported
- * from shared/scoring-config.json to ensure consistency with the app.
- * DO NOT duplicate these values here - update the JSON file instead.
+ * from worker/shared/scoring-config.json. Keep this in sync with /shared/scoring-config.json.
+ * See #34 for future monorepo conversion that will eliminate this duplication.
  *
  * This file contains:
  * - Shared config import (passThreshold, severityPenalties)
@@ -17,7 +17,7 @@
  * - CDN whitelist
  */
 
-import sharedConfig from '../../shared/scoring-config.json'
+import sharedConfig from '../shared/scoring-config.json'
 
 export const SCORING_CONFIG = {
   /**

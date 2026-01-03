@@ -501,7 +501,7 @@ async function runCustomRulesWithErrorHandling(url: string): Promise<ResultItemT
 
     // Return a single error item so we know custom rules failed
     return [{
-      provider: IssueProvider.CUSTOM_RULE,
+      provider: IssueProvider.ReleasePass,
       code: 'CUSTOM_RULES_ERROR',
       name: 'Custom Rules Check Failed',
       status: ResultStatus.FAIL,

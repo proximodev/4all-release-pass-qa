@@ -58,7 +58,7 @@ enum IssueProvider {
   LANGUAGETOOL
   LIGHTHOUSE
   LINKINATOR
-  CUSTOM_RULE
+  ReleasePass
   INTERNAL
 }
 

@@ -81,7 +81,7 @@ async function fetchPage(url: string): Promise<FetchedPage> {
  */
 function createPass(code: string, name: string, meta?: Record<string, unknown>): ResultItemToCreate {
   return {
-    provider: IssueProvider.CUSTOM_RULE,
+    provider: IssueProvider.ReleasePass,
     code,
     name,
     status: ResultStatus.PASS,
@@ -99,7 +99,7 @@ function createFail(
   meta?: Record<string, unknown>
 ): ResultItemToCreate {
   return {
-    provider: IssueProvider.CUSTOM_RULE,
+    provider: IssueProvider.ReleasePass,
     code,
     name,
     status: ResultStatus.FAIL,

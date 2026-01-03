@@ -15,6 +15,7 @@ import { prisma } from '../../lib/prisma';
 import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { runPageSpeed, SeoAudit, PageSpeedResult } from '../pagespeed/client';
 import { checkLinks, LinkCheckResult, LinkCheckSummary } from '../linkinator/client';
+import { runCustomRules } from './custom-rules';
 import { SCORING_CONFIG, getScoreStatus, isWhitelistedCdn, isExcludedEndpoint } from '../../lib/scoring';
 
 interface TestRunWithRelations {
@@ -111,6 +112,10 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
         urlCheckResult.linkinatorRaw = linkinatorResult;
         rawPayload.linkinator.push({ url, result: linkinatorResult });
       }
+
+      // Run custom rules (H1, viewport, etc.)
+      const customItems = await runCustomRulesWithErrorHandling(url);
+      urlCheckResult.resultItems.push(...customItems);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -474,4 +479,34 @@ function calculateScore(failedItems: ResultItemToCreate[]): number {
   }
 
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+/**
+ * Run custom rules with error handling
+ * Returns result items even on partial failure
+ */
+async function runCustomRulesWithErrorHandling(url: string): Promise<ResultItemToCreate[]> {
+  try {
+    console.log(`[PAGE_PREFLIGHT] Running custom rules for ${url}...`);
+    const items = await runCustomRules(url);
+
+    const passCount = items.filter(i => i.status === ResultStatus.PASS).length;
+    const failCount = items.filter(i => i.status === ResultStatus.FAIL).length;
+    console.log(`[PAGE_PREFLIGHT] Custom rules: ${passCount} passed, ${failCount} failed for ${url}`);
+
+    return items;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[PAGE_PREFLIGHT] Custom rules failed for ${url}:`, errorMsg);
+
+    // Return a single error item so we know custom rules failed
+    return [{
+      provider: IssueProvider.CUSTOM_RULE,
+      code: 'CUSTOM_RULES_ERROR',
+      name: 'Custom Rules Check Failed',
+      status: ResultStatus.FAIL,
+      severity: IssueSeverity.HIGH,
+      meta: { error: errorMsg },
+    }];
+  }
 }

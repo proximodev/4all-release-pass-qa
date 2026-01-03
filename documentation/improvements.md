@@ -365,6 +365,13 @@ images: {
 **Status**: Complete
 - Changed `export { Type }` to `export type { Type }` for type-only exports
 
+### 37. Custom Rules Fetch Optimization
+**Location**: `worker/providers/preflight/custom-rules.ts`
+**Category**: Performance
+**Issue**: Custom rules perform a separate HTTP fetch per URL to get raw HTML and headers, even though PageSpeed API already fetches the page. This adds one extra request per URL during preflight checks.
+**Recommendation**: Investigate whether PageSpeed API response contains raw HTML that could be reused, or consider batching/caching the fetch if multiple providers need raw HTML.
+**Status**: Open (future optimization)
+
 ---
 
 ## SECURITY CONSIDERATIONS
@@ -419,8 +426,8 @@ Verify Row-Level Security policies are enabled on all tables. The `NEXT_PUBLIC_S
 | Complete | 16 |
 | Deferred | 4 |
 | Partial | 1 |
-| Open | 11 |
-| **Total** | **32** |
+| Open | 12 |
+| **Total** | **33** |
 
 ---
 

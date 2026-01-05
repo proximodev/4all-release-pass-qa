@@ -13,3 +13,7 @@ export const settingsTabs = [
   { label: 'Preflight Rules', href: '/settings/preflight-rules' },
   { label: 'Preflight Categories', href: '/settings/preflight-categories' },
 ]
+
+export const utilitiesTabs = [
+  { label: 'Paste Cleaner', href: '/utilities/paste-cleaner' },
+]

@@ -15,6 +15,35 @@ export interface ProjectSummary {
 }
 
 /**
+ * Category for grouping ReleaseRules
+ */
+export interface ReleaseRuleCategory {
+  id: string
+  name: string
+  description?: string | null
+  sortOrder: number
+  isActive: boolean
+}
+
+/**
+ * Taxonomy entry for a check rule
+ */
+export interface ReleaseRule {
+  code: string
+  provider: string
+  categoryId: string
+  category?: ReleaseRuleCategory | null
+  name: string
+  description: string
+  severity: string
+  impact?: string | null
+  fix?: string | null
+  docUrl?: string | null
+  isActive: boolean
+  sortOrder: number
+}
+
+/**
  * Individual check result from a test provider
  */
 export interface ResultItem {
@@ -25,6 +54,7 @@ export interface ResultItem {
   status: string
   severity?: string
   meta?: Record<string, any>
+  releaseRule?: ReleaseRule | null
 }
 
 /**

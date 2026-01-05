@@ -35,6 +35,13 @@ export async function GET(
         urlResults: {
           include: {
             resultItems: {
+              include: {
+                releaseRule: {
+                  include: {
+                    category: true, // Include category for grouping
+                  },
+                },
+              },
               orderBy: [{ status: 'asc' }, { severity: 'desc' }],
             },
           },

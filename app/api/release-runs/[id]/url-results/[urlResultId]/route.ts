@@ -27,6 +27,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       where: { id: urlResultId },
       include: {
         resultItems: {
+          include: {
+            releaseRule: {
+              include: {
+                category: true, // Include category for grouping
+              },
+            },
+          },
           orderBy: [
             { status: 'asc' },  // FAIL first, then PASS, then SKIP
             { provider: 'asc' }, // Group by provider

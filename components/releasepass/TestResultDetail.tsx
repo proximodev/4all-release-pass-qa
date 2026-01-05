@@ -8,7 +8,7 @@ import { getScoreBadgeClasses, getStatusBadgeClasses } from '@/lib/config/scorin
 import { calculateUrlResultSummary } from '@/lib/services/testResults'
 import PageContainer from "@/components/layout/PageContainer";
 import TabPanel from "@/components/layout/TabPanel";
-import type { ResultItem, UrlResultData, TestRunData, ReleaseRun } from '@/lib/types/releasepass'
+import type { ResultItem, UrlResultData, TestRunData, ReleaseRun, ReleaseRule, ReleaseRuleCategory } from '@/lib/types/releasepass'
 
 const TEST_TYPE_OPTIONS = [
   { value: 'PAGE_PREFLIGHT', label: 'Technical Baseline', route: 'baseline' },
@@ -37,6 +37,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
   // Separate state for result items (fetched on demand)
   const [resultItems, setResultItems] = useState<ResultItem[]>([])
   const [loadingItems, setLoadingItems] = useState(false)
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
 
   useEffect(() => {
     if (testId) {
@@ -358,38 +359,101 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
                   <table className="w-full text-m">
                     <thead>
                       <tr className="border-b border-medium-gray">
+                        <th className="text-left py-2 w-8"></th>
                         <th className="text-left py-2">Provider</th>
-                        <th className="text-left py-2">Code</th>
+                        <th className="text-left py-2">Category</th>
                         <th className="text-left py-2">Name</th>
                         <th className="text-left py-2">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {resultItems.map((item) => (
-                        <tr key={item.id} className="border-b border-medium-gray/50 last:border-0">
-                          <td className="py-2">
-                            {item.provider === 'LIGHTHOUSE' ? 'Lighthouse' :
-                             item.provider === 'LINKINATOR' ? 'Linkinator' :
-                             item.provider === 'LANGUAGETOOL' ? 'LanguageTool' :
-                             item.provider}
-                          </td>
-                          <td className="py-2">{item.code}</td>
-                          <td className="py-2">{item.name}</td>
-                          <td className="py-2">
-                            <span className={
-                              item.status === 'PASS'
-                                ? 'text-brand-cyan'
-                                : item.status === 'FAIL'
-                                  ? 'text-red'
-                                  : 'text-black/60'
-                            }>
-                              {item.status === 'PASS' ? 'Pass' :
-                               item.status === 'FAIL' ? 'Fail' :
-                               item.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {resultItems.map((item) => {
+                        const rule = item.releaseRule
+                        const isExpanded = expandedItemId === item.id
+                        const hasDetails = rule && (rule.description || rule.fix)
+
+                        return (
+                          <>
+                            <tr
+                              key={item.id}
+                              className={`border-b border-medium-gray/50 ${hasDetails ? 'cursor-pointer hover:bg-black/5' : ''}`}
+                              onClick={() => hasDetails && setExpandedItemId(isExpanded ? null : item.id)}
+                            >
+                              <td className="py-2 text-center">
+                                {hasDetails && (
+                                  <span className="text-black/40">
+                                    {isExpanded ? '▼' : '▶'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2">
+                                {item.provider === 'LIGHTHOUSE' ? 'Lighthouse' :
+                                 item.provider === 'LINKINATOR' ? 'Linkinator' :
+                                 item.provider === 'LANGUAGETOOL' ? 'LanguageTool' :
+                                 item.provider === 'ReleasePass' ? 'ReleasePass' :
+                                 item.provider}
+                              </td>
+                              <td className="py-2 text-black/60">
+                                {rule?.category?.name || '—'}
+                              </td>
+                              <td className="py-2">
+                                {rule?.name || item.name}
+                              </td>
+                              <td className="py-2">
+                                <span className={
+                                  item.status === 'PASS'
+                                    ? 'text-brand-cyan'
+                                    : item.status === 'FAIL'
+                                      ? 'text-red'
+                                      : 'text-black/60'
+                                }>
+                                  {item.status === 'PASS' ? 'Pass' :
+                                   item.status === 'FAIL' ? 'Fail' :
+                                   item.status}
+                                </span>
+                              </td>
+                            </tr>
+                            {isExpanded && rule && (
+                              <tr key={`${item.id}-details`} className="bg-black/5 border-b border-medium-gray/50">
+                                <td></td>
+                                <td colSpan={4} className="py-3 px-4">
+                                  {rule.description && (
+                                    <div className="mb-2">
+                                      <span className="font-medium">Description: </span>
+                                      <span className="text-black/80">{rule.description}</span>
+                                    </div>
+                                  )}
+                                  {rule.fix && (
+                                    <div className="mb-2">
+                                      <span className="font-medium">How to Fix: </span>
+                                      <span className="text-black/80">{rule.fix}</span>
+                                    </div>
+                                  )}
+                                  {rule.impact && (
+                                    <div className="mb-2">
+                                      <span className="font-medium">Impact: </span>
+                                      <span className="text-black/80">{rule.impact}</span>
+                                    </div>
+                                  )}
+                                  {rule.docUrl && (
+                                    <div>
+                                      <a
+                                        href={rule.docUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-brand-cyan underline"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        Learn more →
+                                      </a>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>

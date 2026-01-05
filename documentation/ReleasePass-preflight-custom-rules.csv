@@ -1,38 +1,38 @@
-Classification/Grouping,Test,Rule Code,Severity,Release,Notes
-Indexing & Crawl Control,Page marked noindex via HTTP headers,PREFLIGHT_INDEX_NOINDEX_HEADER,Blocker,v1,Blocks indexing even if meta tags allow indexing
-Indexing & Crawl Control,Page marked nofollow via meta or HTTP headers,PREFLIGHT_INDEX_NOFOLLOW,Critical,v1,Prevents link equity flow and crawling intent
-Indexing & Crawl Control,Conflicting index directives detected (meta vs headers),PREFLIGHT_INDEX_CONFLICT,Blocker,v1,Creates undefined indexing behavior
-Canonical Intent & Consistency,Canonical tag missing,PREFLIGHT_CANONICAL_MISSING,Blocker,v1,Page may be treated as duplicate or ignored
-Canonical Intent & Consistency,Multiple canonical tags detected,PREFLIGHT_CANONICAL_MULTIPLE,Blocker,v1,Search engines may ignore canonical entirely
-Canonical Intent & Consistency,Canonical points to a different URL than the page,PREFLIGHT_CANONICAL_MISMATCH,Blocker,v1,Page effectively deindexed in favor of canonical target
-Canonical Intent & Consistency,Canonical uses incorrect protocol (HTTP vs HTTPS),PREFLIGHT_CANONICAL_PROTOCOL,Blocker,v1,Introduces duplicate and security issues
-Canonical Intent & Consistency,Canonical points to non-primary hostname,PREFLIGHT_CANONICAL_HOSTNAME,Blocker,v1,Signals wrong authority source
-Canonical Intent & Consistency,Canonical target contains tracking or session parameters,PREFLIGHT_CANONICAL_PARAMS,Critical,v1,Creates unstable canonical signals
-Heading Structure,No H1 present on page,PREFLIGHT_H1_MISSING,Blocker,v1,Page lacks primary content heading
-Heading Structure,More than one H1 present,PREFLIGHT_H1_MULTIPLE,Critical,v1,Common CMS/template error affecting content hierarchy
-Heading Structure,H1 exists but is empty or whitespace-only,PREFLIGHT_H1_EMPTY,Blocker,v1,Invisible primary heading
-Heading Structure,H1 is hidden or visually suppressed,PREFLIGHT_H1_HIDDEN,Critical,v1,Heading exists technically but not for users
-Meta & Title Quality,Title exceeds maximum recommended length,PREFLIGHT_TITLE_TOO_LONG,High,v1.2,May truncate in SERPs
-Meta & Title Quality,Title below minimum recommended length,PREFLIGHT_TITLE_TOO_SHORT,High,v1.2,Insufficient context for search engines
-Meta & Title Quality,Meta description exceeds maximum length,PREFLIGHT_META_DESC_TOO_LONG,Medium,v1.2,Truncation risk
-Meta & Title Quality,Meta description below minimum length,PREFLIGHT_META_DESC_TOO_SHORT,Medium,v1.2,Low SERP quality
-Meta & Title Quality,Title and H1 are identical,PREFLIGHT_TITLE_H1_MATCH,Medium,v1.2,Missed differentiation opportunity
-Social Metadata,Missing Open Graph title,PREFLIGHT_OG_TITLE_MISSING,High,v1.2,Social previews incomplete
-Social Metadata,Missing Open Graph description,PREFLIGHT_OG_DESC_MISSING,High,v1.2,Social previews incomplete
-Social Metadata,Missing Open Graph image,PREFLIGHT_OG_IMAGE_MISSING,High,v1.2,Default or broken social previews
-Social Metadata,Open Graph image below minimum size,PREFLIGHT_OG_IMAGE_SMALL,Medium,v1.2,Blurry or rejected previews
-Social Metadata,Missing Twitter Card metadata,PREFLIGHT_TWITTER_CARD_MISSING,Medium,v1.2,Poor Twitter/X link previews
-Language & Accessibility,HTML lang attribute missing,PREFLIGHT_LANG_MISSING,High,v1.2,Accessibility and localization issues
-Language & Accessibility,HTML lang value invalid or malformed,PREFLIGHT_LANG_INVALID,Medium,v1.2,Language detection errors
-Language & Accessibility,HTML lang conflicts with hreflang declarations,PREFLIGHT_LANG_CONFLICT,Medium,v1.2,Confusing localization signals
-Mobile & Responsiveness,Viewport meta tag missing,PREFLIGHT_VIEWPORT_MISSING,Critical,v1,Page not optimized for mobile devices
-Structured Data,Invalid or malformed structured data (JSON-LD/Schema.org),PREFLIGHT_SCHEMA_INVALID,High,v1.2,Rich results may fail or be rejected
-Site Resources,Favicon missing or not found,PREFLIGHT_FAVICON_MISSING,Medium,v1.2,Browser tabs show generic icon
-Security & Protocol Hygiene,Page served over HTTP,PREFLIGHT_SECURITY_HTTP,Blocker,v1,Insecure and often deindexed
-Security & Protocol Hygiene,Canonical or OG URLs use HTTP,PREFLIGHT_SECURITY_HTTP_URLS,Blocker,v1,Mixed protocol authority signals
-Security & Protocol Hygiene,Mixed content assets detected,PREFLIGHT_SECURITY_MIXED_CONTENT,Critical,v1,Browser blocking and trust issues
-Security & Protocol Hygiene,Insecure iframe embeds detected,PREFLIGHT_SECURITY_IFRAME,Critical,v1,Potential security and trust risk
-Rendering & Content Presence,No meaningful content present in initial HTML,PREFLIGHT_RENDER_EMPTY,Blocker,v1,Search engines and users see empty page
-Rendering & Content Presence,Primary content requires JavaScript to appear,PREFLIGHT_RENDER_JS_ONLY,Critical,v1,SEO and crawl reliability risk
-Rendering & Content Presence,Critical SEO elements injected post-load,PREFLIGHT_RENDER_POSTLOAD,Critical,v1,Indexing may miss key signals
-Links,Check for links with # only,PREFLIGHT_EMPTY_LINK,Blocker,v1,href tags are empty (have # only)
+Classification/Grouping,Test,Rule Code,Severity,Release,Status,Notes
+Indexing & Crawl Control,Page marked noindex via HTTP headers,PREFLIGHT_INDEX_NOINDEX_HEADER,Blocker,v1,Done,Blocks indexing even if meta tags allow indexing
+Indexing & Crawl Control,Page marked nofollow via meta or HTTP headers,PREFLIGHT_INDEX_NOFOLLOW,Critical,v1,Done,Prevents link equity flow and crawling intent
+Indexing & Crawl Control,Conflicting index directives detected (meta vs headers),PREFLIGHT_INDEX_CONFLICT,Blocker,v1,Done,Creates undefined indexing behavior
+Canonical Intent & Consistency,Canonical tag missing,PREFLIGHT_CANONICAL_MISSING,Blocker,v1,Done,Page may be treated as duplicate or ignored
+Canonical Intent & Consistency,Multiple canonical tags detected,PREFLIGHT_CANONICAL_MULTIPLE,Blocker,v1,Done,Search engines may ignore canonical entirely
+Canonical Intent & Consistency,Canonical points to a different URL than the page,PREFLIGHT_CANONICAL_MISMATCH,Blocker,v1,Done,Page effectively deindexed in favor of canonical target
+Canonical Intent & Consistency,Canonical uses incorrect protocol (HTTP vs HTTPS),PREFLIGHT_CANONICAL_PROTOCOL,Blocker,v1,Done,Introduces duplicate and security issues
+Canonical Intent & Consistency,Canonical points to non-primary hostname,PREFLIGHT_CANONICAL_HOSTNAME,Blocker,v1,Done,Signals wrong authority source
+Canonical Intent & Consistency,Canonical target contains tracking or session parameters,PREFLIGHT_CANONICAL_PARAMS,Critical,v1,Done,Creates unstable canonical signals
+Heading Structure,No H1 present on page,PREFLIGHT_H1_MISSING,Blocker,v1,Done,Page lacks primary content heading
+Heading Structure,More than one H1 present,PREFLIGHT_H1_MULTIPLE,Critical,v1,Done,Common CMS/template error affecting content hierarchy
+Heading Structure,H1 exists but is empty or whitespace-only,PREFLIGHT_H1_EMPTY,Blocker,v1,Done,Invisible primary heading
+Heading Structure,H1 is hidden or visually suppressed,PREFLIGHT_H1_HIDDEN,Critical,v1.1,Deferred,Requires Playwright for rendered DOM analysis
+Meta & Title Quality,Title exceeds maximum recommended length,PREFLIGHT_TITLE_TOO_LONG,High,v1.2,Planned,May truncate in SERPs
+Meta & Title Quality,Title below minimum recommended length,PREFLIGHT_TITLE_TOO_SHORT,High,v1.2,Planned,Insufficient context for search engines
+Meta & Title Quality,Meta description exceeds maximum length,PREFLIGHT_META_DESC_TOO_LONG,Medium,v1.2,Planned,Truncation risk
+Meta & Title Quality,Meta description below minimum length,PREFLIGHT_META_DESC_TOO_SHORT,Medium,v1.2,Planned,Low SERP quality
+Meta & Title Quality,Title and H1 are identical,PREFLIGHT_TITLE_H1_MATCH,Medium,v1.2,Planned,Missed differentiation opportunity
+Social Metadata,Missing Open Graph title,PREFLIGHT_OG_TITLE_MISSING,High,v1.2,Planned,Social previews incomplete
+Social Metadata,Missing Open Graph description,PREFLIGHT_OG_DESC_MISSING,High,v1.2,Planned,Social previews incomplete
+Social Metadata,Missing Open Graph image,PREFLIGHT_OG_IMAGE_MISSING,High,v1.2,Planned,Default or broken social previews
+Social Metadata,Open Graph image below minimum size,PREFLIGHT_OG_IMAGE_SMALL,Medium,v1.2,Planned,Blurry or rejected previews
+Social Metadata,Missing Twitter Card metadata,PREFLIGHT_TWITTER_CARD_MISSING,Medium,v1.2,Planned,Poor Twitter/X link previews
+Language & Accessibility,HTML lang attribute missing,PREFLIGHT_LANG_MISSING,High,v1.2,Planned,Accessibility and localization issues
+Language & Accessibility,HTML lang value invalid or malformed,PREFLIGHT_LANG_INVALID,Medium,v1.2,Planned,Language detection errors
+Language & Accessibility,HTML lang conflicts with hreflang declarations,PREFLIGHT_LANG_CONFLICT,Medium,v1.2,Planned,Confusing localization signals
+Mobile & Responsiveness,Viewport meta tag missing,PREFLIGHT_VIEWPORT_MISSING,Critical,v1,Done,Page not optimized for mobile devices
+Structured Data,Invalid or malformed structured data (JSON-LD/Schema.org),PREFLIGHT_SCHEMA_INVALID,High,v1.2,Planned,Rich results may fail or be rejected
+Site Resources,Favicon missing or not found,PREFLIGHT_FAVICON_MISSING,Medium,v1.2,Planned,Browser tabs show generic icon
+Security & Protocol Hygiene,Page served over HTTP,PREFLIGHT_SECURITY_HTTP,Blocker,v1,Done,Insecure and often deindexed
+Security & Protocol Hygiene,Canonical or OG URLs use HTTP,PREFLIGHT_SECURITY_HTTP_URLS,Blocker,v1,Done,Mixed protocol authority signals
+Security & Protocol Hygiene,Mixed content assets detected,PREFLIGHT_SECURITY_MIXED_CONTENT,Critical,v1,Done,Browser blocking and trust issues
+Security & Protocol Hygiene,Insecure iframe embeds detected,PREFLIGHT_SECURITY_IFRAME,Critical,v1,Done,Potential security and trust risk
+Rendering & Content Presence,No meaningful content present in initial HTML,PREFLIGHT_RENDER_EMPTY,Blocker,v1.1,Deferred,Requires Playwright for rendered DOM analysis
+Rendering & Content Presence,Primary content requires JavaScript to appear,PREFLIGHT_RENDER_JS_ONLY,Critical,v1.1,Deferred,Requires Playwright for rendered DOM analysis
+Rendering & Content Presence,Critical SEO elements injected post-load,PREFLIGHT_RENDER_POSTLOAD,Critical,v1.1,Deferred,Requires Playwright for rendered DOM analysis
+Links,Check for links with # only,PREFLIGHT_EMPTY_LINK,Blocker,v1,Done,href tags are empty (have # only)

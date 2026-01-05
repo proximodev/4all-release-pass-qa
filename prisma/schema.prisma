@@ -257,12 +257,13 @@ model ResultItem {
   urlResultId String         @db.Uuid
   provider    IssueProvider
   code        String
-  name        String         // Human-readable title of the check
+  name        String         // Human-readable title of the check (fallback if no ReleaseRule)
   status      ResultStatus
   severity    IssueSeverity? // Only for FAIL status
   meta        Json?
 
-  urlResult UrlResult @relation(fields: [urlResultId], references: [id], onDelete: Cascade)
+  urlResult   UrlResult    @relation(fields: [urlResultId], references: [id], onDelete: Cascade)
+  releaseRule ReleaseRule? @relation(fields: [code], references: [code])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -272,6 +273,7 @@ model ResultItem {
   @@index([provider])
   @@index([status])
   @@index([severity])
+  @@index([code])
 }
 
 model ScreenshotSet {
@@ -313,4 +315,46 @@ model ManualTestStatus {
   @@index([releaseRunId])
   @@index([projectId, testType])
   @@index([updatedByUserId])
+}
+
+/// Categories for grouping ReleaseRules in the UI
+model ReleaseRuleCategory {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique                // "Heading Structure", "Canonical", etc.
+  description String?                         // Optional description of the category
+  sortOrder   Int      @default(0)            // Display order in UI
+  isActive    Boolean  @default(true)         // Soft enable/disable
+
+  rules       ReleaseRule[]                   // All rules in this category
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sortOrder])
+  @@index([isActive])
+}
+
+/// Taxonomy of all check rules - defines what each result code means
+model ReleaseRule {
+  code        String              @id         // Primary key - e.g., "PREFLIGHT_H1_MISSING"
+  provider    IssueProvider                   // LIGHTHOUSE, LINKINATOR, ReleasePass, etc.
+  categoryId  String              @db.Uuid    // FK to ReleaseRuleCategory
+  name        String                          // Short title: "Missing H1 Heading"
+  description String                          // What it means
+  severity    IssueSeverity                   // Default severity: BLOCKER, CRITICAL, etc.
+  impact      String?                         // Why it matters
+  fix         String?                         // How to fix it
+  docUrl      String?                         // External docs link
+  isActive    Boolean             @default(true)   // Soft enable/disable
+  sortOrder   Int                 @default(0)      // Display order within category
+
+  category    ReleaseRuleCategory @relation(fields: [categoryId], references: [id])
+  resultItems ResultItem[]                    // All result items using this rule
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([provider])
+  @@index([categoryId])
+  @@index([isActive])
 }

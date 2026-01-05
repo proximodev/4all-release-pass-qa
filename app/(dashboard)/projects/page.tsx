@@ -46,8 +46,7 @@ export default function ProjectsPage() {
     project.name.toLowerCase().includes(filter.toLowerCase())
   )
 
-  return (
-    <PageContainer>
+  return (<PageContainer>
       <Tabs tabs={projectTabs} />
       <TabPanel>
       <div className="mb-8">

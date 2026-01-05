@@ -7,3 +7,9 @@ export const projectTabs = [
   { label: 'View', href: '/projects' },
   { label: 'Add New Project', href: '/projects/new' },
 ]
+
+export const settingsTabs = [
+  { label: 'Users', href: '/settings/users' },
+  { label: 'Preflight Rules', href: '/settings/preflight-rules' },
+  { label: 'Preflight Categories', href: '/settings/preflight-categories' },
+]

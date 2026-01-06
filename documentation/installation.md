@@ -1790,9 +1790,14 @@ POLL_INTERVAL_MAX=60000          # 60 seconds
 HEARTBEAT_INTERVAL=30000         # 30 seconds
 STUCK_RUN_TIMEOUT=3600000        # 60 minutes
 
-# Future providers (not needed for Page Preflight)
+# LanguageTool (for Spelling tests)
+# Option 1: Self-hosted (recommended - unlimited requests)
+LANGUAGETOOL_URL=http://localhost:8010/v2
+# Option 2: Cloud API (paid tiers only)
+# LANGUAGETOOL_API_KEY=your-api-key-here
+
+# Future providers
 SE_RANKING_API_KEY=
-LANGUAGETOOL_API_KEY=
 EMAIL_PROVIDER_API_KEY=
 EMAIL_FROM=qa-bot@example.com
 ```
@@ -2047,19 +2052,72 @@ npx playwright install  # Install browser binaries
 
 ---
 
-## Phase 6.5: Spelling Provider (Playwright + LanguageTool)
+## Phase 6.5: Spelling Provider (Cheerio + LanguageTool) ✅ IMPLEMENTED
 
-> **Status**: To be implemented
+This phase implements the Spelling test provider using Cheerio for text extraction and LanguageTool API for grammar/spelling checks.
 
-This phase will implement the Spelling test provider using Playwright for text extraction and LanguageTool API for grammar/spelling checks.
+### Implementation Overview
 
-**Dependencies to add**:
+The spelling provider consists of two files:
+
+1. **`worker/providers/languagetool/client.ts`** - LanguageTool API client
+   - Supports self-hosted instance (LANGUAGETOOL_URL) or cloud API (LANGUAGETOOL_API_KEY)
+   - Auto language detection
+   - Configurable disabled rules/categories
+   - Retry logic with exponential backoff
+
+2. **`worker/providers/spelling/index.ts`** - Spelling provider
+   - Extracts visible text from pages using Cheerio (no Playwright dependency)
+   - Filters out nav, header, footer, scripts, cookie notices
+   - Skips pages with <10 words
+   - Creates ResultItems with severity mapping:
+     - Misspelling → HIGH
+     - Grammar → CRITICAL
+     - Style → MEDIUM
+     - Typographical → LOW
+
+### Configuration
+
+Add to `worker/.env`:
+
 ```bash
-# Playwright already installed in Phase 6.4
-npm install axios  # For HTTP requests to LanguageTool API
+# Option 1: Self-hosted (recommended - unlimited requests)
+LANGUAGETOOL_URL=http://languagetool:8010/v2
+
+# Option 2: Cloud API (paid tiers only)
+LANGUAGETOOL_API_KEY=your-api-key-here
 ```
 
-**Implementation**: See `documentation/mvp-implementation-plan.md` Phase 7.
+### Self-Hosted Setup (Recommended)
+
+Self-hosting LanguageTool gives you unlimited requests with no API costs:
+
+```bash
+# Basic setup (512MB-2GB RAM)
+docker run -d -p 8010:8010 erikvl87/languagetool
+
+# With more memory for better performance
+docker run -d -p 8010:8010 -e Java_Xms=512m -e Java_Xmx=2g erikvl87/languagetool
+```
+
+For Railway deployment, add a LanguageTool service alongside your worker.
+
+### Cloud API Setup (Alternative)
+
+If using the cloud API:
+
+1. Go to [LanguageTool Proofreading API](https://languagetool.org/proofreading-api/)
+2. Choose a paid tier (no free tier for API access)
+3. Get your API key
+4. Set `LANGUAGETOOL_API_KEY` in your environment
+
+### Dependencies
+
+The spelling provider uses existing dependencies:
+- `cheerio` - Already installed for custom-rules
+- No additional npm packages required
+
+**Implementation**: See `worker/providers/languagetool/client.ts` and `worker/providers/spelling/index.ts`
 
 ---
 

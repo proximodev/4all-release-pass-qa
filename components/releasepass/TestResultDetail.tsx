@@ -110,6 +110,35 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
     }
   }, [])
 
+  // Split result items into failed and passed groups
+  const { failedItems, passedItemsByCategory } = useMemo(() => {
+    const failed = resultItems.filter(item => item.status === 'FAIL')
+    const passed = resultItems.filter(item => item.status === 'PASS')
+
+    // Group passed items by category and sort by sortOrder
+    const categoryMap = new Map<string, { name: string; sortOrder: number; items: ResultItem[] }>()
+
+    passed.forEach(item => {
+      const categoryName = item.releaseRule?.category?.name || 'Uncategorized'
+      const categorySortOrder = item.releaseRule?.category?.sortOrder ?? 999
+
+      if (!categoryMap.has(categoryName)) {
+        categoryMap.set(categoryName, { name: categoryName, sortOrder: categorySortOrder, items: [] })
+      }
+      categoryMap.get(categoryName)!.items.push(item)
+    })
+
+    // Sort categories by sortOrder, then sort items within each category by rule sortOrder
+    const sortedCategories = Array.from(categoryMap.values())
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map(cat => ({
+        ...cat,
+        items: cat.items.sort((a, b) => (a.releaseRule?.sortOrder ?? 999) - (b.releaseRule?.sortOrder ?? 999))
+      }))
+
+    return { failedItems: failed, passedItemsByCategory: sortedCategories }
+  }, [resultItems])
+
   // Get the test run and URL result data (resultItems come from separate state)
   const { testRun, urlResult, urlResults, summary } = useMemo(() => {
     if (!releaseRun) {
@@ -261,7 +290,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
                   || urlResults.find(ur => ur.url === selectedUrl)
                 if (match) handleUrlChange(match.id)
               }}
-              className="px-3 py-2 border border-medium-gray rounded text-sm bg-white min-w-[200px]"
+              className="px-3 py-2 border border-dark-gray/40 rounded text-sm bg-white min-w-[200px]"
             >
               {/* Get unique URLs */}
               {[...new Set(urlResults.map(ur => ur.url))].map((url) => (
@@ -275,7 +304,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
             <select
               value={testType}
               onChange={(e) => handleTestTypeChange(e.target.value)}
-              className="px-3 py-2 border border-medium-gray rounded text-sm bg-white"
+              className="px-3 py-2 border border-dark-gray/40 rounded text-sm bg-white"
             >
               {availableTestTypes.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -286,7 +315,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
           </div>
         </div>
 
-        <hr className="border-medium-gray mb-6" />
+        <hr className="border-dark-gray/40 mb-8" />
 
         {/* Summary Section */}
         {summary && urlResult ? (
@@ -344,121 +373,167 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
               </div>
             </div>
 
-            <hr className="border-medium-gray mb-6" />
+            <hr className="border-dark-gray/40 mb-8" />
 
-            {/* Details Table */}
-            <div>
-              <h3>Details</h3>
+            {/* Failed Section */}
+            {loadingItems ? (
+              <p className="text-black/60">Loading details...</p>
+            ) : resultItems.length === 0 ? (
+              <p>No results available for this URL.</p>
+            ) : (
+              <>
+                {failedItems.length > 0 && (
+                  <div className="mb-6">
+                    <h3>Failed Tests</h3>
+                    <div className="overflow-hidden">
+                      <table className="w-full text-m">
+                        <tbody>
+                          {failedItems.map((item, index) => {
+                            const rule = item.releaseRule
+                            const isExpanded = expandedItemId === item.id
+                            const hasDetails = rule && (rule.fix || rule.impact || rule.docUrl)
+                            const testName = rule
+                              ? `${rule.name}${rule.description ? ` - ${rule.description}` : ''}`
+                              : item.name
+                            const categoryName = rule?.category?.name || '—'
+                            const isLastItem = index === failedItems.length - 1
 
-              {loadingItems ? (
-                <p className="text-black/60">Loading details...</p>
-              ) : resultItems.length === 0 ? (
-                <p>No results available for this URL.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-m">
-                    <thead>
-                      <tr className="border-b border-medium-gray">
-                        <th className="text-left py-2 w-8"></th>
-                        <th className="text-left py-2">Provider</th>
-                        <th className="text-left py-2">Category</th>
-                        <th className="text-left py-2">Name</th>
-                        <th className="text-left py-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {resultItems.map((item) => {
-                        const rule = item.releaseRule
-                        const isExpanded = expandedItemId === item.id
-                        const hasDetails = rule && (rule.description || rule.fix)
-
-                        return (
-                          <>
-                            <tr
-                              key={item.id}
-                              className={`border-b border-medium-gray/50 ${hasDetails ? 'cursor-pointer hover:bg-black/5' : ''}`}
-                              onClick={() => hasDetails && setExpandedItemId(isExpanded ? null : item.id)}
-                            >
-                              <td className="py-2 text-center">
-                                {hasDetails && (
-                                  <span className="text-black/40">
-                                    {isExpanded ? '▼' : '▶'}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-2">
-                                {item.provider === 'LIGHTHOUSE' ? 'Lighthouse' :
-                                 item.provider === 'LINKINATOR' ? 'Linkinator' :
-                                 item.provider === 'LANGUAGETOOL' ? 'LanguageTool' :
-                                 item.provider === 'ReleasePass' ? 'ReleasePass' :
-                                 item.provider}
-                              </td>
-                              <td className="py-2 text-black/60">
-                                {rule?.category?.name || '—'}
-                              </td>
-                              <td className="py-2">
-                                {rule?.name || item.name}
-                              </td>
-                              <td className="py-2">
-                                <span className={
-                                  item.status === 'PASS'
-                                    ? 'text-brand-cyan'
-                                    : item.status === 'FAIL'
-                                      ? 'text-red'
-                                      : 'text-black/60'
-                                }>
-                                  {item.status === 'PASS' ? 'Pass' :
-                                   item.status === 'FAIL' ? 'Fail' :
-                                   item.status}
-                                </span>
-                              </td>
-                            </tr>
-                            {isExpanded && rule && (
-                              <tr key={`${item.id}-details`} className="bg-black/5 border-b border-medium-gray/50">
-                                <td></td>
-                                <td colSpan={4} className="py-3 px-4">
-                                  {rule.description && (
-                                    <div className="mb-2">
-                                      <span className="font-medium">Description: </span>
-                                      <span className="text-black/80">{rule.description}</span>
-                                    </div>
-                                  )}
-                                  {rule.fix && (
-                                    <div className="mb-2">
-                                      <span className="font-medium">How to Fix: </span>
-                                      <span className="text-black/80">{rule.fix}</span>
-                                    </div>
-                                  )}
-                                  {rule.impact && (
-                                    <div className="mb-2">
-                                      <span className="font-medium">Impact: </span>
-                                      <span className="text-black/80">{rule.impact}</span>
-                                    </div>
-                                  )}
-                                  {rule.docUrl && (
-                                    <div>
-                                      <a
-                                        href={rule.docUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-brand-cyan underline"
-                                        onClick={(e) => e.stopPropagation()}
+                            return (
+                              <>
+                                <tr
+                                  key={item.id}
+                                  className={`${isLastItem && !isExpanded ? '' : 'border-b border-dark-gray/40'} ${hasDetails ? 'cursor-pointer' : ''}`}
+                                  onClick={() => hasDetails && setExpandedItemId(isExpanded ? null : item.id)}
+                                >
+                                  <td className="py-2">{categoryName}</td>
+                                  <td className="py-2">{testName}</td>
+                                  <td className="py-2 text-right">
+                                    {hasDetails && (
+                                      <svg
+                                        className={`w-4 h-4 inline-block transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
                                       >
-                                        Learn more →
-                                      </a>
-                                    </div>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+                                      </svg>
+                                    )}
+                                  </td>
+                                </tr>
+                                {isExpanded && rule && (
+                                  <tr key={`${item.id}-details`} className="bg-black/5">
+                                    <td colSpan={3} className="py-3 px-4">
+                                      {rule.fix && (
+                                        <div className="mb-2">
+                                          <span className="font-medium">How to Fix: </span>
+                                          <span className="text-black/80">{rule.fix}</span>
+                                        </div>
+                                      )}
+                                      {rule.impact && (
+                                        <div className="mb-2">
+                                          <span className="font-medium">Impact: </span>
+                                          <span className="text-black/80">{rule.impact}</span>
+                                        </div>
+                                      )}
+                                      {rule.docUrl && (
+                                        <div>
+                                          <a
+                                            href={rule.docUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-brand-cyan underline"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            Learn more →
+                                          </a>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )}
+                              </>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Passed Section */}
+                {passedItemsByCategory.length > 0 && (
+                  <div>
+                    <h3 className="mb-3">Passed Tests</h3>
+                    {passedItemsByCategory.map((category) => (
+                      <div key={category.name} className="mb-4">
+                        <h4 className="mb-2">{category.name}</h4>
+                        <div className="space-y-0">
+                          {category.items.map((item, index) => {
+                            const rule = item.releaseRule
+                            const isExpanded = expandedItemId === item.id
+                            const hasDetails = rule && (rule.fix || rule.impact || rule.docUrl)
+                            const testName = rule
+                              ? `${rule.name}${rule.description ? ` - ${rule.description}` : ''}`
+                              : item.name
+                            const isLastItem = index === category.items.length - 1
+
+                            return (
+                              <div key={item.id}>
+                                <div
+                                  className={`py-2 ${isLastItem && !isExpanded ? '' : 'border-b border-dark-gray/40'} flex items-center justify-between ${hasDetails ? 'cursor-pointer' : ''}`}
+                                  onClick={() => hasDetails && setExpandedItemId(isExpanded ? null : item.id)}
+                                >
+                                  <span>{testName}</span>
+                                  {hasDetails && (
+                                    <svg
+                                      className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+                                    </svg>
                                   )}
-                                </td>
-                              </tr>
-                            )}
-                          </>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                                </div>
+                                {isExpanded && rule && (
+                                  <div className="bg-black/5 py-3 px-4">
+                                    {rule.fix && (
+                                      <div className="mb-2">
+                                        <span className="font-medium">How to Fix: </span>
+                                        <span className="text-black/80">{rule.fix}</span>
+                                      </div>
+                                    )}
+                                    {rule.impact && (
+                                      <div className="mb-2">
+                                        <span className="font-medium">Impact: </span>
+                                        <span className="text-black/80">{rule.impact}</span>
+                                      </div>
+                                    )}
+                                    {rule.docUrl && (
+                                      <div>
+                                        <a
+                                          href={rule.docUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-brand-cyan underline"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          Learn more →
+                                        </a>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </>
         ) : (
           <div className="text-black/60 text-sm">
@@ -467,10 +542,10 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
         )}
 
         {/* Bottom Actions */}
-        <div className="flex gap-3 mt-8 pt-6 border-t border-medium-gray">
+        <div className="flex gap-3 mt-8 pt-6o">
           <Link
             href={`/releasepass/preflight?project=${releaseRun.project.id}&test=${releaseRun.id}`}
-            className="px-4 py-2 border border-medium-gray rounded text-sm bg-white hover:bg-white/80"
+            className="px-4 py-2 border border-dark-gray/40 rounded text-sm bg-white hover:bg-white/80"
           >
             &larr; Back to All Results
           </Link>

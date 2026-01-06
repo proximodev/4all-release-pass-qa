@@ -182,8 +182,8 @@ export default function PasteCleanerPage() {
 
           {/* Options */}
           <Card>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium">Preserve Tags and Attributes</h3>
+            <div className="flex items-center justify-between mb-2">
+              <strong>Preserve Tags and Attributes</strong>
               <div className="px-3 py-1 bg-gray-100 rounded-full text-sm text-gray-600">
                 Input: {inputChars} | Output: {outputChars} | Links: {linkCount}
               </div>
@@ -228,8 +228,8 @@ export default function PasteCleanerPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Input Pane */}
             <Card>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium">Paste Here (Rich Text)</h3>
+              <div className="flex items-center justify-between mb-2">
+                <div><strong>Paste Here (Rich Text)</strong></div>
                 <Button variant="secondary" onClick={handleClear}>Clear</Button>
               </div>
               <div className="relative">
@@ -239,12 +239,14 @@ export default function PasteCleanerPage() {
                   onPaste={handlePaste}
                   onInput={handleInput}
                   spellCheck={false}
-                  className={`min-h-[260px] p-3 bg-white border border-medium-gray rounded outline-none whitespace-pre-wrap ${isEmpty ? 'text-gray-400' : ''}`}
-                  data-placeholder="Paste formatted content from Google Docs/Word/Web here..."
+                  className="min-h-[260px] p-3 bg-white border border-medium-gray rounded outline-none whitespace-pre-wrap"
                   suppressContentEditableWarning
-                >
-                  {isEmpty && <span className="pointer-events-none">Paste formatted content from Google Docs/Word/Web here...</span>}
-                </div>
+                />
+                {isEmpty && (
+                  <div className="absolute top-3 left-3 text-gray-400 pointer-events-none">
+                    Paste formatted content from Google Docs/Word/Web here...
+                  </div>
+                )}
                 <div className="absolute bottom-2 left-3 text-xs text-gray-500">
                   {inputChars} chars
                 </div>
@@ -253,24 +255,24 @@ export default function PasteCleanerPage() {
 
             {/* Output Pane */}
             <Card>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium">Output (Clean HTML)</h3>
+              <div className="flex items-center justify-between mb-2">
+                <div><strong>Output (Clean HTML)</strong></div>
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-1 cursor-pointer text-sm">
                     <input
-                      type="radio"
-                      name="viewMode"
-                      checked={viewMode === 'html'}
-                      onChange={() => setViewMode('html')}
+                        type="radio"
+                        name="viewMode"
+                        checked={viewMode === 'html'}
+                        onChange={() => setViewMode('html')}
                     />
                     HTML
                   </label>
                   <label className="flex items-center gap-1 cursor-pointer text-sm">
                     <input
-                      type="radio"
-                      name="viewMode"
-                      checked={viewMode === 'preview'}
-                      onChange={() => setViewMode('preview')}
+                        type="radio"
+                        name="viewMode"
+                        checked={viewMode === 'preview'}
+                        onChange={() => setViewMode('preview')}
                     />
                     Preview
                   </label>
@@ -279,7 +281,7 @@ export default function PasteCleanerPage() {
                 </div>
               </div>
               <div className="relative">
-                {viewMode === 'html' ? (
+              {viewMode === 'html' ? (
                   <textarea
                     value={output}
                     readOnly
@@ -300,9 +302,9 @@ export default function PasteCleanerPage() {
           </div>
 
           {/* Debug Panel */}
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium">Debug</h3>
+          <Card className="hidden">
+            <div className="flex items-center justify-between mb-1">
+              <strong>Debug</strong>
               <div className="flex items-center gap-4">
                 <label className="flex items-center gap-2 cursor-pointer text-sm">
                   <input

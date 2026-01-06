@@ -34,7 +34,9 @@
       "Bash(git -C \"C:/Users/doug/WebstormProjects/4all-release-pass-qa\" commit -m \"$\\(cat <<''EOF''\nAdd Referer header to PageSpeed API requests\n\nRequired for API keys with HTTP referrer restrictions.\nUser must whitelist https://releasepass.app/* in Google Cloud Console.\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git fetch:*)",
       "Bash(xargs cat:*)",
-      "Bash(npx tsx prisma/seed-release-rules.ts)"
+      "Bash(npx tsx prisma/seed-release-rules.ts)",
+      "WebSearch",
+      "WebFetch(domain:languagetool.org)"
     ]
   }
 }

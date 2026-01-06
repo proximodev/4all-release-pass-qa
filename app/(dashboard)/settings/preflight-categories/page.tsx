@@ -77,12 +77,12 @@ export default function PreflightCategoriesPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-medium-gray text-left">
-                    <th className="pb-3 font-medium">Name</th>
-                    <th className="pb-3 font-medium">Description</th>
-                    <th className="pb-3 font-medium">Rules</th>
-                    <th className="pb-3 font-medium">Sort Order</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 font-medium text-right">Actions</th>
+                    <th className="pb-3">Name</th>
+                    <th className="pb-3">Description</th>
+                    <th className="pb-3">Rules</th>
+                    <th className="pb-3">Sort Order</th>
+                    <th className="pb-3">Status</th>
+                    <th className="pb-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -82,13 +82,13 @@ export default function PreflightRulesPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-medium-gray text-left">
-                    <th className="pb-3 font-medium">Code</th>
-                    <th className="pb-3 font-medium">Provider</th>
-                    <th className="pb-3 font-medium">Category</th>
-                    <th className="pb-3 font-medium">Name</th>
-                    <th className="pb-3 font-medium">Severity</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 font-medium text-right">Actions</th>
+                    <th className="pb-3">Code</th>
+                    <th className="pb-3">Provider</th>
+                    <th className="pb-3">Category</th>
+                    <th className="pb-3">Name</th>
+                    <th className="pb-3">Severity</th>
+                    <th className="pb-3">Status</th>
+                    <th className="pb-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>

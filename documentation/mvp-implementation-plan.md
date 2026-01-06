@@ -40,13 +40,13 @@ Each test provider needs a detailed integration specification:
 - Storage upload flow to Supabase Storage
 - Naming convention for storage keys
 
-#### `Documentation/providers/languagetool-integration.md`
-- API authentication
-- Text extraction strategy from rendered HTML (via Playwright)
-- Batching large text blocks
-- Filtering navigation/boilerplate content
-- Mapping LanguageTool issues to our `Issue` schema
-- Example API payloads
+#### `Documentation/providers/languagetool-integration.md` ✅ IMPLEMENTED
+- API configuration: Self-hosted (LANGUAGETOOL_URL) or Cloud API (LANGUAGETOOL_API_KEY)
+- Text extraction strategy from HTML (via Cheerio - no Playwright dependency)
+- Filters navigation/boilerplate content (nav, header, footer, cookie notices)
+- Maps LanguageTool issues to ResultItem records with severity levels
+- Supports auto language detection
+- See `worker/providers/languagetool/client.ts` and `worker/providers/spelling/index.ts`
 
 ---
 
@@ -496,15 +496,29 @@ Set up worker hosting platform (Railway or Fly.io) to validate deployment before
 - [ ] Update parent Release Run status after completion (requires manual PASS to reach READY)
 - [ ] Implement screenshot viewer UI component
 
-#### Step 7.8: LanguageTool Integration (Page-Level - Priority 6)
-- [ ] Write `Documentation/providers/languagetool-integration.md`
-- [ ] Create `worker/providers/languagetool.ts`
-- [ ] Use Playwright to render page and extract text
-- [ ] Filter out navigation/boilerplate (heuristic-based)
-- [ ] Batch large text blocks for API
-- [ ] Parse issues and store in `Issue` table with impact levels (typically WARNING or INFO)
+#### Step 7.8: LanguageTool Integration (Page-Level - Priority 6) ✅ IMPLEMENTED
+- [x] Create `worker/providers/languagetool/client.ts` - API client supporting self-hosted and cloud
+- [x] Create `worker/providers/spelling/index.ts` - Spelling provider with text extraction
+- [x] Text extraction via Cheerio (no Playwright dependency needed)
+- [x] Filters navigation, header, footer, cookie notices, hidden elements
+- [x] Creates ResultItems with severity mapping (misspelling=HIGH, grammar=CRITICAL, style=MEDIUM)
+- [x] Integrated into `worker/jobs/process.ts`
 - [ ] Update parent Release Run status after completion (requires manual PASS to reach READY)
 - [ ] Test with various page types
+
+**Configuration:**
+```bash
+# Self-hosted (recommended - unlimited requests)
+LANGUAGETOOL_URL=http://languagetool:8010/v2
+
+# OR Cloud API (paid tiers)
+LANGUAGETOOL_API_KEY=your-api-key
+```
+
+**Self-hosted Docker:**
+```bash
+docker run -d -p 8010:8010 erikvl87/languagetool
+```
 
 ---
 

@@ -86,7 +86,7 @@ Tests are organized into two tabs under **ReleasePass** in the navigation:
 - **Baseline** (PAGE_PREFLIGHT): Lighthouse SEO checks + Custom Rules + Linkinator
 - **Performance**: User-selectable URLs (custom list OR sitemap with 20-URL limit in MVP)
 - **Browser** (SCREENSHOTS): Custom URL list only (4 fixed viewports: Desktop Chrome/Safari 1440px, Tablet iOS Safari 768px, Mobile iOS Safari 375px)
-- **Spelling**: Custom URL list only (Playwright extracts text from rendered pages)
+- **Spelling**: Custom URL list only (Cheerio extracts visible text from HTML)
 
 **Site Audit Tab - Site-Level Tests (NOT part of Release Runs):**
 - **Site Audit**: Full sitemap crawl (max 500 pages, same subdomain only) via SE Ranking API exclusively
@@ -240,7 +240,11 @@ SUPABASE_SERVICE_ROLE_KEY=...
 SUPABASE_URL=...
 PAGE_SPEED_API_KEY=...
 SE_RANKING_API_KEY=...
-LANGUAGETOOL_API_KEY=...
+
+# LanguageTool - choose one:
+LANGUAGETOOL_URL=http://localhost:8010/v2  # Self-hosted (recommended)
+# LANGUAGETOOL_API_KEY=...                 # Cloud API (paid only)
+
 LAMBDA_TEST_API_KEY=...
 EMAIL_PROVIDER_API_KEY=...
 EMAIL_FROM=qa-bot@example.com
@@ -284,8 +288,12 @@ Page Preflight combines three components for launch-critical page validation:
 - **Storage**: Supabase Storage bucket
 
 ### Spelling/Grammar (Page-Level)
-- **Provider**: LanguageTool API
-- **Scope**: Spelling and contextual grammar issues in rendered text
+- **Provider**: LanguageTool API (self-hosted or cloud)
+- **Text Extraction**: Cheerio (HTML parsing, no Playwright dependency)
+- **Scope**: Spelling and contextual grammar issues in visible text content
+- **Filters**: Excludes nav, header, footer, scripts, cookie notices
+- **Configuration**: `LANGUAGETOOL_URL` for self-hosted, `LANGUAGETOOL_API_KEY` for cloud
+- **Implementation**: `worker/providers/languagetool/client.ts`, `worker/providers/spelling/index.ts`
 - **Documentation**: https://languagetool.org/http-api/
 
 ## Worker Atomic Job Locking

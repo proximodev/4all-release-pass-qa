@@ -4,6 +4,7 @@ import { completeTestRun, failTestRun } from './claim';
 import { processPerformance } from '../providers/pagespeed';
 import { processPagePreflight } from '../providers/preflight';
 import { processSiteAudit } from '../providers/seranking';
+import { processSpelling } from '../providers/spelling';
 
 // Type for TestRun with relations (from claimNextQueuedRun)
 type TestRunWithRelations = TestRun & {
@@ -41,7 +42,7 @@ export async function processTestRun(testRun: TestRunWithRelations): Promise<voi
 
       case TestType.SPELLING:
         await processSpelling(testRun);
-        // Spelling doesn't have a numeric score
+        // Spelling results are for manual review, no numeric score
         break;
 
       case TestType.SITE_AUDIT:
@@ -71,9 +72,11 @@ export async function processTestRun(testRun: TestRunWithRelations): Promise<voi
 // Provider Stubs (to be implemented)
 // ============================================================================
 
-// Note: processPerformance is imported from '../providers/pagespeed'
-// Note: processPagePreflight is imported from '../providers/preflight'
-// Note: processSiteAudit is imported from '../providers/seranking'
+// Implemented providers are imported at the top:
+// - processPerformance from '../providers/pagespeed'
+// - processPagePreflight from '../providers/preflight'
+// - processSiteAudit from '../providers/seranking'
+// - processSpelling from '../providers/spelling'
 
 async function processScreenshots(testRun: TestRunWithRelations): Promise<void> {
   console.log(`[SCREENSHOTS] Processing ${testRun.id}`);
@@ -84,11 +87,3 @@ async function processScreenshots(testRun: TestRunWithRelations): Promise<void> 
   throw new Error('SCREENSHOTS provider not yet implemented');
 }
 
-async function processSpelling(testRun: TestRunWithRelations): Promise<void> {
-  console.log(`[SPELLING] Processing ${testRun.id}`);
-  // TODO: Implement
-  // - Extract text via Playwright
-  // - Check via LanguageTool API
-  // - Store results in Issue table
-  throw new Error('SPELLING provider not yet implemented');
-}

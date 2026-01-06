@@ -17,7 +17,7 @@ import type { CheerioAPI } from 'cheerio';
 import { prisma } from '../../lib/prisma';
 import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { fetchWithTimeout } from '../../lib/fetch';
-import { checkSpelling, isConfigured, getConfigInfo, SpellingMatch } from '../languagetool/client';
+import { checkSpelling, isConfigured, getConfigInfo, SpellingMatch } from './languagetool-client';
 
 interface TestRunWithRelations {
   id: string;
@@ -101,7 +101,9 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<vo
       );
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : '';
       console.error(`[SPELLING] Failed to check ${url}:`, errorMsg);
+      console.error(`[SPELLING] Stack trace:`, errorStack);
 
       // Create an error result
       allResults.push({
@@ -196,6 +198,8 @@ function getUrlsToTest(testRun: TestRunWithRelations): string[] {
  * Check spelling for a single URL
  */
 async function checkUrlSpelling(url: string): Promise<UrlSpellingResult> {
+  console.log(`[SPELLING] Fetching URL: ${url}`);
+
   // Fetch the page
   const response = await fetchWithTimeout(url, {
     timeoutMs: 30000,
@@ -205,16 +209,23 @@ async function checkUrlSpelling(url: string): Promise<UrlSpellingResult> {
     },
   });
 
+  console.log(`[SPELLING] Fetch response: ${response.status} ${response.statusText}`);
+
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
   }
 
   const html = await response.text();
+  console.log(`[SPELLING] HTML length: ${html.length} chars`);
+
   const $ = cheerio.load(html);
 
   // Extract visible text
   const text = extractVisibleText($);
   const wordCount = countWords(text);
+
+  console.log(`[SPELLING] Extracted text: ${wordCount} words, ${text.length} chars`);
+  console.log(`[SPELLING] Text preview: "${text.substring(0, 200)}..."`);
 
   // Skip if no meaningful text content
   if (wordCount < 10) {

@@ -1472,8 +1472,24 @@ npx prisma migrate deploy
 
 Setting up your worker hosting platform early ensures the deployment works before implementing complex provider logic.
 
-**Recommended Platform**: Railway (generous free tier, simple setup)
-**Alternative**: Fly.io (more scalable, slightly more complex)
+### Platform Comparison
+
+| Feature | Railway | Fly.io |
+|---------|---------|--------|
+| **Ease of setup** | Easier (GitHub integration) | Medium (CLI-based) |
+| **Base fee** | $5/month (Hobby) | $0 (pay-as-you-go) |
+| **1GB RAM cost** | ~$10/month | ~$5-6/month |
+| **2GB RAM cost** | ~$20/month | ~$10/month |
+| **Free tier** | 0.5GB RAM | None for new orgs |
+| **Best for** | Quick start, simplicity | Cost optimization |
+
+**Cost Example (Worker + LanguageTool):**
+- Railway: ~$15-25/month
+- Fly.io: ~$8-15/month (40-50% savings)
+
+Choose based on your priorities:
+- **Railway** if you want the simplest setup and don't mind paying a bit more
+- **Fly.io** if you want to minimize costs and are comfortable with CLI tools
 
 ### Option A: Railway (Recommended)
 
@@ -1626,16 +1642,29 @@ Commit and push to test. Check Railway logs for successful database connection.
 
 ---
 
-### Option B: Fly.io (Alternative)
+### Option B: Fly.io (Cost-Effective Alternative)
+
+Fly.io is ~40-50% cheaper than Railway for running the worker and LanguageTool. Setup requires CLI tools but is straightforward.
+
+#### Prerequisites
+
+- A [Fly.io account](https://fly.io/app/sign-up) (credit card required, but no charges until you exceed free allowances)
 
 #### Step 1: Install Fly CLI
 
+**macOS/Linux:**
 ```bash
-# macOS/Linux
 curl -L https://fly.io/install.sh | sh
+```
 
-# Windows (PowerShell)
+**Windows (PowerShell as Administrator):**
+```powershell
 iwr https://fly.io/install.ps1 -useb | iex
+```
+
+**Verify installation:**
+```bash
+fly version
 ```
 
 #### Step 2: Login to Fly.io
@@ -1644,29 +1673,49 @@ iwr https://fly.io/install.ps1 -useb | iex
 fly auth login
 ```
 
-#### Step 3: Create Fly.io App
+This opens a browser window for authentication.
 
-```bash
-cd worker
-fly launch
+#### Step 3: Create Worker Dockerfile
+
+Fly.io requires a Dockerfile. Create `worker/Dockerfile`:
+
+```dockerfile
+FROM node:20-slim
+
+# Install OpenSSL for Prisma
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy source code
+COPY . .
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Build TypeScript
+RUN npm run build
+
+# Run the worker
+CMD ["node", "dist/index.js"]
 ```
 
-When prompted:
-- App name: `releasepass-worker-[your-name]`
-- Region: Choose closest to your database
-- PostgreSQL: **No** (we're using Supabase)
-- Redis: **No**
+#### Step 4: Create fly.toml Configuration
 
-#### Step 4: Configure fly.toml
-
-Edit `worker/fly.toml`:
+Create `worker/fly.toml`:
 
 ```toml
 app = "releasepass-worker"
-primary_region = "iad"
+primary_region = "iad"  # Change to region closest to your Supabase database
 
 [build]
-  builder = "heroku/buildpacks:20"
+  dockerfile = "Dockerfile"
 
 [env]
   NODE_ENV = "production"
@@ -1675,32 +1724,186 @@ primary_region = "iad"
   HEARTBEAT_INTERVAL = "30000"
   STUCK_RUN_TIMEOUT = "3600000"
 
-[[services]]
-  internal_port = 8080
-  protocol = "tcp"
+# Worker is a background process, not a web server
+# No HTTP services needed
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
 ```
 
-#### Step 5: Set Secrets
+**Region codes** (choose closest to your Supabase database):
+- `iad` - Virginia, USA (default)
+- `sjc` - San Jose, USA
+- `lax` - Los Angeles, USA
+- `ord` - Chicago, USA
+- `lhr` - London, UK
+- `fra` - Frankfurt, Germany
+- `syd` - Sydney, Australia
+
+#### Step 5: Initialize Fly App
 
 ```bash
-fly secrets set DATABASE_URL="postgresql://postgres:[PASSWORD]@db.your-project-id.supabase.co:5432/postgres"
-fly secrets set SUPABASE_URL="https://your-project-id.supabase.co"
-fly secrets set SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+cd worker
+
+# Create the app (don't deploy yet)
+fly launch --no-deploy
 ```
 
-#### Step 6: Deploy
+When prompted:
+- **App name**: `releasepass-worker` (or your preferred name)
+- **Organization**: Select your org
+- **Region**: Choose closest to your database
+- **PostgreSQL**: **No** (we use Supabase)
+- **Redis**: **No**
+
+#### Step 6: Set Environment Secrets
+
+```bash
+# Database connection
+fly secrets set DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.your-project-id.supabase.co:5432/postgres"
+
+# Supabase
+fly secrets set SUPABASE_URL="https://your-project-id.supabase.co"
+fly secrets set SUPABASE_SERVICE_ROLE_KEY="your-service-role-key-here"
+
+# PageSpeed API
+fly secrets set PAGE_SPEED_API_KEY="your-google-api-key"
+
+# LanguageTool (if using cloud API)
+# fly secrets set LANGUAGETOOL_API_KEY="your-languagetool-key"
+```
+
+**Note:** For LanguageTool, we recommend deploying a self-hosted instance on Fly.io (see Step 9 below).
+
+#### Step 7: Deploy Worker
 
 ```bash
 fly deploy
 ```
 
-#### Step 7: View Logs
+First deployment takes 2-3 minutes. Subsequent deployments are faster.
+
+#### Step 8: Verify Deployment
 
 ```bash
+# View logs
 fly logs
+
+# Check app status
+fly status
 ```
 
-You should see worker startup messages and heartbeats.
+You should see:
+```
+Worker starting...
+Environment check:
+- DATABASE_URL: Set
+✅ Database connected!
+```
+
+#### Step 9: Deploy LanguageTool on Fly.io (Recommended)
+
+Deploy LanguageTool as a separate Fly app for unlimited spelling checks:
+
+**Step 9a: Create LanguageTool app**
+```bash
+# From project root (not worker directory)
+mkdir -p fly-languagetool
+cd fly-languagetool
+```
+
+**Step 9b: Create fly.toml for LanguageTool**
+
+Create `fly-languagetool/fly.toml`:
+
+```toml
+app = "releasepass-languagetool"
+primary_region = "iad"  # Same region as worker
+
+[build]
+  image = "erikvl87/languagetool"
+
+[env]
+  Java_Xms = "256m"
+  Java_Xmx = "1g"
+
+[http_service]
+  internal_port = 8010
+  force_https = false
+  auto_stop_machines = false  # Keep running 24/7
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory = "1gb"  # 1GB RAM for LanguageTool
+  cpu_kind = "shared"
+  cpus = 1
+```
+
+**Step 9c: Launch LanguageTool**
+```bash
+fly launch --no-deploy
+fly deploy
+```
+
+**Step 9d: Get internal URL**
+```bash
+fly status
+```
+
+Note the internal address (e.g., `releasepass-languagetool.internal`).
+
+**Step 9e: Configure worker to use LanguageTool**
+```bash
+cd ../worker
+fly secrets set LANGUAGETOOL_URL="http://releasepass-languagetool.internal:8010/v2"
+```
+
+**Step 9f: Redeploy worker**
+```bash
+fly deploy
+```
+
+#### Step 10: Useful Fly.io Commands
+
+```bash
+# View logs in real-time
+fly logs -a releasepass-worker
+
+# SSH into the container (for debugging)
+fly ssh console -a releasepass-worker
+
+# Check resource usage
+fly scale show -a releasepass-worker
+
+# Restart the app
+fly apps restart releasepass-worker
+
+# View all your apps
+fly apps list
+
+# Check costs
+fly billing
+```
+
+#### Cost Monitoring
+
+Fly.io charges per-second for running machines. Monitor costs:
+
+```bash
+# View current billing
+fly billing
+
+# View app-specific usage
+fly scale show -a releasepass-worker
+fly scale show -a releasepass-languagetool
+```
+
+**Expected monthly costs:**
+- Worker (512MB): ~$3-4/month
+- LanguageTool (1GB): ~$5-6/month
+- **Total: ~$8-10/month**
 
 ---
 
@@ -2090,17 +2293,149 @@ LANGUAGETOOL_API_KEY=your-api-key-here
 
 ### Self-Hosted Setup (Recommended)
 
-Self-hosting LanguageTool gives you unlimited requests with no API costs:
+Self-hosting LanguageTool gives you unlimited requests with no API costs.
+
+#### Prerequisites
+
+- **Docker** installed and running
+  - Windows: [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
+  - macOS: [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/)
+  - Linux: [Docker Engine](https://docs.docker.com/engine/install/)
+
+#### Option A: Local Development
+
+Run LanguageTool on your local machine for development:
 
 ```bash
-# Basic setup (512MB-2GB RAM)
-docker run -d -p 8010:8010 erikvl87/languagetool
+# Step 1: Verify Docker is running
+docker --version
 
-# With more memory for better performance
-docker run -d -p 8010:8010 -e Java_Xms=512m -e Java_Xmx=2g erikvl87/languagetool
+# Step 2: Pull and run LanguageTool container
+docker run -d --name languagetool -p 8010:8010 erikvl87/languagetool
+
+# Step 3: Wait ~30 seconds for startup, then verify it's running
+curl.exe http://localhost:8010/v2/check -d "language=en-US" -d "text=Hello wrold"
 ```
 
-For Railway deployment, add a LanguageTool service alongside your worker.
+**What this does:**
+- `-d` runs the container in the background (detached)
+- `--name languagetool` names the container for easy management
+- `-p 8010:8010` maps port 8010 on your machine to port 8010 in the container
+- The container uses ~512MB-1GB RAM by default
+
+**Managing the container:**
+```bash
+# Stop the container
+docker stop languagetool
+
+# Start it again
+docker start languagetool
+
+# View logs
+docker logs languagetool
+
+# Remove container (to recreate with different settings)
+docker rm languagetool
+```
+
+**Worker configuration for local development:**
+```bash
+# In worker/.env
+LANGUAGETOOL_URL=http://localhost:8010/v2
+```
+
+#### Option B: Production (Fly.io) - Recommended
+
+Fly.io is the most cost-effective option for production. See [Phase 5, Option B, Step 9](#step-9-deploy-languagetool-on-flyio-recommended) for complete instructions.
+
+**Quick summary:**
+```bash
+# Create directory and fly.toml
+mkdir -p fly-languagetool && cd fly-languagetool
+
+# Create fly.toml with erikvl87/languagetool image
+# See Phase 5 for full configuration
+
+# Deploy
+fly launch --no-deploy
+fly deploy
+
+# Configure worker
+fly secrets set LANGUAGETOOL_URL="http://releasepass-languagetool.internal:8010/v2" -a releasepass-worker
+```
+
+**Cost:** ~$5-6/month for 1GB RAM
+
+#### Option C: Production (Railway)
+
+For production deployment on Railway, add LanguageTool as a separate service:
+
+**Step 1: Create a new service in your Railway project**
+1. Go to your Railway project dashboard
+2. Click "New" → "Docker Image"
+3. Enter image: `erikvl87/languagetool`
+4. Click "Deploy"
+
+**Step 2: Configure the service**
+1. Go to the LanguageTool service settings
+2. Under "Networking", add a private port: `8010`
+3. Note the internal hostname (e.g., `languagetool.railway.internal`)
+
+**Step 3: Configure environment variables**
+In your worker service settings, add:
+```bash
+LANGUAGETOOL_URL=http://languagetool.railway.internal:8010/v2
+```
+
+**Step 4: Increase memory (optional but recommended)**
+In LanguageTool service settings, add environment variables:
+```bash
+Java_Xms=512m
+Java_Xmx=1g
+```
+
+**Cost:** ~$10-12/month for 1GB RAM
+
+#### Option D: Production (Docker Compose / Self-Managed Server)
+
+For self-managed production servers (VPS, cloud VM), use Docker Compose:
+
+Create `docker-compose.yml`:
+```yaml
+version: '3.8'
+services:
+  worker:
+    build: ./worker
+    environment:
+      - LANGUAGETOOL_URL=http://languagetool:8010/v2
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - languagetool
+
+  languagetool:
+    image: erikvl87/languagetool
+    ports:
+      - "8010:8010"
+    environment:
+      - Java_Xms=512m
+      - Java_Xmx=2g
+    restart: unless-stopped
+```
+
+Run with:
+```bash
+docker-compose up -d
+```
+
+#### Resource Requirements
+
+| Configuration | RAM | Startup Time | Best For |
+|--------------|-----|--------------|----------|
+| Default | 512MB-1GB | ~30 seconds | Development |
+| Production | 2GB+ | ~30 seconds | Production workloads |
+| With n-gram data | 4GB+ | ~2 minutes | Maximum accuracy |
+
+**Note:** The n-gram data improves detection of commonly confused words (their/there, its/it's) but requires ~15GB disk space and slower startup. For MVP, the default configuration is sufficient.
 
 ### Cloud API Setup (Alternative)
 

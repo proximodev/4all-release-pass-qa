@@ -18,7 +18,10 @@ type TestRunWithRelations = TestRun & {
  * Routes to the appropriate provider based on test type
  */
 export async function processTestRun(testRun: TestRunWithRelations): Promise<void> {
-  console.log(`Processing test run ${testRun.id} (${testRun.type}) for project ${testRun.project.name}`);
+  console.log(`[PROCESS] Processing test run ${testRun.id}`);
+  console.log(`[PROCESS] Type: ${testRun.type}`);
+  console.log(`[PROCESS] Project: ${testRun.project.name} (${testRun.project.siteUrl})`);
+  console.log(`[PROCESS] Config: ${JSON.stringify(testRun.config)}`);
 
   // Start heartbeat to keep the run alive
   const stopHeartbeat = startHeartbeat(testRun.id);

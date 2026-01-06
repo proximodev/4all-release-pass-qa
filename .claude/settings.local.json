@@ -36,7 +36,13 @@
       "Bash(xargs cat:*)",
       "Bash(npx tsx prisma/seed-release-rules.ts)",
       "WebSearch",
-      "WebFetch(domain:languagetool.org)"
+      "WebFetch(domain:languagetool.org)",
+      "WebFetch(domain:railway.com)",
+      "WebFetch(domain:fly.io)",
+      "WebFetch(domain:developers.cloudflare.com)",
+      "WebFetch(domain:opennext.js.org)",
+      "WebFetch(domain:www.prisma.io)",
+      "Bash(docker:*)"
     ]
   }
 }

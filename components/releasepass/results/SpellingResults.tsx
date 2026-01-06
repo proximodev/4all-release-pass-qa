@@ -1,6 +1,7 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
+import { getSeveritySortOrder } from '@/lib/config/scoring'
 import type { ResultsProps } from './types'
 
 function SpellingResults({
@@ -11,6 +12,14 @@ function SpellingResults({
   loadingItems,
   resultItems,
 }: ResultsProps) {
+  const sortedFailedItems = useMemo(() => {
+    return [...failedItems].sort((a, b) => {
+      const severityA = a.releaseRule?.severity || a.severity
+      const severityB = b.releaseRule?.severity || b.severity
+      return getSeveritySortOrder(severityA) - getSeveritySortOrder(severityB)
+    })
+  }, [failedItems])
+
   if (loadingItems) {
     return <p className="text-black/60">Loading details...</p>
   }
@@ -29,20 +38,22 @@ function SpellingResults({
             <table className="w-full text-m">
               <thead>
                 <tr className="border-b border-dark-gray/40">
-                  <th className="py-2 text-left font-medium">Error</th>
-                  <th className="py-2 text-left font-medium">Context</th>
+                  <th className="py-2 text-left pr-6"><strong>Error</strong></th>
+                  <th className="py-2 text-left pr-6"><strong>Context</strong></th>
+                  <th className="py-2 text-left pr-6"><strong>Severity</strong></th>
                   <th className="py-2 w-8"></th>
                 </tr>
               </thead>
               <tbody>
-                {failedItems.map((item, index) => {
+                {sortedFailedItems.map((item, index) => {
                   const rule = item.releaseRule
                   const isExpanded = expandedItemId === item.id
                   const hasDetails = rule && (rule.fix || rule.impact || rule.docUrl)
                   const testName = rule
                     ? `${rule.name}${rule.description ? ` - ${rule.description}` : ''}`
                     : item.name
-                  const isLastItem = index === failedItems.length - 1
+                  const severityValue = rule?.severity || item.severity || '—'
+                  const isLastItem = index === sortedFailedItems.length - 1
 
                   // Extract context with highlighting for spelling errors
                   const meta = item.meta as { context?: string; contextOffset?: number; contextLength?: number } | null
@@ -71,9 +82,10 @@ function SpellingResults({
                       className={`${isLastItem && !isExpanded ? '' : 'border-b border-dark-gray/40'} ${hasDetails ? 'cursor-pointer' : ''}`}
                       onClick={() => hasDetails && setExpandedItemId(isExpanded ? null : item.id)}
                     >
-                      <td className="py-2">{testName}</td>
-                      <td className="py-2 text-black/70">{contextDisplay}</td>
-                      <td className="py-2 text-right">
+                      <td className="py-2 pr-6 align-top">{testName}</td>
+                      <td className="py-2 pr-6 align-top">{contextDisplay}</td>
+                      <td className="py-2 pr-6 align-top">{severityValue}</td>
+                      <td className="py-2 align-top text-right">
                         {hasDetails && (
                           <svg
                             className={`w-4 h-4 inline-block transition-transform ${isExpanded ? 'rotate-180' : ''}`}

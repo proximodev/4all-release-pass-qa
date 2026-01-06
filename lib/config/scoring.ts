@@ -31,6 +31,26 @@ export const SCORING_CONFIG = {
 } as const
 
 /**
+ * Severity sort order derived from penalties.
+ * Higher penalty = more severe = lower sort index (sorts first).
+ */
+export const SEVERITY_SORT_ORDER: Record<string, number> = Object.fromEntries(
+  Object.entries(sharedConfig.severityPenalties)
+    .sort(([, a], [, b]) => b - a)
+    .map(([severity], index) => [severity, index])
+)
+
+/**
+ * Get sort order for a severity level.
+ * Lower number = more severe = sorts first.
+ * Unknown severities sort to the end.
+ */
+export function getSeveritySortOrder(severity: string | undefined | null): number {
+  if (!severity) return 999
+  return SEVERITY_SORT_ORDER[severity.toUpperCase()] ?? 999
+}
+
+/**
  * Badge styling configuration.
  * Centralized Tailwind classes for score and status badges.
  */

@@ -198,7 +198,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 
 # Database (from Project Settings → Database → Connection String)
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-id.supabase.co:5432/postgres
+# Use port 5432 for direct connection OR port 6543 with pgbouncer for connection pooling
+# Connection pooling (port 6543) is recommended for production to avoid "MaxClientsInSessionMode" errors
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true
 
 # Email (configure later when needed)
 EMAIL_PROVIDER_API_KEY=
@@ -668,6 +670,42 @@ Before moving to Phase 1.3, verify:
   3. Delete `.next` folder: `rm -rf .next`
   4. Restart dev server
 - **More info**: https://github.com/prisma/prisma/issues/25206
+
+### "MaxClientsInSessionMode: max clients reached" (Database Connection Pool)
+- **Error**: `MaxClientsInSessionMode: max clients reached`
+- **Cause**: Using direct database connection (port 5432) which has limited connection slots
+- **Solution**: Switch to Supabase connection pooler
+  1. Use port `6543` instead of `5432` in DATABASE_URL
+  2. Add `?pgbouncer=true` to the connection string
+  3. Use the pooler host: `aws-0-[region].pooler.supabase.com`
+- **Example**: `postgresql://postgres:[PASSWORD]@aws-0-us-west-2.pooler.supabase.com:6543/postgres?pgbouncer=true`
+
+### Worker Issues
+
+#### "Worker loop stopped" message appears
+- **Cause**: If using `npm run dev` with nodemon, the worker restarts on file changes
+- **Solution for stable testing**: Run with `npx ts-node index.ts` instead of `npm run dev`
+- **Note**: Nodemon auto-restart is useful during development but can interrupt test processing
+
+#### Tests fail when run together but work individually
+- **Cause**: Multiple workers competing for jobs (local + Railway/Fly.io)
+- **Solution**:
+  1. Stop the production worker while testing locally, OR
+  2. Ensure local and production workers have the same code deployed
+  3. Railway/Fly.io worker will claim jobs if it's running with newer/different code
+
+#### Spelling tests fail but other tests work
+- **Cause**: LanguageTool service not accessible
+- **Solution**:
+  1. Verify Docker container is running: `docker ps`
+  2. Test LanguageTool directly: `curl.exe http://localhost:8010/v2/check -d "language=en-US" -d "text=Hello wrold"`
+  3. Check LANGUAGETOOL_URL in worker/.env matches your setup
+  4. For Railway: ensure internal networking is configured correctly
+
+#### PowerShell "curl" command fails with parameter errors (Windows)
+- **Cause**: PowerShell aliases `curl` to `Invoke-WebRequest`
+- **Solution**: Use `curl.exe` instead of `curl` on Windows
+- **Example**: `curl.exe http://localhost:8010/v2/check -d "language=en-US" -d "text=test"`
 
 ---
 
@@ -1416,15 +1454,17 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 
-# Database
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-id.supabase.co:5432/postgres
+# Database (use connection pooler URL - port 6543)
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true
 
 # Email (if configured)
 EMAIL_PROVIDER_API_KEY=
 EMAIL_FROM=qa-bot@example.com
 ```
 
-**Important**: Make sure to use the **Production** environment variables from your Supabase project, not development.
+**Important**:
+- Use the **Production** environment variables from your Supabase project, not development.
+- Use the connection pooler URL (port 6543 with `?pgbouncer=true`) to avoid connection limit errors.
 
 ### Step 5: Deploy
 
@@ -1523,8 +1563,8 @@ Go to **Variables** tab and add:
 - Worker only needs `SERVICE_ROLE_KEY` (not `ANON_KEY`)
 
 ```bash
-# Database (same as main app)
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-id.supabase.co:5432/postgres
+# Database (use connection pooler URL - same as main app)
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true
 
 # Supabase (note: no NEXT_PUBLIC_ prefix for worker)
 SUPABASE_URL=https://your-project-id.supabase.co
@@ -1532,6 +1572,10 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 
 # PageSpeed API (will add later)
 PAGE_SPEED_API_KEY=
+
+# LanguageTool (for Spelling tests - see Phase 6.5)
+# For Railway internal networking:
+LANGUAGETOOL_URL=http://languagetool.railway.internal:8010/v2
 
 # Worker Configuration
 POLL_INTERVAL_MIN=10000
@@ -1760,8 +1804,8 @@ When prompted:
 #### Step 6: Set Environment Secrets
 
 ```bash
-# Database connection
-fly secrets set DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.your-project-id.supabase.co:5432/postgres"
+# Database connection (use connection pooler URL - port 6543)
+fly secrets set DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true"
 
 # Supabase
 fly secrets set SUPABASE_URL="https://your-project-id.supabase.co"
@@ -1976,8 +2020,9 @@ Edit `worker/tsconfig.json`:
 Create `worker/.env`:
 
 ```bash
-# Database (same as main app)
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-id.supabase.co:5432/postgres
+# Database (use connection pooler URL - same as main app)
+# Use port 6543 with pgbouncer to avoid "MaxClientsInSessionMode" errors
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true
 
 # Supabase (for storage operations)
 SUPABASE_URL=https://your-project-id.supabase.co
@@ -1994,9 +2039,11 @@ HEARTBEAT_INTERVAL=30000         # 30 seconds
 STUCK_RUN_TIMEOUT=3600000        # 60 minutes
 
 # LanguageTool (for Spelling tests)
-# Option 1: Self-hosted (recommended - unlimited requests)
+# Option 1: Self-hosted locally (development)
 LANGUAGETOOL_URL=http://localhost:8010/v2
-# Option 2: Cloud API (paid tiers only)
+# Option 2: Self-hosted on Railway (production)
+# LANGUAGETOOL_URL=http://languagetool.railway.internal:8010/v2
+# Option 3: Cloud API (paid tiers only)
 # LANGUAGETOOL_API_KEY=your-api-key-here
 
 # Future providers
@@ -2261,9 +2308,9 @@ This phase implements the Spelling test provider using Cheerio for text extracti
 
 ### Implementation Overview
 
-The spelling provider consists of two files:
+The spelling provider is located in `worker/providers/spelling/`:
 
-1. **`worker/providers/languagetool/client.ts`** - LanguageTool API client
+1. **`worker/providers/spelling/languagetool-client.ts`** - LanguageTool API client
    - Supports self-hosted instance (LANGUAGETOOL_URL) or cloud API (LANGUAGETOOL_API_KEY)
    - Auto language detection
    - Configurable disabled rules/categories
@@ -2278,6 +2325,7 @@ The spelling provider consists of two files:
      - Grammar → CRITICAL
      - Style → MEDIUM
      - Typographical → LOW
+   - Stores full sentence and context for error highlighting in UI
 
 ### Configuration
 
@@ -2368,31 +2416,77 @@ fly secrets set LANGUAGETOOL_URL="http://releasepass-languagetool.internal:8010/
 
 #### Option C: Production (Railway)
 
-For production deployment on Railway, add LanguageTool as a separate service:
+For production deployment on Railway, add LanguageTool as a separate service in your existing Railway project.
 
 **Step 1: Create a new service in your Railway project**
-1. Go to your Railway project dashboard
-2. Click "New" → "Docker Image"
+1. Go to your Railway project dashboard (the same project as your worker)
+2. Click **"Create"** → **"Docker Image"**
 3. Enter image: `erikvl87/languagetool`
-4. Click "Deploy"
+4. Click **"Deploy"**
+5. Wait for the deployment to complete (~1-2 minutes)
 
-**Step 2: Configure the service**
-1. Go to the LanguageTool service settings
-2. Under "Networking", add a private port: `8010`
-3. Note the internal hostname (e.g., `languagetool.railway.internal`)
-
-**Step 3: Configure environment variables**
-In your worker service settings, add:
-```bash
-LANGUAGETOOL_URL=http://languagetool.railway.internal:8010/v2
-```
-
-**Step 4: Increase memory (optional but recommended)**
-In LanguageTool service settings, add environment variables:
+**Step 2: Configure environment variables for LanguageTool**
+Click on **"Variables"** tab and add:
 ```bash
 Java_Xms=512m
 Java_Xmx=1g
 ```
+This allocates 512MB-1GB RAM to the Java process.
+
+**Step 3: Generate a public domain (for testing)**
+1. Click on the LanguageTool service
+2. Go to **"Settings"** tab
+3. Scroll down to **"Networking"** section
+4. Click **"Generate Domain"** to create a public URL (e.g., `languagetool-production-xxxx.up.railway.app`)
+5. Note this URL - you'll need it for local testing
+
+**Step 4: Test from your local machine**
+```bash
+curl.exe https://languagetool-production-xxxx.up.railway.app/v2/check -d "language=en-US" -d "text=Hello wrold"
+```
+You should get a JSON response with a spelling match for "wrold" → "world".
+
+**Step 5: Configure worker to use LanguageTool**
+
+You have two URL options:
+
+| URL Type | Use Case | Example |
+|----------|----------|---------|
+| **Public URL** | Works everywhere (local dev + Railway) | `https://languagetool-production-xxxx.up.railway.app/v2` |
+| **Internal URL** | Railway only (faster, no external traffic) | `http://languagetool.railway.internal:8010/v2` |
+
+**Recommended setup:**
+- Use the **public URL** in Railway worker Variables - this lets you test locally against Railway's LanguageTool
+- Keep `http://localhost:8010/v2` in your local `.env` for offline development with Docker
+
+In your **worker service** on Railway, go to **"Variables"** and add:
+```bash
+LANGUAGETOOL_URL=https://languagetool-production-xxxx.up.railway.app/v2
+```
+
+**Step 6: Redeploy worker**
+Railway will automatically redeploy when you add the variable. If not, click **"Redeploy"** on the worker service.
+
+**Step 7: Verify the connection**
+1. Click on your **worker service** in the Railway dashboard
+2. Go to the **"Logs"** tab (or click "View Logs" on the deployment)
+3. Trigger a spelling test from the ReleasePass UI
+4. Watch for successful LanguageTool calls without connection errors
+
+**Testing Railway LanguageTool from local:**
+To test your local worker against Railway's LanguageTool:
+1. Update your local `worker/.env`:
+   ```bash
+   LANGUAGETOOL_URL=https://languagetool-production-xxxx.up.railway.app/v2
+   ```
+2. Run `npm run dev` in the worker directory
+3. Trigger a spelling test from the UI
+
+**Troubleshooting Railway LanguageTool:**
+- **Service not starting**: Check Railway logs for Java memory errors. Increase `Java_Xmx` if needed.
+- **Worker can't connect**: Ensure both services are in the same Railway project if using internal URL.
+- **Timeout errors**: LanguageTool takes ~30 seconds to start. Wait for "LanguageTool server is ready" in logs before testing.
+- **Local testing fails**: Make sure you're using the public URL (https://...up.railway.app), not the internal URL.
 
 **Cost:** ~$10-12/month for 1GB RAM
 
@@ -2452,7 +2546,7 @@ The spelling provider uses existing dependencies:
 - `cheerio` - Already installed for custom-rules
 - No additional npm packages required
 
-**Implementation**: See `worker/providers/languagetool/client.ts` and `worker/providers/spelling/index.ts`
+**Implementation**: See `worker/providers/spelling/languagetool-client.ts` and `worker/providers/spelling/index.ts`
 
 ---
 

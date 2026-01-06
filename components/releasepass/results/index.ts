@@ -1,0 +1,5 @@
+export { default as PreflightResults } from './PreflightResults'
+export { default as SpellingResults } from './SpellingResults'
+export { default as PerformanceResults } from './PerformanceResults'
+export { default as BrowserResults } from './BrowserResults'
+export type { ResultsProps, CategoryGroup } from './types'

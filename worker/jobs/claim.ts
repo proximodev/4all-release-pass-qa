@@ -13,12 +13,7 @@ export async function claimNextQueuedRun(): Promise<TestRun | null> {
       orderBy: { createdAt: 'asc' },
     });
 
-    if (!run) {
-      console.log('[CLAIM] No queued test runs found');
-      return null;
-    }
-
-    console.log(`[CLAIM] Found queued run: ${run.id} type=${run.type}`);
+    if (!run) return null;
 
     // Atomically update to RUNNING status
     return tx.testRun.update({

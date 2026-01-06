@@ -108,12 +108,8 @@ export async function checkSpelling(
 
   const checkUrl = `${apiUrl}/check`;
 
-  console.log(`[LANGUAGETOOL] Calling API: ${checkUrl}`);
-  console.log(`[LANGUAGETOOL] Text length: ${text.length} chars`);
-
   const response = await retryWithBackoff(
     async () => {
-      console.log(`[LANGUAGETOOL] Making request...`);
       const res = await fetchWithTimeout(checkUrl, {
         timeoutMs: 30000,
         method: 'POST',
@@ -124,11 +120,8 @@ export async function checkSpelling(
         body: params.toString(),
       });
 
-      console.log(`[LANGUAGETOOL] Response status: ${res.status}`);
-
       if (!res.ok) {
         const errorBody = await res.text();
-        console.error(`[LANGUAGETOOL] Error body: ${errorBody}`);
 
         // Don't retry on 4xx errors (except 429 rate limit)
         if (res.status >= 400 && res.status < 500 && res.status !== 429) {
@@ -141,9 +134,7 @@ export async function checkSpelling(
         throw new Error(`LanguageTool API error: ${res.status} - ${errorBody}`);
       }
 
-      const json = await res.json() as { matches?: unknown[] };
-      console.log(`[LANGUAGETOOL] Found ${json.matches?.length || 0} matches`);
-      return json;
+      return res.json();
     },
     { maxRetries: 3, initialDelayMs: 1000 }
   );

@@ -6,9 +6,15 @@ import Link from 'next/link'
 import Card from '@/components/ui/card/Card'
 import { getScoreBadgeClasses, getStatusBadgeClasses } from '@/lib/config/scoring'
 import { calculateUrlResultSummary } from '@/lib/services/testResults'
-import PageContainer from "@/components/layout/PageContainer";
 import TabPanel from "@/components/layout/TabPanel";
-import type { ResultItem, UrlResultData, TestRunData, ReleaseRun, ReleaseRule, ReleaseRuleCategory } from '@/lib/types/releasepass'
+import type { ResultItem, ReleaseRun } from '@/lib/types/releasepass'
+import {
+  PreflightResults,
+  SpellingResults,
+  PerformanceResults,
+  BrowserResults,
+  type CategoryGroup
+} from './results'
 
 const TEST_TYPE_OPTIONS = [
   { value: 'PAGE_PREFLIGHT', label: 'Technical Baseline', route: 'baseline' },
@@ -375,164 +381,46 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
 
             <hr className="border-dark-gray/40 mb-8" />
 
-            {/* Failed Section */}
-            {loadingItems ? (
-              <p className="text-black/60">Loading details...</p>
-            ) : resultItems.length === 0 ? (
-              <p>No results available for this URL.</p>
-            ) : (
-              <>
-                {failedItems.length > 0 && (
-                  <div className="mb-6">
-                    <h3>Failed Tests</h3>
-                    <div className="overflow-hidden">
-                      <table className="w-full text-m">
-                        <tbody>
-                          {failedItems.map((item, index) => {
-                            const rule = item.releaseRule
-                            const isExpanded = expandedItemId === item.id
-                            const hasDetails = rule && (rule.fix || rule.impact || rule.docUrl)
-                            const testName = rule
-                              ? `${rule.name}${rule.description ? ` - ${rule.description}` : ''}`
-                              : item.name
-                            const categoryName = rule?.category?.name || '—'
-                            const isLastItem = index === failedItems.length - 1
-
-                            return (
-                              <>
-                                <tr
-                                  key={item.id}
-                                  className={`${isLastItem && !isExpanded ? '' : 'border-b border-dark-gray/40'} ${hasDetails ? 'cursor-pointer' : ''}`}
-                                  onClick={() => hasDetails && setExpandedItemId(isExpanded ? null : item.id)}
-                                >
-                                  <td className="py-2">{categoryName}</td>
-                                  <td className="py-2">{testName}</td>
-                                  <td className="py-2 text-right">
-                                    {hasDetails && (
-                                      <svg
-                                        className={`w-4 h-4 inline-block transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
-                                      </svg>
-                                    )}
-                                  </td>
-                                </tr>
-                                {isExpanded && rule && (
-                                  <tr key={`${item.id}-details`} className="bg-black/5">
-                                    <td colSpan={3} className="py-3 px-4">
-                                      {rule.fix && (
-                                        <div className="mb-2">
-                                          <span className="font-medium">How to Fix: </span>
-                                          <span className="text-black/80">{rule.fix}</span>
-                                        </div>
-                                      )}
-                                      {rule.impact && (
-                                        <div className="mb-2">
-                                          <span className="font-medium">Impact: </span>
-                                          <span className="text-black/80">{rule.impact}</span>
-                                        </div>
-                                      )}
-                                      {rule.docUrl && (
-                                        <div>
-                                          <a
-                                            href={rule.docUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-brand-cyan underline"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            Learn more →
-                                          </a>
-                                        </div>
-                                      )}
-                                    </td>
-                                  </tr>
-                                )}
-                              </>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Passed Section */}
-                {passedItemsByCategory.length > 0 && (
-                  <div>
-                    <h3 className="mb-3">Passed Tests</h3>
-                    {passedItemsByCategory.map((category) => (
-                      <div key={category.name} className="mb-4">
-                        <h4 className="mb-2">{category.name}</h4>
-                        <div className="space-y-0">
-                          {category.items.map((item, index) => {
-                            const rule = item.releaseRule
-                            const isExpanded = expandedItemId === item.id
-                            const hasDetails = rule && (rule.fix || rule.impact || rule.docUrl)
-                            const testName = rule
-                              ? `${rule.name}${rule.description ? ` - ${rule.description}` : ''}`
-                              : item.name
-                            const isLastItem = index === category.items.length - 1
-
-                            return (
-                              <div key={item.id}>
-                                <div
-                                  className={`py-2 ${isLastItem && !isExpanded ? '' : 'border-b border-dark-gray/40'} flex items-center justify-between ${hasDetails ? 'cursor-pointer' : ''}`}
-                                  onClick={() => hasDetails && setExpandedItemId(isExpanded ? null : item.id)}
-                                >
-                                  <span>{testName}</span>
-                                  {hasDetails && (
-                                    <svg
-                                      className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
-                                    </svg>
-                                  )}
-                                </div>
-                                {isExpanded && rule && (
-                                  <div className="bg-black/5 py-3 px-4">
-                                    {rule.fix && (
-                                      <div className="mb-2">
-                                        <span className="font-medium">How to Fix: </span>
-                                        <span className="text-black/80">{rule.fix}</span>
-                                      </div>
-                                    )}
-                                    {rule.impact && (
-                                      <div className="mb-2">
-                                        <span className="font-medium">Impact: </span>
-                                        <span className="text-black/80">{rule.impact}</span>
-                                      </div>
-                                    )}
-                                    {rule.docUrl && (
-                                      <div>
-                                        <a
-                                          href={rule.docUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-brand-cyan underline"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          Learn more →
-                                        </a>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
+            {/* Test Type Specific Results */}
+            {testType === 'PAGE_PREFLIGHT' && (
+              <PreflightResults
+                resultItems={resultItems}
+                failedItems={failedItems}
+                passedItemsByCategory={passedItemsByCategory}
+                expandedItemId={expandedItemId}
+                setExpandedItemId={setExpandedItemId}
+                loadingItems={loadingItems}
+              />
+            )}
+            {testType === 'SPELLING' && (
+              <SpellingResults
+                resultItems={resultItems}
+                failedItems={failedItems}
+                passedItemsByCategory={passedItemsByCategory}
+                expandedItemId={expandedItemId}
+                setExpandedItemId={setExpandedItemId}
+                loadingItems={loadingItems}
+              />
+            )}
+            {testType === 'PERFORMANCE' && (
+              <PerformanceResults
+                resultItems={resultItems}
+                failedItems={failedItems}
+                passedItemsByCategory={passedItemsByCategory}
+                expandedItemId={expandedItemId}
+                setExpandedItemId={setExpandedItemId}
+                loadingItems={loadingItems}
+              />
+            )}
+            {testType === 'SCREENSHOTS' && (
+              <BrowserResults
+                resultItems={resultItems}
+                failedItems={failedItems}
+                passedItemsByCategory={passedItemsByCategory}
+                expandedItemId={expandedItemId}
+                setExpandedItemId={setExpandedItemId}
+                loadingItems={loadingItems}
+              />
             )}
           </>
         ) : (

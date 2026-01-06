@@ -60,8 +60,6 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<vo
     );
   }
 
-  console.log(`[SPELLING] Using ${getConfigInfo()}`);
-
   // Get URLs to test
   const urls = getUrlsToTest(testRun);
 
@@ -101,9 +99,7 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<vo
       );
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : '';
       console.error(`[SPELLING] Failed to check ${url}:`, errorMsg);
-      console.error(`[SPELLING] Stack trace:`, errorStack);
 
       // Create an error result
       allResults.push({
@@ -198,8 +194,6 @@ function getUrlsToTest(testRun: TestRunWithRelations): string[] {
  * Check spelling for a single URL
  */
 async function checkUrlSpelling(url: string): Promise<UrlSpellingResult> {
-  console.log(`[SPELLING] Fetching URL: ${url}`);
-
   // Fetch the page
   const response = await fetchWithTimeout(url, {
     timeoutMs: 30000,
@@ -209,23 +203,16 @@ async function checkUrlSpelling(url: string): Promise<UrlSpellingResult> {
     },
   });
 
-  console.log(`[SPELLING] Fetch response: ${response.status} ${response.statusText}`);
-
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
   }
 
   const html = await response.text();
-  console.log(`[SPELLING] HTML length: ${html.length} chars`);
-
   const $ = cheerio.load(html);
 
   // Extract visible text
   const text = extractVisibleText($);
   const wordCount = countWords(text);
-
-  console.log(`[SPELLING] Extracted text: ${wordCount} words, ${text.length} chars`);
-  console.log(`[SPELLING] Text preview: "${text.substring(0, 200)}..."`);
 
   // Skip if no meaningful text content
   if (wordCount < 10) {
@@ -335,12 +322,6 @@ function mapMatchToResultItem(match: SpellingMatch): ResultItemToCreate {
   // Create a unique code from rule ID
   const code = `SPELLING_${match.rule.id}`;
 
-  // Format the issue name
-  const contextText = match.context.text.substring(
-    Math.max(0, match.context.offset - 10),
-    Math.min(match.context.text.length, match.context.offset + match.context.length + 10)
-  );
-
   return {
     provider: IssueProvider.LANGUAGETOOL,
     code,
@@ -349,7 +330,10 @@ function mapMatchToResultItem(match: SpellingMatch): ResultItemToCreate {
     severity,
     meta: {
       message: match.message,
-      context: contextText,
+      sentence: match.sentence,
+      context: match.context.text,
+      contextOffset: match.context.offset,
+      contextLength: match.context.length,
       offset: match.offset,
       length: match.length,
       replacements: match.replacements,

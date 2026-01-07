@@ -5,8 +5,9 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -93,7 +94,6 @@ enum ReleaseRunStatus {
   FAIL
 }
 
-
 enum ResultStatus {
   PASS
   FAIL
@@ -125,6 +125,7 @@ model Project {
   testRuns       TestRun[]
   screenshotSets ScreenshotSet[]
   manualStatuses ManualTestStatus[]
+  ignoredRules   IgnoredRule[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -254,17 +255,19 @@ model UrlResult {
 }
 
 model ResultItem {
-  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  urlResultId String         @db.Uuid
-  provider    IssueProvider
-  code        String
-  name        String         // Human-readable title of the check (fallback if no ReleaseRule)
-  status      ResultStatus
-  severity    IssueSeverity? // Only for FAIL status
-  meta        Json?
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  urlResultId     String         @db.Uuid
+  provider        IssueProvider
+  code            String         // Rule code (may or may not match a ReleaseRule)
+  releaseRuleCode String?        // FK to ReleaseRule.code (only set for rules that exist)
+  name            String         // Human-readable title of the check (fallback if no ReleaseRule)
+  status          ResultStatus
+  severity        IssueSeverity? // Only for FAIL status
+  meta            Json?
+  ignored         Boolean        @default(false) // User-marked as false positive
 
   urlResult   UrlResult    @relation(fields: [urlResultId], references: [id], onDelete: Cascade)
-  releaseRule ReleaseRule? @relation(fields: [code], references: [code])
+  releaseRule ReleaseRule? @relation(fields: [releaseRuleCode], references: [code])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -275,6 +278,8 @@ model ResultItem {
   @@index([status])
   @@index([severity])
   @@index([code])
+  @@index([releaseRuleCode])
+  @@index([ignored])
 }
 
 model ScreenshotSet {
@@ -358,4 +363,20 @@ model ReleaseRule {
   @@index([provider])
   @@index([categoryId])
   @@index([isActive])
+}
+
+/// Tracks which rules have been ignored by users for specific URLs
+/// Used to auto-apply ignores on new test runs
+model IgnoredRule {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String @db.Uuid
+  url       String // The URL this ignore applies to
+  code      String // The rule code to ignore (e.g., "document-title")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, url, code]) // One ignore per project/url/code combo
+  @@index([projectId, url])
 }

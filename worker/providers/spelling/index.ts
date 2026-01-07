@@ -18,6 +18,7 @@ import { prisma } from '../../lib/prisma';
 import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { fetchWithTimeout } from '../../lib/fetch';
 import { checkSpelling, isConfigured, getConfigInfo, SpellingMatch } from './languagetool-client';
+import { calculateScoreFromItems } from '../../lib/scoring';
 
 interface TestRunWithRelations {
   id: string;
@@ -43,15 +44,16 @@ interface UrlSpellingResult {
   issueCount: number;
   wordCount: number;
   language: string;
+  score: number;  // Calculated score (0-100)
 }
 
 /**
  * Process a Spelling test run
  *
- * Unlike Preflight/Performance, Spelling doesn't produce a numeric score.
- * Results are stored for manual review.
+ * Returns a score (0-100) based on failed item severity.
+ * Pass/fail is determined by score threshold (see lib/scoring.ts).
  */
-export async function processSpelling(testRun: TestRunWithRelations): Promise<void> {
+export async function processSpelling(testRun: TestRunWithRelations): Promise<number> {
   console.log(`[SPELLING] Starting for test run ${testRun.id}`);
 
   // Check LanguageTool configuration
@@ -95,6 +97,11 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<vo
       // Apply ignored rules to result items
       result.resultItems = applyIgnoredRules(result.resultItems, ignoredCodes);
 
+      // Calculate score from non-ignored failed items
+      result.score = calculateScoreFromItems(
+        result.resultItems.filter(i => !i.ignored)
+      );
+
       allResults.push(result);
 
       // Store raw response for debugging
@@ -112,22 +119,24 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<vo
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error(`[SPELLING] Failed to check ${url}:`, errorMsg);
 
-      // Create an error result
+      // Create an error result with score penalty
+      const errorItems = [
+        {
+          provider: IssueProvider.LANGUAGETOOL,
+          code: 'SPELLING_CHECK_FAILED',
+          name: 'Spelling check failed',
+          status: ResultStatus.FAIL,
+          severity: IssueSeverity.HIGH,
+          meta: { error: errorMsg },
+        },
+      ];
       allResults.push({
         url,
-        resultItems: [
-          {
-            provider: IssueProvider.LANGUAGETOOL,
-            code: 'SPELLING_CHECK_FAILED',
-            name: 'Spelling check failed',
-            status: ResultStatus.FAIL,
-            severity: IssueSeverity.HIGH,
-            meta: { error: errorMsg },
-          },
-        ],
+        resultItems: errorItems,
         issueCount: 0,
         wordCount: 0,
         language: 'unknown',
+        score: calculateScoreFromItems(errorItems),
       });
     }
   }
@@ -136,11 +145,12 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<vo
   let totalIssueCount = 0;
 
   for (const result of allResults) {
-    // Create UrlResult
+    // Create UrlResult with score
     const urlResult = await prisma.urlResult.create({
       data: {
         testRunId: testRun.id,
         url: result.url,
+        preflightScore: result.score,  // Store calculated score
         issueCount: result.issueCount,
         additionalMetrics: {
           wordCount: result.wordCount,
@@ -174,7 +184,16 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<vo
     data: { rawPayload },
   });
 
+  // Calculate average score across all URLs
+  const urlScores = allResults.map(r => r.score);
+  const averageScore = urlScores.length > 0
+    ? Math.round(urlScores.reduce((sum, s) => sum + s, 0) / urlScores.length)
+    : 100;
+
   console.log(`[SPELLING] Completed. ${allResults.length} URLs checked, ${totalIssueCount} total issues`);
+  console.log(`[SPELLING] Average score: ${averageScore}, per-URL scores: ${urlScores.join(', ')}`);
+
+  return averageScore;
 }
 
 /**
@@ -267,6 +286,7 @@ async function checkUrlSpelling(url: string): Promise<UrlSpellingResult> {
       issueCount: 0,
       wordCount,
       language: 'unknown',
+      score: 100,  // No issues = perfect score
     };
   }
 
@@ -301,6 +321,7 @@ async function checkUrlSpelling(url: string): Promise<UrlSpellingResult> {
     issueCount: spellingResult.matches.length,
     wordCount,
     language: spellingResult.language.code,
+    score: calculateScoreFromItems(resultItems),  // Calculate initial score
   };
 }
 

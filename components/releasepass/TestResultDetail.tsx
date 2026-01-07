@@ -251,14 +251,24 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
         item.id === itemId ? { ...item, ignored: data.resultItem.ignored } : item
       ))
 
-      // Update releaseRun state with new testRun score
+      // Update releaseRun state with new testRun score and urlResult score
       setReleaseRun(prev => {
         if (!prev) return prev
         return {
           ...prev,
-          testRuns: prev.testRuns.map(tr =>
-            tr.type === testType ? { ...tr, score: data.testRunScore } : tr
-          )
+          testRuns: prev.testRuns.map(tr => {
+            if (tr.type !== testType) return tr
+            return {
+              ...tr,
+              score: data.testRunScore,
+              // Also update the urlResult's preflightScore for Preflight tests
+              urlResults: tr.urlResults?.map(ur =>
+                ur.id === selectedUrlResultId
+                  ? { ...ur, preflightScore: data.urlResultScore }
+                  : ur
+              )
+            }
+          })
         }
       })
 
@@ -267,7 +277,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
       console.error('Failed to toggle ignore:', err)
       return null
     }
-  }, [testType])
+  }, [testType, selectedUrlResultId])
 
   if (loading) {
     return (

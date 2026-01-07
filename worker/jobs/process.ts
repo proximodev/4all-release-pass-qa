@@ -41,8 +41,7 @@ export async function processTestRun(testRun: TestRunWithRelations): Promise<voi
         break;
 
       case TestType.SPELLING:
-        await processSpelling(testRun);
-        // Spelling results are for manual review, no numeric score
+        score = await processSpelling(testRun);
         break;
 
       case TestType.SITE_AUDIT:

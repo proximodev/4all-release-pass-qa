@@ -118,3 +118,26 @@ export function isExcludedEndpoint(url: string): boolean {
     return false
   }
 }
+
+/**
+ * Calculate score from an array of result items.
+ * Score starts at 100 and deducts based on failed item severity.
+ * Ignored items are excluded from score calculation.
+ */
+export function calculateScoreFromItems(
+  items: Array<{ status: string; severity?: string | null; ignored?: boolean }>
+): number {
+  let score = 100
+
+  for (const item of items) {
+    // Skip non-failing, ignored, or severity-less items
+    if (item.status !== 'FAIL' || item.ignored || !item.severity) continue
+
+    const penalty = SCORING_CONFIG.severityPenalties[
+      item.severity as keyof typeof SCORING_CONFIG.severityPenalties
+    ] || 0
+    score -= penalty
+  }
+
+  return Math.max(0, Math.min(100, Math.round(score)))
+}

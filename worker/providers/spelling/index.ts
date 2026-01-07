@@ -63,8 +63,8 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<nu
     );
   }
 
-  // Get URLs to test
-  const urls = getUrlsToTest(testRun);
+  // Get URLs to test (deduplicated)
+  const urls = [...new Set(getUrlsToTest(testRun))];
 
   if (urls.length === 0) {
     throw new Error('No URLs to test. Configure URLs in TestRunConfig or ReleaseRun.');
@@ -339,16 +339,24 @@ function extractVisibleText($: CheerioAPI): string {
   $('.cookie-notice, .cookie-banner, #cookie-consent').remove();
   $('.newsletter-signup, .popup, .modal').remove();
 
-  // Get the main content area if it exists
-  let $content = $('main, article, [role="main"], .content, #content');
+  // Get the main content area - prioritize selectors to avoid nested duplicates
+  // Check each selector in order and use the first match
+  const contentSelectors = ['main', 'article', '[role="main"]', '.content', '#content'];
+  let text = '';
 
-  // Fall back to body if no main content area found
-  if ($content.length === 0) {
-    $content = $('body');
+  for (const selector of contentSelectors) {
+    const $match = $(selector);
+    if ($match.length > 0) {
+      // Take only the first match to avoid nested element duplication
+      text = $match.first().text();
+      break;
+    }
   }
 
-  // Get text content
-  let text = $content.text();
+  // Fall back to body if no main content area found
+  if (!text) {
+    text = $('body').text();
+  }
 
   // Clean up the text
   text = text

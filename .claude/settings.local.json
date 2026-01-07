@@ -43,7 +43,8 @@
       "WebFetch(domain:opennext.js.org)",
       "WebFetch(domain:www.prisma.io)",
       "Bash(docker:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(git -C \"C:/Users/doug/WebstormProjects/4all-release-pass-qa\" diff worker/providers/spelling/index.ts)"
     ]
   }
 }

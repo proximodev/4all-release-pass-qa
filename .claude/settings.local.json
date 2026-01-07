@@ -42,7 +42,8 @@
       "WebFetch(domain:developers.cloudflare.com)",
       "WebFetch(domain:opennext.js.org)",
       "WebFetch(domain:www.prisma.io)",
-      "Bash(docker:*)"
+      "Bash(docker:*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

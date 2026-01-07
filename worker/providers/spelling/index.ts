@@ -34,6 +34,7 @@ interface ResultItemToCreate {
   status: ResultStatus;
   severity?: IssueSeverity;
   meta?: any;  // Prisma JSON field
+  ignored?: boolean;
 }
 
 interface UrlSpellingResult {
@@ -82,8 +83,18 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<vo
   for (const url of limitedUrls) {
     console.log(`[SPELLING] Checking: ${url}`);
 
+    // Fetch ignored rules for this URL
+    const ignoredCodes = await getIgnoredRuleCodes(testRun.projectId, url);
+    if (ignoredCodes.size > 0) {
+      console.log(`[SPELLING] Found ${ignoredCodes.size} ignored rule(s) for ${url}`);
+    }
+
     try {
       const result = await checkUrlSpelling(url);
+
+      // Apply ignored rules to result items
+      result.resultItems = applyIgnoredRules(result.resultItems, ignoredCodes);
+
       allResults.push(result);
 
       // Store raw response for debugging
@@ -149,6 +160,7 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<vo
           status: item.status,
           severity: item.severity,
           meta: item.meta,
+          ignored: item.ignored ?? false,
         })),
       });
     }
@@ -163,6 +175,31 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<vo
   });
 
   console.log(`[SPELLING] Completed. ${allResults.length} URLs checked, ${totalIssueCount} total issues`);
+}
+
+/**
+ * Get ignored rule codes for a project and URL
+ * Used to auto-apply ignores to new ResultItems
+ */
+async function getIgnoredRuleCodes(projectId: string, url: string): Promise<Set<string>> {
+  const ignoredRules = await prisma.ignoredRule.findMany({
+    where: { projectId, url },
+    select: { code: true },
+  });
+  return new Set(ignoredRules.map(r => r.code));
+}
+
+/**
+ * Apply ignored status to result items based on project's ignored rules
+ */
+function applyIgnoredRules(
+  items: ResultItemToCreate[],
+  ignoredCodes: Set<string>
+): ResultItemToCreate[] {
+  return items.map(item => ({
+    ...item,
+    ignored: ignoredCodes.has(item.code),
+  }));
 }
 
 /**

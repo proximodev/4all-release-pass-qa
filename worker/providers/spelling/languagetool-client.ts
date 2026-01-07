@@ -55,6 +55,7 @@ export interface CheckOptions {
   language?: string;  // e.g., 'en-US', 'auto' for auto-detect
   disabledRules?: string[];
   disabledCategories?: string[];
+  level?: 'default' | 'picky';  // 'picky' enables additional rules
 }
 
 /**
@@ -69,6 +70,36 @@ function getApiUrl(): string {
  */
 function isSelfHosted(): boolean {
   return !!process.env.LANGUAGETOOL_URL;
+}
+
+/**
+ * Get default disabled categories from environment
+ * LANGUAGETOOL_DISABLED_CATEGORIES=CASING,TYPOGRAPHY
+ */
+function getDefaultDisabledCategories(): string[] {
+  const envValue = process.env.LANGUAGETOOL_DISABLED_CATEGORIES;
+  if (!envValue) return [];
+  return envValue.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * Get default disabled rules from environment
+ * LANGUAGETOOL_DISABLED_RULES=UPPERCASE_SENTENCE_START,EN_COMPOUNDS
+ */
+function getDefaultDisabledRules(): string[] {
+  const envValue = process.env.LANGUAGETOOL_DISABLED_RULES;
+  if (!envValue) return [];
+  return envValue.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * Get default level from environment
+ * LANGUAGETOOL_LEVEL=default|picky
+ */
+function getDefaultLevel(): 'default' | 'picky' {
+  const envValue = process.env.LANGUAGETOOL_LEVEL;
+  if (envValue === 'picky') return 'picky';
+  return 'default';
 }
 
 /**
@@ -98,12 +129,26 @@ export async function checkSpelling(
     params.set('apiKey', apiKey);
   }
 
-  // Add disabled rules/categories if specified
-  if (options.disabledRules?.length) {
-    params.set('disabledRules', options.disabledRules.join(','));
+  // Set level (default or picky)
+  const level = options.level || getDefaultLevel();
+  params.set('level', level);
+
+  // Merge disabled rules from options and environment
+  const disabledRules = [
+    ...getDefaultDisabledRules(),
+    ...(options.disabledRules || [])
+  ];
+  if (disabledRules.length) {
+    params.set('disabledRules', [...new Set(disabledRules)].join(','));
   }
-  if (options.disabledCategories?.length) {
-    params.set('disabledCategories', options.disabledCategories.join(','));
+
+  // Merge disabled categories from options and environment
+  const disabledCategories = [
+    ...getDefaultDisabledCategories(),
+    ...(options.disabledCategories || [])
+  ];
+  if (disabledCategories.length) {
+    params.set('disabledCategories', [...new Set(disabledCategories)].join(','));
   }
 
   const checkUrl = `${apiUrl}/check`;
@@ -196,11 +241,28 @@ export function isConfigured(): boolean {
  * Get configuration info for logging
  */
 export function getConfigInfo(): string {
+  const parts: string[] = [];
+
   if (isSelfHosted()) {
-    return `Self-hosted at ${getApiUrl()}`;
+    parts.push(`Self-hosted at ${getApiUrl()}`);
+  } else if (process.env.LANGUAGETOOL_API_KEY) {
+    parts.push('Cloud API (api.languagetool.org)');
+  } else {
+    return 'Not configured';
   }
-  if (process.env.LANGUAGETOOL_API_KEY) {
-    return 'Cloud API (api.languagetool.org)';
+
+  const level = getDefaultLevel();
+  parts.push(`level=${level}`);
+
+  const disabledCategories = getDefaultDisabledCategories();
+  if (disabledCategories.length) {
+    parts.push(`disabledCategories=${disabledCategories.join(',')}`);
   }
-  return 'Not configured';
+
+  const disabledRules = getDefaultDisabledRules();
+  if (disabledRules.length) {
+    parts.push(`disabledRules=${disabledRules.join(',')}`);
+  }
+
+  return parts.join(', ');
 }

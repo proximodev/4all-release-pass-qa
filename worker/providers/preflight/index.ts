@@ -33,6 +33,7 @@ interface ResultItemToCreate {
   status: ResultStatus;
   severity?: IssueSeverity;
   meta?: any;
+  ignored?: boolean;
 }
 
 interface UrlCheckResults {
@@ -78,6 +79,12 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
   // Process each URL
   for (const url of limitedUrls) {
     console.log(`[PAGE_PREFLIGHT] Checking: ${url}`);
+
+    // Fetch ignored rules for this URL
+    const ignoredCodes = await getIgnoredRuleCodes(testRun.projectId, url);
+    if (ignoredCodes.size > 0) {
+      console.log(`[PAGE_PREFLIGHT] Found ${ignoredCodes.size} ignored rule(s) for ${url}`);
+    }
 
     const urlCheckResult: UrlCheckResults = {
       url,
@@ -132,9 +139,12 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
       });
     }
 
-    // Calculate per-URL score from failed items
+    // Apply ignored rules to result items
+    urlCheckResult.resultItems = applyIgnoredRules(urlCheckResult.resultItems, ignoredCodes);
+
+    // Calculate per-URL score from non-ignored failed items
     urlCheckResult.score = calculateScore(
-      urlCheckResult.resultItems.filter(i => i.status === ResultStatus.FAIL)
+      urlCheckResult.resultItems.filter(i => i.status === ResultStatus.FAIL && !i.ignored)
     );
     console.log(`[PAGE_PREFLIGHT] URL score for ${url}: ${urlCheckResult.score}`);
 
@@ -177,10 +187,12 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
           urlResultId: createdUrlResult.id,
           provider: item.provider,
           code: item.code,
+          releaseRuleCode: item.code, // Preflight codes match ReleaseRule codes
           name: item.name,
           status: item.status,
           severity: item.severity,
           meta: item.meta,
+          ignored: item.ignored ?? false,
         })),
       });
     }
@@ -218,6 +230,31 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
   console.log(`[PAGE_PREFLIGHT] Failed by severity: ${blockerCount} blocker, ${criticalCount} critical, ${highCount} high, ${mediumCount} medium, ${lowCount} low`);
 
   return averageScore;
+}
+
+/**
+ * Get ignored rule codes for a project and URL
+ * Used to auto-apply ignores to new ResultItems
+ */
+async function getIgnoredRuleCodes(projectId: string, url: string): Promise<Set<string>> {
+  const ignoredRules = await prisma.ignoredRule.findMany({
+    where: { projectId, url },
+    select: { code: true },
+  });
+  return new Set(ignoredRules.map(r => r.code));
+}
+
+/**
+ * Apply ignored status to result items based on project's ignored rules
+ */
+function applyIgnoredRules(
+  items: ResultItemToCreate[],
+  ignoredCodes: Set<string>
+): ResultItemToCreate[] {
+  return items.map(item => ({
+    ...item,
+    ignored: ignoredCodes.has(item.code),
+  }));
 }
 
 /**

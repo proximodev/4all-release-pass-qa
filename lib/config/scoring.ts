@@ -113,15 +113,17 @@ export function getStatusBadgeClasses(status: 'pass' | 'fail'): string {
 /**
  * Calculate score from an array of result items.
  * Score starts at 100 and deducts based on failed item severity.
+ * Ignored items are excluded from score calculation.
  * Used by UI to calculate per-URL scores from ResultItems.
  */
 export function calculateScoreFromItems(
-  items: Array<{ status: string; severity?: string }>
+  items: Array<{ status: string; severity?: string; ignored?: boolean }>
 ): number {
   let score = 100
 
   for (const item of items) {
-    if (item.status !== 'FAIL' || !item.severity) continue
+    // Skip non-failing, ignored, or severity-less items
+    if (item.status !== 'FAIL' || item.ignored || !item.severity) continue
 
     const penalty = SCORING_CONFIG.severityPenalties[
       item.severity as keyof typeof SCORING_CONFIG.severityPenalties

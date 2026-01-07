@@ -55,6 +55,7 @@ export interface ResultItem {
   severity?: string
   meta?: Record<string, any>
   releaseRule?: ReleaseRule | null
+  ignored?: boolean  // User-marked as false positive
 }
 
 /**

@@ -2548,6 +2548,63 @@ The spelling provider uses existing dependencies:
 
 **Implementation**: See `worker/providers/spelling/languagetool-client.ts` and `worker/providers/spelling/index.ts`
 
+### Reducing False Positives
+
+LanguageTool can be configured to reduce false positives (e.g., proper nouns, brand names) using environment variables.
+
+#### Configuration Variables
+
+Add to `worker/.env` (and Railway worker Variables):
+
+```bash
+# Level: 'default' or 'picky' (picky enables stricter rules)
+LANGUAGETOOL_LEVEL=default
+
+# Disable entire categories (comma-separated)
+LANGUAGETOOL_DISABLED_CATEGORIES=CASING
+
+# Disable specific rules (comma-separated)
+LANGUAGETOOL_DISABLED_RULES=UPPERCASE_SENTENCE_START
+```
+
+#### Available Categories
+
+| Category ID | Description |
+|-------------|-------------|
+| `CASING` | Uppercase/lowercase issues |
+| `TYPOS` | Spelling mistakes |
+| `GRAMMAR` | Grammar rules |
+| `PUNCTUATION` | Punctuation errors |
+| `TYPOGRAPHY` | Typographical issues |
+| `STYLE` | Style suggestions |
+| `REDUNDANCY` | Redundant words/phrases |
+| `CONFUSED_WORDS` | Commonly confused words (there/their) |
+| `COMPOUNDING` | Compound word issues |
+| `COLLOQUIALISMS` | Informal language |
+| `REPETITIONS` | Repeated words |
+| `REPETITIONS_STYLE` | Stylistic repetitions |
+| `SEMANTICS` | Semantic issues |
+| `GENDER_NEUTRALITY` | Gender-neutral language |
+| `FALSE_FRIENDS` | False cognates between languages |
+| `PLAIN_ENGLISH` | Plain language suggestions |
+| `REGIONALISMS` | Regional language variants |
+| `MISC` | Miscellaneous |
+| `WIKIPEDIA` | Wikipedia-specific rules |
+
+#### Browse All Rules
+
+To find specific rule IDs to disable, browse the complete list of 6,146 English rules:
+https://community.languagetool.org/rule/list?lang=en
+
+#### Recommended Configuration
+
+For web content with brand names and proper nouns:
+
+```bash
+LANGUAGETOOL_LEVEL=default
+LANGUAGETOOL_DISABLED_CATEGORIES=CASING
+```
+
 ---
 
 ## Phase 6.6: Full Site Crawl Provider (SE Ranking) - v1.2

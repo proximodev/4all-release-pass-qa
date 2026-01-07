@@ -6,6 +6,12 @@ export interface CategoryGroup {
   items: ResultItem[]
 }
 
+export interface IgnoreToggleResult {
+  resultItem: ResultItem
+  urlResultScore: number
+  testRunScore: number
+}
+
 export interface ResultsProps {
   resultItems: ResultItem[]
   failedItems: ResultItem[]
@@ -13,4 +19,5 @@ export interface ResultsProps {
   expandedItemId: string | null
   setExpandedItemId: (id: string | null) => void
   loadingItems: boolean
+  onIgnoreToggle?: (itemId: string, ignored: boolean) => Promise<IgnoreToggleResult | null>
 }

@@ -13,7 +13,8 @@ import {
   SpellingResults,
   PerformanceResults,
   BrowserResults,
-  type CategoryGroup
+  type CategoryGroup,
+  type IgnoreToggleResult
 } from './results'
 
 const TEST_TYPE_OPTIONS = [
@@ -122,10 +123,11 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
     const passed = resultItems.filter(item => item.status === 'PASS')
 
     // Group passed items by category and sort by sortOrder
+    // Use releaseRule.category.name if available, otherwise fall back to provider
     const categoryMap = new Map<string, { name: string; sortOrder: number; items: ResultItem[] }>()
 
     passed.forEach(item => {
-      const categoryName = item.releaseRule?.category?.name || 'Uncategorized'
+      const categoryName = item.releaseRule?.category?.name || item.provider || 'Uncategorized'
       const categorySortOrder = item.releaseRule?.category?.sortOrder ?? 999
 
       if (!categoryMap.has(categoryName)) {
@@ -229,6 +231,43 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
       setRerunning(false)
     }
   }, [releaseRun, testRun, title, testType, router])
+
+  const handleIgnoreToggle = useCallback(async (itemId: string, ignored: boolean): Promise<IgnoreToggleResult | null> => {
+    try {
+      const res = await fetch(`/api/result-items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ignored }),
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to update item')
+      }
+
+      const data: IgnoreToggleResult = await res.json()
+
+      // Update local resultItems state
+      setResultItems(prev => prev.map(item =>
+        item.id === itemId ? { ...item, ignored: data.resultItem.ignored } : item
+      ))
+
+      // Update releaseRun state with new testRun score
+      setReleaseRun(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          testRuns: prev.testRuns.map(tr =>
+            tr.type === testType ? { ...tr, score: data.testRunScore } : tr
+          )
+        }
+      })
+
+      return data
+    } catch (err: any) {
+      console.error('Failed to toggle ignore:', err)
+      return null
+    }
+  }, [testType])
 
   if (loading) {
     return (
@@ -390,6 +429,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
                 expandedItemId={expandedItemId}
                 setExpandedItemId={setExpandedItemId}
                 loadingItems={loadingItems}
+                onIgnoreToggle={handleIgnoreToggle}
               />
             )}
             {testType === 'SPELLING' && (
@@ -400,6 +440,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
                 expandedItemId={expandedItemId}
                 setExpandedItemId={setExpandedItemId}
                 loadingItems={loadingItems}
+                onIgnoreToggle={handleIgnoreToggle}
               />
             )}
             {testType === 'PERFORMANCE' && (

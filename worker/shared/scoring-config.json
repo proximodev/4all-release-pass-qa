@@ -3,10 +3,10 @@
   "$comment": "Shared scoring configuration - single source of truth for app and worker.",
 
   "scoring": {
-    "passThreshold": 60,
+    "passThreshold": 70,
     "colorThresholds": {
-      "green": 80,
-      "yellow": 60
+      "green": 90,
+      "yellow": 70
     },
     "severityPenalties": {
       "BLOCKER": 40,

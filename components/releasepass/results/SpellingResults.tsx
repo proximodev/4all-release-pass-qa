@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, memo, useMemo, useState } from 'react'
-import { getSeveritySortOrder } from '@/lib/config/scoring'
+import { getSeveritySortOrder } from '@/lib/scoring'
 import type { ResultsProps } from './types'
 
 function SpellingResults({

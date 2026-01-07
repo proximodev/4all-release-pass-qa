@@ -194,7 +194,7 @@ Failed ResultItems include a `severity` field that determines score penalties:
 
 ### Pass/Fail Threshold
 
-* **Pass threshold**: score >= 50 (configurable in `lib/config/scoring.ts`)
+* **Pass threshold**: score >= 50 (configurable in `lib/scoring`)
 * Score starts at 100 and deducts based on severity of failed items
 
 ### Color Mapping
@@ -479,7 +479,7 @@ Tests are categorized as **page-level** (included in Release Runs) or **site-lev
   * HIGH: -10 points (e.g., missing canonical)
   * MEDIUM: -5 points (e.g., external broken links)
   * LOW: -2 points (e.g., redirect chains)
-* Pass threshold: score >= 50 (configurable in `lib/config/scoring.ts`)
+* Pass threshold: score >= 50 (configurable in `lib/scoring`)
 * Final score: 0-100
 
 ### Site Audit Full Crawl (Site-Level, NOT Part of Release Runs) - Future v1.2

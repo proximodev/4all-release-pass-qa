@@ -5,7 +5,7 @@
  * Extracted from TestResultDetail.tsx for reusability and testability.
  */
 
-import { isPassingScore } from '@/lib/config/scoring'
+import { isPassingScore } from '@/lib/scoring'
 import type { ResultItem, UrlResultData } from '@/lib/types/releasepass'
 
 /**

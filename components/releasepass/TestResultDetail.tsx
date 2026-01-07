@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, memo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Card from '@/components/ui/card/Card'
-import { getScoreBadgeClasses, getStatusBadgeClasses } from '@/lib/config/scoring'
+import { getScoreBadgeClasses, getStatusBadgeClasses } from '@/lib/scoring'
 import { calculateUrlResultSummary } from '@/lib/services/testResults'
 import TabPanel from "@/components/layout/TabPanel";
 import type { ResultItem, ReleaseRun } from '@/lib/types/releasepass'

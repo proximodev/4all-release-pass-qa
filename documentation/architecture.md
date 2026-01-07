@@ -764,7 +764,7 @@ export const SCREENSHOT_VIEWPORTS = [
 // lib/release-readiness.ts
 import { prisma } from '@/lib/prisma';
 import { ReleaseRunStatus, TestStatus, ManualTestType } from '@prisma/client';
-import { isPassingScore } from '@/lib/config/scoring';
+import { isPassingScore } from '@/lib/scoring';
 
 export async function getReleaseRunStatus(releaseRunId: string): Promise<ReleaseRunStatus> {
   // Get the Release Run with all related TestRuns

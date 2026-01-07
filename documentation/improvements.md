@@ -161,12 +161,12 @@ catch (error: unknown) {
 - Updated `TestSelector.tsx` to import from shared types
 
 ### 14. Duplicate Scoring Configuration
-**Location**: `lib/config/scoring.ts`, `worker/lib/scoring.ts`
+**Location**: `lib/scoring/index.ts`, `worker/lib/scoring.ts`
 **Category**: Code Quality
 **Issue**: Identical scoring logic maintained separately in app and worker. Changes must be synced manually.
 **Status**: Complete
 - Created `shared/scoring-config.json` as single source of truth for passThreshold and severityPenalties
-- Updated `lib/config/scoring.ts` to import from shared config
+- Updated `lib/scoring/index.ts` to import from shared config
 - Updated `worker/lib/scoring.ts` to import from shared config
 - Added clear comments explaining the shared config pattern
 - See #34 for future monorepo conversion

@@ -6,7 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { calculateScoreFromItems } from '@/lib/config/scoring'
+import { calculateScoreFromItems } from '@/lib/scoring'
 
 /**
  * Recalculate and update the score for a UrlResult.

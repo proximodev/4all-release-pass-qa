@@ -111,7 +111,7 @@ All check results are stored in the `ResultItem` table, which belongs to `UrlRes
 
 Test scores are calculated by the worker and determine pass/fail status:
 - Score starts at 100, deducts based on severity of failed items
-- **Pass threshold**: score >= 50 (configurable in `lib/config/scoring.ts`)
+- **Pass threshold**: score >= 50 (configurable in `lib/scoring`)
 - Score colors: green (80+), yellow (50-79), red (<50)
 
 ### Data Storage

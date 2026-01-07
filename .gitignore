@@ -48,9 +48,6 @@ Thumbs.db
 *~
 .cache
 
-# Worker config (copied from /shared at build time)
-worker/shared/scoring-config.json
-
 # Misc
 .turbo
 /Temp/Design/new-project.png

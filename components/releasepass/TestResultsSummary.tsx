@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { getScoreBadgeClasses } from '@/lib/config/scoring'
+import { getScoreBadgeClasses } from '@/lib/scoring'
 import type { ResultItem, UrlResultData, TestRunData, ReleaseRun } from '@/lib/types/releasepass'
 
 interface TestResultsSummaryProps {

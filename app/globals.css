@@ -72,9 +72,14 @@
   --color-medium-gray: #DDDBDD;
   --color-dark-gray: #383439;
   --color-charcol: #423F44;
-  --color-red: #dc2626;
+  --color-red: #DC3545;
   --color-text-white: #FFFFFF;
   --color-text-black: #221D23;
+
+  /* Score badge colors */
+  --color-score-green: #28A745;
+  --color-score-yellow: #FFC107;
+  --color-score-red: var(--color-red);
 
   /* Body text */
   --text-s: 0.875rem;   /* 14px */

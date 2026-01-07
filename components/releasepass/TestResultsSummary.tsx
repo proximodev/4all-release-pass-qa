@@ -484,8 +484,8 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
 
                     // Calculate per-URL score based on test type
                     let score: number | null = null
-                    if (testType === 'PAGE_PREFLIGHT' && urlResult?.preflightScore != null) {
-                      // Preflight: use stored per-URL score
+                    if ((testType === 'PAGE_PREFLIGHT' || testType === 'SPELLING') && urlResult?.preflightScore != null) {
+                      // Preflight & Spelling: use stored per-URL score
                       score = urlResult.preflightScore
                     }
 

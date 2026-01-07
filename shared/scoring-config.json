@@ -1,14 +1,58 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$comment": "Shared scoring configuration - single source of truth for app and worker. See lib/config/scoring.ts and worker/lib/scoring.ts for usage.",
+  "$schema": "./scoring-config.schema.json",
+  "$comment": "Shared scoring configuration - single source of truth for app and worker.",
 
-  "passThreshold": 50,
+  "scoring": {
+    "passThreshold": 70,
+    "colorThresholds": {
+      "green": 90,
+      "yellow": 70
+    },
+    "severityPenalties": {
+      "BLOCKER": 40,
+      "CRITICAL": 20,
+      "HIGH": 10,
+      "MEDIUM": 5,
+      "LOW": 2
+    }
+  },
 
-  "severityPenalties": {
-    "BLOCKER": 40,
-    "CRITICAL": 20,
-    "HIGH": 10,
-    "MEDIUM": 5,
-    "LOW": 2
+  "validation": {
+    "cdnWhitelist": [
+      "kit.fontawesome.com",
+      "use.fontawesome.com",
+      "cdnjs.cloudflare.com",
+      "cdn.jsdelivr.net",
+      "unpkg.com",
+      "ajax.googleapis.com",
+      "fonts.googleapis.com",
+      "fonts.gstatic.com",
+      "code.jquery.com",
+      "stackpath.bootstrapcdn.com",
+      "maxcdn.bootstrapcdn.com",
+      "use.typekit.net",
+      "cdn.tailwindcss.com",
+      "cdn.ampproject.org"
+    ],
+    "excludedEndpoints": [
+      "xmlrpc.php",
+      "wp-json",
+      "wp-admin/admin-ajax.php",
+      "wp-admin/admin-post.php",
+      "wp-comments-post.php",
+      "/cdn-cgi/"
+    ]
+  },
+
+  "ui": {
+    "scoreColors": {
+      "green": "score-green",
+      "yellow": "score-yellow",
+      "red": "score-red"
+    },
+    "statusColors": {
+      "pass": "score-green",
+      "fail": "score-red"
+    }
   }
 }

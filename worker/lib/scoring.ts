@@ -3,76 +3,25 @@
  *
  * Controls how test scores are calculated and how pass/fail is determined.
  *
- * IMPORTANT: Core scoring values (passThreshold, severityPenalties) are imported
- * from worker/shared/scoring-config.json. Keep this in sync with /shared/scoring-config.json.
- * See #34 for future monorepo conversion that will eliminate this duplication.
+ * Configuration is imported from worker/shared/scoring-config.json.
+ * This file is copied from /shared/scoring-config.json at build time.
+ * See prebuild script in package.json.
  *
  * This file contains:
- * - Shared config import (passThreshold, severityPenalties)
- * - Worker-specific validation helpers (CDN whitelist, excluded endpoints)
+ * - Config imports (thresholds, penalties, validation rules)
+ * - Validation helpers (CDN whitelist, excluded endpoints)
+ * - Score calculation
  *
- * Post-MVP: Move to database table for GUI configuration:
- * - Pass/fail thresholds (global or per-project)
- * - Severity penalties
- * - CDN whitelist
+ * Post-MVP: Move to database table for GUI configuration.
  */
 
 import sharedConfig from '../shared/scoring-config.json'
 
 export const SCORING_CONFIG = {
-  /**
-   * Score threshold for pass/fail determination.
-   * Imported from shared/scoring-config.json
-   */
-  passThreshold: sharedConfig.passThreshold,
-
-  /**
-   * Point deductions by severity level.
-   * Imported from shared/scoring-config.json
-   */
-  severityPenalties: sharedConfig.severityPenalties,
-
-  /**
-   * CDN domains to skip during link validation.
-   * These often return false positives (403/CORS errors) when fetched directly
-   * but work fine in browsers with proper headers.
-   */
-  cdnWhitelist: [
-    'kit.fontawesome.com',
-    'use.fontawesome.com',
-    'cdnjs.cloudflare.com',
-    'cdn.jsdelivr.net',
-    'unpkg.com',
-    'ajax.googleapis.com',
-    'fonts.googleapis.com',
-    'fonts.gstatic.com',
-    'code.jquery.com',
-    'stackpath.bootstrapcdn.com',
-    'maxcdn.bootstrapcdn.com',
-    'use.typekit.net',
-    'cdn.tailwindcss.com',
-    'cdn.ampproject.org',
-  ],
-
-  /**
-   * URL patterns to exclude from link validation.
-   * These are API endpoints that return errors for GET/HEAD requests
-   * but are not user-facing broken links (e.g., WordPress endpoints).
-   */
-  excludedEndpoints: [
-    // WordPress XML-RPC - requires POST with XML payload, returns 405 for GET/HEAD
-    'xmlrpc.php',
-    // WordPress REST API - may require authentication or specific methods
-    'wp-json',
-    // WordPress admin AJAX - requires POST with specific parameters
-    'wp-admin/admin-ajax.php',
-    // WordPress admin post handler
-    'wp-admin/admin-post.php',
-    // WordPress comments handler
-    'wp-comments-post.php',
-    // Cloudflare services (email protection, challenge pages, scripts, etc.)
-    '/cdn-cgi/',
-  ],
+  passThreshold: sharedConfig.scoring.passThreshold,
+  severityPenalties: sharedConfig.scoring.severityPenalties,
+  cdnWhitelist: sharedConfig.validation.cdnWhitelist,
+  excludedEndpoints: sharedConfig.validation.excludedEndpoints,
 } as const
 
 /**

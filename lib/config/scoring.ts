@@ -3,31 +3,30 @@
  *
  * Controls how test scores are calculated and how pass/fail is determined.
  *
- * IMPORTANT: Core scoring values (passThreshold, severityPenalties) are imported
- * from shared/scoring-config.json to ensure consistency with the worker.
- * DO NOT duplicate these values here - update the JSON file instead.
+ * Configuration is imported from shared/scoring-config.json.
+ * Color values are defined in globals.css via CSS variables.
  *
  * This file contains:
- * - Shared config import (passThreshold, severityPenalties)
- * - App-specific UI helpers (badge styles, color functions)
+ * - Config imports (thresholds, penalties)
+ * - UI helpers (badge class functions)
  *
- * Post-MVP: These values could move to a database table or project-level settings.
+ * Post-MVP: Thresholds could move to database for per-project settings.
  */
 
 import sharedConfig from '@/shared/scoring-config.json'
 
-export const SCORING_CONFIG = {
-  /**
-   * Score threshold for pass/fail determination.
-   * Imported from shared/scoring-config.json
-   */
-  passThreshold: sharedConfig.passThreshold,
+/**
+ * Tailwind safelist - ensures these dynamic classes are included in build.
+ * @see https://tailwindcss.com/docs/content-configuration#safelisting-classes
+ *
+ * bg-score-green bg-score-yellow bg-score-red
+ * text-white text-black
+ */
 
-  /**
-   * Point deductions by severity level.
-   * Imported from shared/scoring-config.json
-   */
-  severityPenalties: sharedConfig.severityPenalties,
+export const SCORING_CONFIG = {
+  passThreshold: sharedConfig.scoring.passThreshold,
+  colorThresholds: sharedConfig.scoring.colorThresholds,
+  severityPenalties: sharedConfig.scoring.severityPenalties,
 } as const
 
 /**
@@ -35,7 +34,7 @@ export const SCORING_CONFIG = {
  * Higher penalty = more severe = lower sort index (sorts first).
  */
 export const SEVERITY_SORT_ORDER: Record<string, number> = Object.fromEntries(
-  Object.entries(sharedConfig.severityPenalties)
+  Object.entries(sharedConfig.scoring.severityPenalties)
     .sort(([, a], [, b]) => b - a)
     .map(([severity], index) => [severity, index])
 )
@@ -52,17 +51,17 @@ export function getSeveritySortOrder(severity: string | undefined | null): numbe
 
 /**
  * Badge styling configuration.
- * Centralized Tailwind classes for score and status badges.
+ * Uses CSS variable-based Tailwind classes defined in globals.css.
  */
 export const SCORE_BADGE_STYLES = {
-  green: { bg: 'bg-green-600', text: 'text-white' },
-  yellow: { bg: 'bg-brand-yellow', text: 'text-black' },
-  red: { bg: 'bg-red', text: 'text-white' },
+  green: { bg: 'bg-score-green', text: 'text-white' },
+  yellow: { bg: 'bg-score-yellow', text: 'text-black' },
+  red: { bg: 'bg-score-red', text: 'text-white' },
 } as const
 
 export const STATUS_BADGE_STYLES = {
-  pass: { bg: 'bg-green-600', text: 'text-white' },
-  fail: { bg: 'bg-red', text: 'text-white' },
+  pass: { bg: 'bg-score-green', text: 'text-white' },
+  fail: { bg: 'bg-score-red', text: 'text-white' },
 } as const
 
 /**
@@ -81,13 +80,11 @@ export function getScoreStatus(score: number): 'PASS' | 'FAIL' {
 
 /**
  * Get the color category based on score
- * - green: 80-100 (good)
- * - yellow: 50-79 (passing but has issues)
- * - red: 0-49 (failing)
+ * Thresholds are defined in shared/scoring-config.json
  */
 export function getScoreColor(score: number): 'green' | 'yellow' | 'red' {
-  if (score >= 80) return 'green'
-  if (score >= SCORING_CONFIG.passThreshold) return 'yellow'
+  if (score >= SCORING_CONFIG.colorThresholds.green) return 'green'
+  if (score >= SCORING_CONFIG.colorThresholds.yellow) return 'yellow'
   return 'red'
 }
 

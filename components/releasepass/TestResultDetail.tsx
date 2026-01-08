@@ -16,13 +16,7 @@ import {
   type CategoryGroup,
   type IgnoreToggleResult
 } from './results'
-
-const TEST_TYPE_OPTIONS = [
-  { value: 'PAGE_PREFLIGHT', label: 'Technical Baseline', route: 'baseline' },
-  { value: 'PERFORMANCE', label: 'Performance', route: 'performance' },
-  { value: 'SPELLING', label: 'Spelling', route: 'spelling' },
-  { value: 'SCREENSHOTS', label: 'Browser', route: 'browser' },
-]
+import { PREFLIGHT_TEST_TYPES } from '@/lib/constants/testTypes'
 
 interface TestResultDetailProps {
   testType: 'PAGE_PREFLIGHT' | 'PERFORMANCE' | 'SPELLING' | 'SCREENSHOTS'
@@ -182,12 +176,12 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
     // Update URL param
     const params = new URLSearchParams(searchParams.toString())
     params.set('urlResult', newUrlResultId)
-    const currentRoute = TEST_TYPE_OPTIONS.find(o => o.value === testType)?.route || 'baseline'
+    const currentRoute = PREFLIGHT_TEST_TYPES.find(o => o.value === testType)?.route || 'baseline'
     router.replace(`/releasepass/preflight/${currentRoute}?${params.toString()}`)
   }, [searchParams, testType, router])
 
   const handleTestTypeChange = useCallback((newTestType: string) => {
-    const option = TEST_TYPE_OPTIONS.find(o => o.value === newTestType)
+    const option = PREFLIGHT_TEST_TYPES.find(o => o.value === newTestType)
     if (!option) return
 
     // Find the URL result for the same URL in the new test type
@@ -324,7 +318,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
     )
   }
 
-  const availableTestTypes = TEST_TYPE_OPTIONS.filter(opt =>
+  const availableTestTypes = PREFLIGHT_TEST_TYPES.filter(opt =>
     releaseRun.selectedTests.includes(opt.value)
   )
 
@@ -345,7 +339,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
                   || urlResults.find(ur => ur.url === selectedUrl)
                 if (match) handleUrlChange(match.id)
               }}
-              className="px-3 py-2 border border-dark-gray/40 rounded text-sm bg-white min-w-[200px]"
+              className="px-3 py-2 border border-dark-gray/40 rounded bg-white min-w-[200px]"
             >
               {/* Get unique URLs */}
               {[...new Set(urlResults.map(ur => ur.url))].map((url) => (
@@ -359,7 +353,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
             <select
               value={testType}
               onChange={(e) => handleTestTypeChange(e.target.value)}
-              className="px-3 py-2 border border-dark-gray/40 rounded text-sm bg-white"
+              className="px-3 py-2 border border-dark-gray/40 rounded bg-white"
             >
               {availableTestTypes.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -377,7 +371,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
           <>
             <div className="mb-6">
               <h3>Summary</h3>
-              <div className="flex flex-wrap gap-x-12 gap-y-4 items-center">
+              <div className="flex flex-wrap gap-x-6 gap-y-4 items-center">
                 {/* Status */}
                 <div className="flex gap-2">
                   <span>Status</span>
@@ -388,7 +382,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
 
                 {/* Score(s) - different display for Performance vs other tests */}
                 {testType === 'PERFORMANCE' ? (
-                  <div className="flex flex-row gap-6">
+                  <div className="flex flex-row gap-4">
                     <div className="flex gap-2">
                       <span>Mobile Score</span>
                       <span className={`px-2 py-0.5 text-s font-medium ${summary.mobileScore !== null ? getScoreBadgeClasses(summary.mobileScore) : 'bg-medium-gray text-black'}`}>
@@ -412,7 +406,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
                 )}
 
                 {/* Stats - hide for Performance tests */}
-                {testType !== 'PERFORMANCE' && (
+                {testType == 'PAGE_PREFLIGHT' && (
                   <div className="flex flex-col gap-0">
                     <div className="mb-0.5">Passed {summary.passCount}/{summary.totalCount} checks</div>
                     {summary.additionalInfo.map((info, i) => (

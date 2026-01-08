@@ -6,18 +6,12 @@ import Input from '@/components/ui/input/Input'
 import Textarea from '@/components/ui/textarea/Textarea'
 import Checkbox from '@/components/ui/checkbox/Checkbox'
 import Button from '@/components/ui/button/Button'
+import { PREFLIGHT_TEST_TYPES } from '@/lib/constants/testTypes'
 
 interface NewPreflightTestFormProps {
   projectId: string
   projectName?: string
 }
-
-const TEST_TYPES = [
-  { id: 'PAGE_PREFLIGHT', label: 'Baseline', defaultChecked: true },
-  { id: 'PERFORMANCE', label: 'Performance', defaultChecked: true },
-  { id: 'SPELLING', label: 'Spelling', defaultChecked: true },
-  { id: 'SCREENSHOTS', label: 'Browser', defaultChecked: true },
-] as const
 
 export default function NewPreflightTestForm({ projectId, projectName }: NewPreflightTestFormProps) {
   const router = useRouter()
@@ -30,7 +24,7 @@ export default function NewPreflightTestForm({ projectId, projectName }: NewPref
 
   const [testName, setTestName] = useState(defaultName)
   const [selectedTests, setSelectedTests] = useState<string[]>(
-    TEST_TYPES.filter((t) => t.defaultChecked).map((t) => t.id)
+    PREFLIGHT_TEST_TYPES.filter((t) => t.defaultChecked).map((t) => t.value)
   )
   const [urls, setUrls] = useState('')
 
@@ -129,12 +123,12 @@ export default function NewPreflightTestForm({ projectId, projectName }: NewPref
         <div>
           <label className="block font-medium mb-3">Test Types</label>
           <div className="flex flex-wrap gap-4">
-            {TEST_TYPES.map((testType) => (
+            {PREFLIGHT_TEST_TYPES.map((testType) => (
                 <Checkbox
-                    key={testType.id}
+                    key={testType.value}
                     label={testType.label}
-                    checked={selectedTests.includes(testType.id)}
-                    onChange={(e) => handleTestTypeChange(testType.id, e.target.checked)}
+                    checked={selectedTests.includes(testType.value)}
+                    onChange={(e) => handleTestTypeChange(testType.value, e.target.checked)}
                 />
             ))}
           </div>

@@ -9,11 +9,12 @@
       "yellow": 70
     },
     "severityPenalties": {
-      "BLOCKER": 40,
-      "CRITICAL": 20,
-      "HIGH": 10,
+      "INFO": 0,
+      "LOW": 2,
       "MEDIUM": 5,
-      "LOW": 2
+      "HIGH": 10,
+      "CRITICAL": 20,
+      "BLOCKER": 40
     }
   },
 

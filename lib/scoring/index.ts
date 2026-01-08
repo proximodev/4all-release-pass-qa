@@ -130,3 +130,70 @@ export function calculateScoreFromItems(
 
   return Math.max(0, Math.min(100, Math.round(score)))
 }
+
+/**
+ * Test types that have numeric scores for release-level calculation.
+ * SCREENSHOTS is excluded as it requires manual review.
+ */
+export const SCORED_TEST_TYPES = ['PAGE_PREFLIGHT', 'PERFORMANCE', 'SPELLING'] as const
+
+/**
+ * Result of release-level score calculation.
+ */
+export interface ReleaseScoreResult {
+  /** Average score across completed scored tests, null if none completed */
+  score: number | null
+  /** Pass/Fail status based on score, null if no score */
+  status: 'Pass' | 'Fail' | null
+  /** Number of scored tests that have completed */
+  completedTests: number
+  /** Total number of scored tests selected for this release */
+  totalScoredTests: number
+}
+
+/**
+ * Calculate release-level score from TestRun scores.
+ * Averages scores from completed scored test types (PAGE_PREFLIGHT, PERFORMANCE, SPELLING).
+ *
+ * @param testRuns - Array of test runs from the release
+ * @param selectedTests - Array of test types selected for this release
+ * @returns Release score result with average score and pass/fail status
+ */
+export function calculateReleaseScore(
+  testRuns: Array<{ type: string; status: string; score: number | null }>,
+  selectedTests: string[]
+): ReleaseScoreResult {
+  // Filter to only scored test types that were selected
+  const scoredSelectedTests = selectedTests.filter(
+    type => SCORED_TEST_TYPES.includes(type as typeof SCORED_TEST_TYPES[number])
+  )
+
+  // Get completed scored test runs with valid scores
+  const completedScoredRuns = testRuns.filter(
+    run =>
+      SCORED_TEST_TYPES.includes(run.type as typeof SCORED_TEST_TYPES[number]) &&
+      (run.status === 'SUCCESS' || run.status === 'PARTIAL') &&
+      run.score !== null
+  )
+
+  // If no completed scored tests, return null
+  if (completedScoredRuns.length === 0) {
+    return {
+      score: null,
+      status: null,
+      completedTests: 0,
+      totalScoredTests: scoredSelectedTests.length,
+    }
+  }
+
+  // Calculate average score
+  const totalScore = completedScoredRuns.reduce((sum, run) => sum + (run.score ?? 0), 0)
+  const averageScore = Math.round(totalScore / completedScoredRuns.length)
+
+  return {
+    score: averageScore,
+    status: isPassingScore(averageScore) ? 'Pass' : 'Fail',
+    completedTests: completedScoredRuns.length,
+    totalScoredTests: scoredSelectedTests.length,
+  }
+}

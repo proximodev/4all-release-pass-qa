@@ -7,7 +7,7 @@ interface PageContainerProps {
 
 export default function PageContainer({ children, className = '' }: PageContainerProps) {
   return (
-    <div className={`space-y-6 ${className}`.trim()}>
+    <div className={`${className}`.trim()}>
       {children}
     </div>
   )

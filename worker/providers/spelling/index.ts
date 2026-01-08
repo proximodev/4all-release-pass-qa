@@ -291,10 +291,9 @@ async function checkUrlSpelling(url: string): Promise<UrlSpellingResult> {
   }
 
   // Check spelling with LanguageTool
+  // Disabled categories/rules can be configured via LANGUAGETOOL_DISABLED_CATEGORIES env var
   const spellingResult = await checkSpelling(text, {
     language: 'auto',
-    // Disable some noisy categories for web content
-    disabledCategories: ['TYPOGRAPHY', 'CASING'],
   });
 
   const resultItems: ResultItemToCreate[] = [];
@@ -412,29 +411,123 @@ function mapMatchToResultItem(match: SpellingMatch): ResultItemToCreate {
 }
 
 /**
- * Map LanguageTool issue type to our severity levels
+ * Clamp severity to a maximum value
+ */
+function clampSeverity(max: IssueSeverity, value: IssueSeverity): IssueSeverity {
+  const order = [
+    IssueSeverity.INFO,
+    IssueSeverity.LOW,
+    IssueSeverity.MEDIUM,
+    IssueSeverity.HIGH,
+    IssueSeverity.CRITICAL,
+    IssueSeverity.BLOCKER,
+  ];
+  const maxIndex = order.indexOf(max);
+  const valueIndex = order.indexOf(value);
+  return valueIndex > maxIndex ? max : value;
+}
+
+/**
+ * Bump severity up or down by delta, clamping to valid range
+ */
+function bumpSeverity(value: IssueSeverity, delta: number): IssueSeverity {
+  const order = [
+    IssueSeverity.INFO,
+    IssueSeverity.LOW,
+    IssueSeverity.MEDIUM,
+    IssueSeverity.HIGH,
+    IssueSeverity.CRITICAL,
+    IssueSeverity.BLOCKER,
+  ];
+  const currentIndex = order.indexOf(value);
+  const newIndex = Math.max(0, Math.min(order.length - 1, currentIndex + delta));
+  return order[newIndex];
+}
+
+/**
+ * Map LanguageTool issue type + category to our severity levels
+ *
+ * Two-stage approach:
+ * Stage 1: Baseline severity by issueType
+ * Stage 2: Caps and nudges by categoryId
  */
 function mapIssueSeverity(issueType: string, categoryId: string): IssueSeverity {
-  // Misspellings are high severity (looks unprofessional)
-  if (issueType === 'misspelling') {
-    return IssueSeverity.HIGH;
+  const it = (issueType || 'uncategorized').toLowerCase();
+  const cat = (categoryId || '').toUpperCase();
+
+  // --- Stage 1: baseline severity by issueType ---
+  const baseByIssueType: Record<string, IssueSeverity> = {
+    misspelling: IssueSeverity.HIGH,
+    typographical: IssueSeverity.HIGH,
+
+    grammar: IssueSeverity.MEDIUM,
+    terminology: IssueSeverity.MEDIUM,
+    markup: IssueSeverity.MEDIUM,
+
+    numbers: IssueSeverity.LOW,
+    formatting: IssueSeverity.LOW,
+    characters: IssueSeverity.LOW,
+
+    inconsistency: IssueSeverity.INFO,
+    duplication: IssueSeverity.INFO,
+    'locale-specific-content': IssueSeverity.INFO,
+    'locale-violation': IssueSeverity.INFO,
+    internationalization: IssueSeverity.INFO,
+    addition: IssueSeverity.INFO,
+    'non-conformance': IssueSeverity.INFO,
+    length: IssueSeverity.INFO,
+    'pattern-problem': IssueSeverity.INFO,
+    other: IssueSeverity.INFO,
+    uncategorized: IssueSeverity.INFO,
+    legal: IssueSeverity.INFO,
+    whitespace: IssueSeverity.INFO,
+    style: IssueSeverity.INFO,
+    register: IssueSeverity.INFO,
+
+    // Translation-centric (won't usually appear unless doing i18n QA)
+    mistranslation: IssueSeverity.HIGH,
+    untranslated: IssueSeverity.HIGH,
+    omission: IssueSeverity.HIGH,
+  };
+
+  let severity = baseByIssueType[it] ?? IssueSeverity.LOW;
+
+  // --- Stage 2A: hard caps by category (marketing-friendly) ---
+  const capsByCategory: Record<string, IssueSeverity> = {
+    TYPOGRAPHY: IssueSeverity.LOW,
+    PUNCTUATION: IssueSeverity.LOW,
+
+    STYLE: IssueSeverity.INFO,
+    COLLOQUIALISMS: IssueSeverity.INFO,
+    GENDER_NEUTRALITY: IssueSeverity.INFO,
+    REGIONALISMS: IssueSeverity.INFO,
+    CREATIVE_WRITING: IssueSeverity.INFO,
+    WIKIPEDIA: IssueSeverity.INFO,
+
+    CASING: IssueSeverity.MEDIUM,
+  };
+
+  const cap = capsByCategory[cat];
+  if (cap !== undefined) {
+    severity = clampSeverity(cap, severity);
   }
 
-  // Grammar errors are critical (can change meaning)
-  if (issueType === 'grammar' || categoryId === 'GRAMMAR') {
-    return IssueSeverity.CRITICAL;
+  // --- Stage 2B: soft adjustments (nudges) ---
+  const bumpByCategory: Record<string, number> = {
+    TYPOS: +1,
+    CONFUSED_WORDS: +1,
+    SEMANTICS: +1,
+    PROPER_NOUNS: +1,
+  };
+
+  const delta = bumpByCategory[cat] ?? 0;
+  if (delta !== 0) {
+    severity = bumpSeverity(severity, delta);
+    // Re-apply cap if there is one
+    if (cap !== undefined) {
+      severity = clampSeverity(cap, severity);
+    }
   }
 
-  // Style suggestions are medium
-  if (issueType === 'style' || categoryId === 'STYLE') {
-    return IssueSeverity.MEDIUM;
-  }
-
-  // Typographical issues are low
-  if (issueType === 'typographical' || categoryId === 'TYPOGRAPHY') {
-    return IssueSeverity.LOW;
-  }
-
-  // Default to medium
-  return IssueSeverity.MEDIUM;
+  return severity;
 }

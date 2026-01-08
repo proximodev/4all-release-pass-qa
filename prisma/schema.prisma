@@ -64,6 +64,7 @@ enum IssueProvider {
 }
 
 enum IssueSeverity {
+  INFO
   LOW
   MEDIUM
   HIGH

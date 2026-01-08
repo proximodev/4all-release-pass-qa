@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getScoreBadgeClasses } from '@/lib/scoring'
+import { TEST_TYPE_LABELS, TEST_TYPE_ROUTES } from '@/lib/constants/testTypes'
 import type { ResultItem, UrlResultData, TestRunData, ReleaseRun } from '@/lib/types/releasepass'
 
 interface TestResultsSummaryProps {
@@ -17,22 +18,7 @@ const TEST_STATUS_STYLES: Record<string, { bg: string; text: string; border?: st
   RUNNING: { bg: 'bg-brand-yellow', text: 'text-black'},
   SUCCESS: { bg: 'bg-brand-cyan', text: 'text-white' },
   FAILED: { bg: 'bg-red', text: 'text-white' },
-  PARTIAL: { bg: 'bg-brand-yellow', text: 'text-black' },
-}
-
-const TEST_TYPE_LABELS: Record<string, string> = {
-  PAGE_PREFLIGHT: 'Technical Baseline',
-  PERFORMANCE: 'Performance',
-  SCREENSHOTS: 'Browser',
-  SPELLING: 'Spelling',
-  SITE_AUDIT: 'Site Audit',
-}
-
-const TEST_TYPE_ROUTES: Record<string, string> = {
-  PAGE_PREFLIGHT: 'baseline',
-  PERFORMANCE: 'performance',
-  SCREENSHOTS: 'browser',
-  SPELLING: 'spelling',
+  PARTIAL: { bg: 'bg-medium-gray', text: 'text-black' },
 }
 
 const POLL_INTERVAL_MS = 5000
@@ -203,7 +189,7 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
     const styles = TEST_STATUS_STYLES[status] || { bg: 'bg-medium-gray', text: 'text-black' }
     const label = status === 'RUNNING' ? 'In Progress' : status.charAt(0) + status.slice(1).toLowerCase()
     return (
-      <span className={`px-2 py-0.5 text-xs font-medium ${styles.bg} ${styles.text} ${styles.border || ''}`}>
+      <span className={`px-2 py-0.5 text-sm font-medium ${styles.bg} ${styles.text} ${styles.border || ''}`}>
         {label}
       </span>
     )
@@ -213,7 +199,7 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
     if (testType === 'SCREENSHOTS') {
       // Browser tests show "Review" badge
       return (
-        <span className="px-2 py-0.5 text-xs font-medium bg-medium-gray text-black">
+        <span className="px-2 py-0.5 text-sm font-medium bg-medium-gray text-black">
           Review
         </span>
       )
@@ -222,14 +208,14 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
     if (score === null) {
       // No score available (e.g., PAGE_PREFLIGHT - score shown in detail view)
       return (
-        <span className="px-2 py-0.5 text-xs font-medium bg-medium-gray text-black">
+        <span className="px-2 py-0.5 text-sm font-medium bg-medium-gray text-black">
           View
         </span>
       )
     }
 
     return (
-      <span className={`px-2 py-0.5 text-xs font-medium ${getScoreBadgeClasses(score)}`}>
+      <span className={`px-2 py-0.5 text-sm font-medium ${getScoreBadgeClasses(score)}`}>
         {score}
       </span>
     )
@@ -460,17 +446,17 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
                           </Link>
                           <div className="flex items-center gap-2">
                             {mobileResult?.performanceScore != null && (
-                              <span className={`px-2 py-0.5 text-xs font-medium ${getScoreBadgeClasses(mobileResult.performanceScore)}`} title="Mobile">
+                              <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(mobileResult.performanceScore)}`} title="Mobile">
                                 {mobileResult.performanceScore}
                               </span>
                             )}
                             {desktopResult?.performanceScore != null && (
-                              <span className={`px-2 py-0.5 text-xs font-medium ${getScoreBadgeClasses(desktopResult.performanceScore)}`} title="Desktop">
+                              <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(desktopResult.performanceScore)}`} title="Desktop">
                                 {desktopResult.performanceScore}
                               </span>
                             )}
                             {mobileResult?.performanceScore == null && desktopResult?.performanceScore == null && (
-                              <span className="px-2 py-0.5 text-xs font-medium bg-medium-gray text-black">
+                              <span className="px-2 py-0.5 text-s font-medium bg-medium-gray text-black">
                                 View
                               </span>
                             )}

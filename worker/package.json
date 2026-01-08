@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "copy-config": "node -e \"require('fs').copyFileSync('../shared/scoring-config.json', './shared/scoring-config.json')\"",
+    "copy-config": "node -e \"const fs=require('fs'); if(fs.existsSync('../shared/scoring-config.json')) fs.copyFileSync('../shared/scoring-config.json', './shared/scoring-config.json');\"",
     "predev": "npm run copy-config",
     "dev": "nodemon --exec ts-node index.ts",
     "prebuild": "npm run copy-config",

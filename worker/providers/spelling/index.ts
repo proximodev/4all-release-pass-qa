@@ -457,9 +457,9 @@ function mapIssueSeverity(issueType: string, categoryId: string): IssueSeverity 
 
   // --- Stage 1: baseline severity by issueType ---
   const baseByIssueType: Record<string, IssueSeverity> = {
-    misspelling: IssueSeverity.HIGH,
     typographical: IssueSeverity.HIGH,
 
+    misspelling: IssueSeverity.MEDIUM,
     grammar: IssueSeverity.MEDIUM,
     terminology: IssueSeverity.MEDIUM,
     markup: IssueSeverity.MEDIUM,

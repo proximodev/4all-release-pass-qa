@@ -266,6 +266,9 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
         }
       })
 
+      // Notify ReleaseStatusBadge to refetch
+      window.dispatchEvent(new CustomEvent('releaserun-score-updated'))
+
       return data
     } catch (err: any) {
       console.error('Failed to toggle ignore:', err)

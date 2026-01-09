@@ -18,6 +18,54 @@ import { checkLinks, LinkCheckResult, LinkCheckSummary } from '../linkinator/cli
 import { runCustomRules } from './custom-rules';
 import { SCORING_CONFIG, getScoreStatus, isWhitelistedCdn, isExcludedEndpoint } from '../../lib/scoring';
 
+/**
+ * Cached ReleaseRule data for severity and display
+ */
+interface ReleaseRuleCache {
+  severity: IssueSeverity;
+  name: string;
+  description: string;
+  impact: string | null;
+  fix: string | null;
+  docUrl: string | null;
+}
+
+type ReleaseRulesMap = Map<string, ReleaseRuleCache>;
+
+/**
+ * Load all active ReleaseRules into a Map for fast lookup
+ * Called once at start of test run to avoid repeated DB queries
+ */
+async function loadReleaseRules(): Promise<ReleaseRulesMap> {
+  const rules = await prisma.releaseRule.findMany({
+    where: { isActive: true },
+    select: {
+      code: true,
+      severity: true,
+      name: true,
+      description: true,
+      impact: true,
+      fix: true,
+      docUrl: true,
+    },
+  });
+
+  const rulesMap = new Map<string, ReleaseRuleCache>();
+  for (const rule of rules) {
+    rulesMap.set(rule.code, {
+      severity: rule.severity,
+      name: rule.name,
+      description: rule.description,
+      impact: rule.impact,
+      fix: rule.fix,
+      docUrl: rule.docUrl,
+    });
+  }
+
+  console.log(`[PAGE_PREFLIGHT] Loaded ${rulesMap.size} ReleaseRules for severity lookup`);
+  return rulesMap;
+}
+
 interface TestRunWithRelations {
   id: string;
   projectId: string;
@@ -75,6 +123,9 @@ export interface PreflightProviderResult {
 export async function processPagePreflight(testRun: TestRunWithRelations): Promise<PreflightProviderResult> {
   console.log(`[PAGE_PREFLIGHT] Starting for test run ${testRun.id}`);
 
+  // Load ReleaseRules for severity lookup (batch load once)
+  const rulesMap = await loadReleaseRules();
+
   // Get URLs to test
   const urls = getUrlsToTest(testRun);
 
@@ -116,7 +167,7 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
       };
 
       // Run Lighthouse SEO checks
-      const { resultItems: seoItems, result: lighthouseResult } = await runLighthouseSeo(url);
+      const { resultItems: seoItems, result: lighthouseResult } = await runLighthouseSeo(url, rulesMap);
       urlCheckResult.resultItems.push(...seoItems);
 
       if (lighthouseResult) {
@@ -126,7 +177,7 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
       }
 
       // Run Linkinator checks
-      const { resultItems: linkItems, result: linkinatorResult } = await runLinkinator(url);
+      const { resultItems: linkItems, result: linkinatorResult } = await runLinkinator(url, rulesMap);
       urlCheckResult.resultItems.push(...linkItems);
 
       if (linkinatorResult) {
@@ -140,7 +191,7 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
       }
 
       // Run custom rules (H1, viewport, etc.)
-      const customItems = await runCustomRulesWithErrorHandling(url);
+      const customItems = await runCustomRulesWithErrorHandling(url, rulesMap);
       urlCheckResult.resultItems.push(...customItems);
 
       // Apply ignored rules to result items
@@ -343,10 +394,25 @@ function getUrlsToTest(testRun: TestRunWithRelations): string[] {
 }
 
 /**
+ * Get severity from ReleaseRule cache, falling back to hardcoded value
+ */
+function getSeverityFromRule(
+  code: string,
+  rulesMap: ReleaseRulesMap,
+  fallbackFn: () => IssueSeverity
+): IssueSeverity {
+  const rule = rulesMap.get(code);
+  return rule?.severity ?? fallbackFn();
+}
+
+/**
  * Run Lighthouse SEO audits via PageSpeed API
  * Returns ALL audit results (pass + fail)
  */
-async function runLighthouseSeo(url: string): Promise<{ resultItems: ResultItemToCreate[]; result: PageSpeedResult | null }> {
+async function runLighthouseSeo(
+  url: string,
+  rulesMap: ReleaseRulesMap
+): Promise<{ resultItems: ResultItemToCreate[]; result: PageSpeedResult | null }> {
   const resultItems: ResultItemToCreate[] = [];
   let result: PageSpeedResult | null = null;
 
@@ -359,7 +425,8 @@ async function runLighthouseSeo(url: string): Promise<{ resultItems: ResultItemT
     // Create ResultItems for ALL audits (pass + fail)
     for (const audit of result.seoAudits) {
       const isPassing = audit.score === null || audit.score >= 1;
-      const severity = mapSeoAuditSeverity(audit);
+      // Use ReleaseRule severity if available, otherwise fall back to hardcoded
+      const severity = getSeverityFromRule(audit.id, rulesMap, () => mapSeoAuditSeverity(audit));
 
       resultItems.push({
         provider: IssueProvider.LIGHTHOUSE,
@@ -395,7 +462,10 @@ async function runLighthouseSeo(url: string): Promise<{ resultItems: ResultItemT
  * Run Linkinator link validation
  * Returns results for broken links (no pass items for working links to avoid clutter)
  */
-async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCreate[]; result: LinkCheckSummary | null }> {
+async function runLinkinator(
+  url: string,
+  rulesMap: ReleaseRulesMap
+): Promise<{ resultItems: ResultItemToCreate[]; result: LinkCheckSummary | null }> {
   const resultItems: ResultItemToCreate[] = [];
   let result: LinkCheckSummary | null = null;
 
@@ -435,11 +505,13 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
       }
 
       const isInternal = isInternalLink(url, link.url);
-      const severity = mapLinkSeverity(link, isInternal);
+      const code = isInternal ? 'BROKEN_INTERNAL_LINK' : 'BROKEN_EXTERNAL_LINK';
+      // Use ReleaseRule severity if available, otherwise fall back to hardcoded
+      const severity = getSeverityFromRule(code, rulesMap, () => mapLinkSeverity(link, isInternal));
 
       resultItems.push({
         provider: IssueProvider.LINKINATOR,
-        code: isInternal ? 'BROKEN_INTERNAL_LINK' : 'BROKEN_EXTERNAL_LINK',
+        code,
         name: `Broken ${isInternal ? 'internal' : 'external'} link: ${link.url}`,
         status: ResultStatus.FAIL,
         severity,
@@ -455,12 +527,14 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
     // Add info items for internal redirect chains
     for (const redirect of result.redirects) {
       if (isInternalLink(url, redirect.url)) {
+        // Use ReleaseRule severity if available, otherwise fall back to hardcoded LOW
+        const severity = getSeverityFromRule('REDIRECT_CHAIN', rulesMap, () => IssueSeverity.LOW);
         resultItems.push({
           provider: IssueProvider.LINKINATOR,
           code: 'REDIRECT_CHAIN',
           name: `Internal redirect: ${redirect.url}`,
           status: ResultStatus.FAIL,
-          severity: IssueSeverity.LOW,
+          severity,
           meta: {
             redirectUrl: redirect.url,
             status: redirect.status,
@@ -566,10 +640,13 @@ function calculateScore(failedItems: ResultItemToCreate[]): number {
  * Run custom rules
  * Throws on operational errors
  */
-async function runCustomRulesWithErrorHandling(url: string): Promise<ResultItemToCreate[]> {
+async function runCustomRulesWithErrorHandling(
+  url: string,
+  rulesMap: ReleaseRulesMap
+): Promise<ResultItemToCreate[]> {
   try {
     console.log(`[PAGE_PREFLIGHT] Running custom rules for ${url}...`);
-    const items = await runCustomRules(url);
+    const items = await runCustomRules(url, rulesMap);
 
     const passCount = items.filter(i => i.status === ResultStatus.PASS).length;
     const failCount = items.filter(i => i.status === ResultStatus.FAIL).length;

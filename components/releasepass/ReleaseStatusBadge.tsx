@@ -58,6 +58,18 @@ export default function ReleaseStatusBadge() {
     return () => clearInterval(intervalId)
   }, [releaseRun, fetchReleaseRun])
 
+  // Listen for score updates from ignore toggle
+  useEffect(() => {
+    if (!releaseRun) return
+
+    const handleScoreUpdate = () => {
+      fetchReleaseRun(releaseRun.id, false)
+    }
+
+    window.addEventListener('releaserun-score-updated', handleScoreUpdate)
+    return () => window.removeEventListener('releaserun-score-updated', handleScoreUpdate)
+  }, [releaseRun, fetchReleaseRun])
+
   // Don't render if no test selected or still loading
   if (!testId || loading || !releaseRun) {
     return null

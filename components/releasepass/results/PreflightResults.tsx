@@ -3,6 +3,56 @@
 import { Fragment, memo, useMemo, useState } from 'react'
 import { getSeveritySortOrder } from '@/lib/scoring'
 import type { ResultsProps } from './types'
+import { IgnoreToggleButton } from './IgnoreToggleButton'
+
+/**
+ * Render meta fields as nested ul/li structure
+ * Displays ResultItem.meta data as-is for error details
+ */
+function renderMetaFields(meta: Record<string, unknown>, depth = 0): React.ReactNode[] {
+  const maxDepth = 3 // Prevent infinite nesting
+
+  return Object.entries(meta).map(([key, value]) => {
+    if (value === null || value === undefined) return null
+
+    // Handle nested objects
+    if (typeof value === 'object' && !Array.isArray(value) && depth < maxDepth) {
+      return (
+        <li key={key}>
+          <span className="font-medium">{key}:</span>
+          <ul className="ml-4 list-disc">
+            {renderMetaFields(value as Record<string, unknown>, depth + 1)}
+          </ul>
+        </li>
+      )
+    }
+
+    // Handle arrays
+    if (Array.isArray(value)) {
+      if (value.length === 0) return null
+      return (
+        <li key={key}>
+          <span className="font-medium">{key}:</span>
+          <ul className="ml-4 list-disc">
+            {value.slice(0, 10).map((item, i) => (
+              <li key={i}>
+                {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+              </li>
+            ))}
+            {value.length > 10 && <li className="text-black/60">...and {value.length - 10} more</li>}
+          </ul>
+        </li>
+      )
+    }
+
+    // Handle primitive values
+    return (
+      <li key={key}>
+        <span className="font-medium">{key}:</span> {String(value)}
+      </li>
+    )
+  }).filter(Boolean)
+}
 
 function PreflightResults({
   failedItems,
@@ -73,10 +123,8 @@ function PreflightResults({
                 {sortedFailedItems.map((item, index) => {
                   const rule = item.releaseRule
                   const isExpanded = expandedItemId === item.id
-                  // Use rule name + description, or fall back to item.name
-                  const testName = rule
-                    ? `${rule.name}${rule.description ? ` - ${rule.description}` : ''}`
-                    : item.name
+                  // For failed tests: always use ResultItem.name (dynamic error message)
+                  const testName = item.name
                   // Use rule category, or fall back to provider name
                   const categoryName = rule?.category?.name || item.provider || '—'
                   const severityValue = rule?.severity || item.severity || '—'
@@ -95,23 +143,11 @@ function PreflightResults({
                         <td className={`py-2 pr-6 whitespace-nowrap ${isIgnored ? 'line-through' : ''}`}>{severityValue}</td>
                         {onIgnoreToggle && (
                           <td className="py-2 text-center">
-                            <button
+                            <IgnoreToggleButton
+                              isIgnored={isIgnored}
+                              isToggling={isToggling}
                               onClick={(e) => handleIgnoreClick(e, item.id, isIgnored)}
-                              disabled={isToggling}
-                              className={`p-1 rounded hover:bg-black/10 transition-colors ${isToggling ? 'opacity-50' : ''}`}
-                              title={isIgnored ? 'Include in score' : 'Ignore (false positive)'}
-                            >
-                              {isIgnored ? (
-                                <svg className="w-5 h-5 text-black/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                              ) : (
-                                <svg className="w-5 h-5 text-black/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                                </svg>
-                              )}
-                            </button>
+                            />
                           </td>
                         )}
                         <td className="py-2 text-right">
@@ -128,20 +164,20 @@ function PreflightResults({
                       {isExpanded && (
                         <tr key={`${item.id}-details`}>
                           <td colSpan={onIgnoreToggle ? 5 : 4} className="bg-black/5 py-3 px-4 border-b border-dark-gray/40">
-                            {rule?.fix && (
-                              <div className="mb-2">
-                                <span className="font-medium">Fix: </span>
-                                <span className="text-black/80">{rule.fix}</span>
-                              </div>
-                            )}
                             {rule?.impact && (
                               <div className="mb-2">
                                 <span className="font-medium">Impact: </span>
                                 <span className="text-black/80">{rule.impact}</span>
                               </div>
                             )}
+                            {rule?.fix && (
+                              <div className="mb-2">
+                                <span className="font-medium">Fix: </span>
+                                <span className="text-black/80">{rule.fix}</span>
+                              </div>
+                            )}
                             {rule?.docUrl && (
-                              <div>
+                              <div className="mb-2">
                                 <a
                                   href={rule.docUrl}
                                   target="_blank"
@@ -152,7 +188,18 @@ function PreflightResults({
                                 </a>
                               </div>
                             )}
-                            {!rule?.fix && !rule?.impact && !rule?.docUrl && (
+                            {/* Error Details - only for LINKINATOR and ReleasePass failed items */}
+                            {(item.provider === 'LINKINATOR' || item.provider === 'ReleasePass') &&
+                             item.meta && Object.keys(item.meta).length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-dark-gray/20">
+                                <span className="font-medium">Error Details:</span>
+                                <ul className="mt-1 ml-4 list-disc text-black/80 text-sm">
+                                  {renderMetaFields(item.meta)}
+                                </ul>
+                              </div>
+                            )}
+                            {!rule?.fix && !rule?.impact && !rule?.docUrl &&
+                             !(item.provider === 'LINKINATOR' || item.provider === 'ReleasePass') && (
                               <span className="text-black/60">No additional details available.</span>
                             )}
                           </td>
@@ -201,16 +248,16 @@ function PreflightResults({
                       </div>
                       {isExpanded && (
                         <div className="bg-black/5 py-3 px-4">
-                          {rule?.fix && (
-                            <div className="mb-2">
-                              <span className="font-medium">Fix: </span>
-                              <span className="text-black/80">{rule.fix}</span>
-                            </div>
-                          )}
                           {rule?.impact && (
                             <div className="mb-2">
                               <span className="font-medium">Impact: </span>
                               <span className="text-black/80">{rule.impact}</span>
+                            </div>
+                          )}
+                          {rule?.fix && (
+                            <div className="mb-2">
+                              <span className="font-medium">Fix: </span>
+                              <span className="text-black/80">{rule.fix}</span>
                             </div>
                           )}
                           {rule?.docUrl && (

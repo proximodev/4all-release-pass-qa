@@ -39,6 +39,20 @@ import type { Element } from 'domhandler';
 import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { fetchWithTimeout } from '../../lib/fetch';
 
+/**
+ * Cached ReleaseRule data for severity lookup
+ */
+interface ReleaseRuleCache {
+  severity: IssueSeverity;
+  name: string;
+  description: string;
+  impact: string | null;
+  fix: string | null;
+  docUrl: string | null;
+}
+
+type ReleaseRulesMap = Map<string, ReleaseRuleCache>;
+
 interface ResultItemToCreate {
   provider: IssueProvider;
   code: string;
@@ -56,29 +70,44 @@ interface FetchedPage {
 }
 
 /**
+ * Get severity from ReleaseRule cache, falling back to hardcoded value
+ */
+function getSeverityFromRule(
+  code: string,
+  rulesMap: ReleaseRulesMap,
+  fallback: IssueSeverity
+): IssueSeverity {
+  const rule = rulesMap.get(code);
+  return rule?.severity ?? fallback;
+}
+
+/**
  * Run all custom rules against a URL
  */
-export async function runCustomRules(url: string): Promise<ResultItemToCreate[]> {
+export async function runCustomRules(
+  url: string,
+  rulesMap: ReleaseRulesMap
+): Promise<ResultItemToCreate[]> {
   const results: ResultItemToCreate[] = [];
 
   const page = await fetchPage(url);
   const $ = cheerio.load(page.html);
 
   // Batch 1: H1 + Viewport rules
-  results.push(...checkH1Rules($));
-  results.push(...checkViewportRules($));
+  results.push(...checkH1Rules($, rulesMap));
+  results.push(...checkViewportRules($, rulesMap));
 
   // Batch 2: Indexing rules
-  results.push(...checkIndexingRules($, page));
+  results.push(...checkIndexingRules($, page, rulesMap));
 
   // Batch 3: Canonical rules
-  results.push(...checkCanonicalRules($, page));
+  results.push(...checkCanonicalRules($, page, rulesMap));
 
   // Batch 4: Security rules
-  results.push(...checkSecurityRules($, page));
+  results.push(...checkSecurityRules($, page, rulesMap));
 
   // Batch 5: Link rules
-  results.push(...checkLinkRules($));
+  results.push(...checkLinkRules($, rulesMap));
 
   return results;
 }
@@ -126,13 +155,16 @@ function createPass(code: string, name: string, meta?: Record<string, unknown>):
 
 /**
  * Create a FAIL result item
+ * Uses ReleaseRule severity if available, otherwise falls back to provided severity
  */
 function createFail(
   code: string,
   name: string,
-  severity: IssueSeverity,
+  fallbackSeverity: IssueSeverity,
+  rulesMap: ReleaseRulesMap,
   meta?: Record<string, unknown>
 ): ResultItemToCreate {
+  const severity = getSeverityFromRule(code, rulesMap, fallbackSeverity);
   return {
     provider: IssueProvider.ReleasePass,
     code,
@@ -153,7 +185,7 @@ function createFail(
  * - PREFLIGHT_H1_MULTIPLE: More than one H1
  * - PREFLIGHT_H1_EMPTY: H1 exists but is empty/whitespace
  */
-function checkH1Rules($: CheerioAPI): ResultItemToCreate[] {
+function checkH1Rules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
   const results: ResultItemToCreate[] = [];
   const h1Elements = $('h1');
   const h1Count = h1Elements.length;
@@ -165,6 +197,7 @@ function checkH1Rules($: CheerioAPI): ResultItemToCreate[] {
         'PREFLIGHT_H1_MISSING',
         'No H1 heading found on page',
         IssueSeverity.BLOCKER,
+        rulesMap,
         { h1Count: 0 }
       )
     );
@@ -185,6 +218,7 @@ function checkH1Rules($: CheerioAPI): ResultItemToCreate[] {
         'PREFLIGHT_H1_MULTIPLE',
         `Multiple H1 headings found (${h1Count})`,
         IssueSeverity.CRITICAL,
+        rulesMap,
         { h1Count, h1Texts }
       )
     );
@@ -212,6 +246,7 @@ function checkH1Rules($: CheerioAPI): ResultItemToCreate[] {
         'PREFLIGHT_H1_EMPTY',
         'H1 heading is empty or whitespace-only',
         IssueSeverity.BLOCKER,
+        rulesMap,
         { emptyH1Indices }
       )
     );
@@ -233,7 +268,7 @@ function checkH1Rules($: CheerioAPI): ResultItemToCreate[] {
  * Check viewport meta tag:
  * - PREFLIGHT_VIEWPORT_MISSING: No viewport meta tag
  */
-function checkViewportRules($: CheerioAPI): ResultItemToCreate[] {
+function checkViewportRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
   const results: ResultItemToCreate[] = [];
 
   // Look for <meta name="viewport" ...>
@@ -245,6 +280,7 @@ function checkViewportRules($: CheerioAPI): ResultItemToCreate[] {
         'PREFLIGHT_VIEWPORT_MISSING',
         'Viewport meta tag missing',
         IssueSeverity.CRITICAL,
+        rulesMap,
         { reason: 'Page not optimized for mobile devices' }
       )
     );
@@ -282,7 +318,7 @@ function parseRobotsDirectives(value: string): Set<string> {
  * - PREFLIGHT_INDEX_NOFOLLOW: Page marked nofollow via meta or headers
  * - PREFLIGHT_INDEX_CONFLICT: Conflicting index directives (meta vs headers)
  */
-function checkIndexingRules($: CheerioAPI, page: FetchedPage): ResultItemToCreate[] {
+function checkIndexingRules($: CheerioAPI, page: FetchedPage, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
   const results: ResultItemToCreate[] = [];
 
   // Get X-Robots-Tag header (can have multiple values)
@@ -306,6 +342,7 @@ function checkIndexingRules($: CheerioAPI, page: FetchedPage): ResultItemToCreat
         'PREFLIGHT_INDEX_NOINDEX_HEADER',
         'Page blocked from indexing via X-Robots-Tag header',
         IssueSeverity.BLOCKER,
+        rulesMap,
         { xRobotsTag, directive: 'noindex' }
       )
     );
@@ -332,6 +369,7 @@ function checkIndexingRules($: CheerioAPI, page: FetchedPage): ResultItemToCreat
         'PREFLIGHT_INDEX_NOFOLLOW',
         `Page marked nofollow via ${nofollowSource === 'header' ? 'X-Robots-Tag header' : 'meta robots'}`,
         IssueSeverity.CRITICAL,
+        rulesMap,
         {
           source: nofollowSource,
           xRobotsTag: xRobotsTag || '(not set)',
@@ -361,6 +399,7 @@ function checkIndexingRules($: CheerioAPI, page: FetchedPage): ResultItemToCreat
         'PREFLIGHT_INDEX_CONFLICT',
         'Conflicting indexing directives between meta and headers',
         IssueSeverity.BLOCKER,
+        rulesMap,
         {
           xRobotsTag: xRobotsTag || '(not set)',
           metaRobots: metaRobots || '(not set)',
@@ -502,7 +541,7 @@ function hasTrackingParams(urlString: string): { has: boolean; params: string[] 
  * - PREFLIGHT_CANONICAL_HOSTNAME: Canonical points to different hostname
  * - PREFLIGHT_CANONICAL_PARAMS: Canonical contains tracking parameters
  */
-function checkCanonicalRules($: CheerioAPI, page: FetchedPage): ResultItemToCreate[] {
+function checkCanonicalRules($: CheerioAPI, page: FetchedPage, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
   const results: ResultItemToCreate[] = [];
 
   // Find all canonical link tags
@@ -516,6 +555,7 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage): ResultItemToCrea
         'PREFLIGHT_CANONICAL_MISSING',
         'Canonical tag missing',
         IssueSeverity.BLOCKER,
+        rulesMap,
         { reason: 'Page may be treated as duplicate or ignored by search engines' }
       )
     );
@@ -535,6 +575,7 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage): ResultItemToCrea
         'PREFLIGHT_CANONICAL_MULTIPLE',
         `Multiple canonical tags found (${canonicalCount})`,
         IssueSeverity.BLOCKER,
+        rulesMap,
         { count: canonicalCount, hrefs }
       )
     );
@@ -554,6 +595,7 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage): ResultItemToCrea
         'PREFLIGHT_CANONICAL_MISMATCH',
         'Canonical tag has empty href',
         IssueSeverity.BLOCKER,
+        rulesMap,
         { canonical: '', pageUrl: page.finalUrl }
       )
     );
@@ -570,6 +612,7 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage): ResultItemToCrea
         'PREFLIGHT_CANONICAL_MISMATCH',
         'Canonical tag has invalid URL',
         IssueSeverity.BLOCKER,
+        rulesMap,
         { canonical: canonicalHref, pageUrl: page.finalUrl }
       )
     );
@@ -586,6 +629,7 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage): ResultItemToCrea
         'PREFLIGHT_CANONICAL_PROTOCOL',
         `Canonical uses ${canonicalProtocol} but page is ${pageProtocol}`,
         IssueSeverity.BLOCKER,
+        rulesMap,
         {
           canonicalProtocol,
           pageProtocol,
@@ -611,6 +655,7 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage): ResultItemToCrea
         'PREFLIGHT_CANONICAL_HOSTNAME',
         `Canonical points to different hostname: ${canonicalHostname}`,
         IssueSeverity.BLOCKER,
+        rulesMap,
         {
           canonicalHostname,
           pageHostname,
@@ -637,6 +682,7 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage): ResultItemToCrea
         'PREFLIGHT_CANONICAL_MISMATCH',
         'Canonical points to a different URL',
         IssueSeverity.BLOCKER,
+        rulesMap,
         {
           canonical: canonicalUrl,
           pageUrl: page.finalUrl,
@@ -662,6 +708,7 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage): ResultItemToCrea
         'PREFLIGHT_CANONICAL_PARAMS',
         `Canonical contains tracking parameters: ${trackingCheck.params.join(', ')}`,
         IssueSeverity.CRITICAL,
+        rulesMap,
         {
           canonical: canonicalUrl,
           trackingParams: trackingCheck.params,
@@ -701,7 +748,7 @@ function isHttpUrl(urlString: string): boolean {
  * - PREFLIGHT_SECURITY_MIXED_CONTENT: Mixed content assets detected
  * - PREFLIGHT_SECURITY_IFRAME: Insecure iframe embeds detected
  */
-function checkSecurityRules($: CheerioAPI, page: FetchedPage): ResultItemToCreate[] {
+function checkSecurityRules($: CheerioAPI, page: FetchedPage, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
   const results: ResultItemToCreate[] = [];
 
   // --- PREFLIGHT_SECURITY_HTTP ---
@@ -714,6 +761,7 @@ function checkSecurityRules($: CheerioAPI, page: FetchedPage): ResultItemToCreat
         'PREFLIGHT_SECURITY_HTTP',
         'Page served over insecure HTTP',
         IssueSeverity.BLOCKER,
+        rulesMap,
         { url: page.finalUrl, protocol: 'http:' }
       )
     );
@@ -759,6 +807,7 @@ function checkSecurityRules($: CheerioAPI, page: FetchedPage): ResultItemToCreat
         'PREFLIGHT_SECURITY_HTTP_URLS',
         `Found ${httpUrls.length} HTTP URL(s) in meta tags`,
         IssueSeverity.BLOCKER,
+        rulesMap,
         { httpUrls }
       )
     );
@@ -825,6 +874,7 @@ function checkSecurityRules($: CheerioAPI, page: FetchedPage): ResultItemToCreat
         'PREFLIGHT_SECURITY_MIXED_CONTENT',
         `Found ${mixedContent.length} mixed content resource(s)`,
         IssueSeverity.CRITICAL,
+        rulesMap,
         {
           count: mixedContent.length,
           examples: limitedMixed,
@@ -854,6 +904,7 @@ function checkSecurityRules($: CheerioAPI, page: FetchedPage): ResultItemToCreat
         'PREFLIGHT_SECURITY_IFRAME',
         `Found ${insecureIframes.length} insecure iframe(s)`,
         IssueSeverity.CRITICAL,
+        rulesMap,
         {
           count: insecureIframes.length,
           iframes: insecureIframes.slice(0, 5), // Limit to 5
@@ -940,7 +991,7 @@ function isNavDropdownTrigger($: CheerioAPI, $el: Cheerio<Element>): {
  * Excludes navigation dropdown triggers (intentional patterns) and reports
  * the count of excluded items in the PASS meta.
  */
-function checkLinkRules($: CheerioAPI): ResultItemToCreate[] {
+function checkLinkRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
   const results: ResultItemToCreate[] = [];
 
   // Track empty links and excluded nav dropdowns separately
@@ -983,6 +1034,7 @@ function checkLinkRules($: CheerioAPI): ResultItemToCreate[] {
         'PREFLIGHT_EMPTY_LINK',
         `Found ${emptyLinks.length} placeholder link(s) with href="#"`,
         IssueSeverity.BLOCKER,
+        rulesMap,
         {
           count: emptyLinks.length,
           examples: emptyLinks.slice(0, 10), // Limit to 10

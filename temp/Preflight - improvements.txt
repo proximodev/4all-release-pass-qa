@@ -1,7 +1,10 @@
-Baseline:
---------
+-------------------------------------------------------------
+Baseline UPDATES:
+-------------------------------------------------------------
 
-1 - Empty links (#)
+-------------------------------------------------------------
+Empty links (#)
+-------------------------------------------------------------
 - Update to exclude links in head
 
 Questions 1:
@@ -27,19 +30,256 @@ Answers 1:
 
 --
 
+Action: Skip nav elements but note in meta
+Status: COMPLETE
+
+-------------------------------------------------------------
+Result Detail Updates (Preflight)
+-------------------------------------------------------------
+
+A. General Requirements
+-----------------------
+Review preflight rules from all providers (custom, linkanator, lighthouse) and always use ReleaseRule for the following:
+
+1 - ReleaseRule.severity (some rules may be hardcoded)
+2 - ReleaseRule.description
+3 - ReleaseRule.impact
+4 - ReleaseRule.fix
+5 - ReleaseRule.docUrl
+
+Additional info:
+1 - For custom rules, which have hardcoded values, remove or fallback on them. Recommend.
+2-4 - These should already be implemented.
+
+B. ReleaseRule.name and ResultItem.name
+---------------------------------------
+We also use ReleaseRule.name for all/most preflight rules. We will make the following changes:
+
+1 - Pass tests: Use ReleaseRule.name (current state)
+-- In UI: [ReleaseRule.name] - [ReleaseRule.description]
+
+2 - Failed tests: Use ResultItem.name (new)
+-- In UI: [ResultItem.name]
+
+For failed tests, we will omit description.
+
+C. Test Details
+---------------
+In additional to name and description, we have test details of impact, fix and docurl. We will make the following changes:
+
+1 - All tests: Change order so that ReleaseRule.impact is first and ReleaseRule.fix is second (url third)
+2 - Failed tests: Below URL display a new section called "Error Details" and output contents of ResultItem.meta. This should loop through the JSON and out name/value pairs. Use a ul/li structure with nesting where appropriate to JSON structure. For now only output LINKANATOR and ReleasePass providers (LIGHTHOUSE data does not appear to be very detail or informtional)
+
+Next step:
+----------
+Analyze requirements, review code, and ask questions.
+
+---
+
+Questions 1:
+
+1. Severity Lookup Strategy
+
+Worker needs to query ReleaseRule for severity. I recommend:
+- Batch lookup: At start of preflight processing, query all ReleaseRules once, cache in memory as Map<code, ReleaseRule>
+- Fallback: If rule not in DB, use hardcoded severity (ensures new rules work before DB is seeded)
+
+Agree?
+
+2. Scope
+
+- Preflight only for this change, or also Spelling/Performance providers?
+
+3. Meta Display for Error Details (C.2)
+
+For LINKINATOR and ReleasePass meta, should I:
+- Display all fields as-is
+- Exclude internal fields (e.g., IDs, technical data)
+- Format keys for readability (e.g., brokenUrl → "Broken URL")
+
+4. Linkinator releaseRuleCode
+
+Currently not set. Should I add it so ReleaseRule data is available? Codes would be:
+- BROKEN_INTERNAL_LINK
+- BROKEN_EXTERNAL_LINK
+- REDIRECT_CHAIN
+- LINK_CHECK_PASSED
+
+5. ResultItem.name for Failed Tests (B.2)
+
+Current item.name values are dynamic messages like:
+- Lighthouse: "Document has a <title> element"
+- Linkinator: "Broken internal link: https://example.com/page"
+- Custom: "No H1 heading found on page"
+
+Are these the intended display values for failed tests, or should we create more specific error messages?
 
 
+Answers 1:
+1 - Yes
+2 - Preflight only
+3 - As is
+4 - Yes
+5 - Yes but lighthouse will not be included
+
+----
+
+ Analysis: ResultItem.name Sources
+  ┌────────────────────┬──────────────────────────────┬───────────────────┬──────────────────────────────────┐
+  │      Provider      │            Source            │ Controlled by Us? │             Examples             │
+  ├────────────────────┼──────────────────────────────┼───────────────────┼──────────────────────────────────┤
+  │ Lighthouse         │ PageSpeed API (audit.title)  │ ✗ No              │ "Document has a <title> element" │
+  ├────────────────────┼──────────────────────────────┼───────────────────┼──────────────────────────────────┤
+  │ Linkinator         │ Hardcoded in index.ts        │ ✓ Yes             │ "Broken internal link: {url}"    │
+  ├────────────────────┼──────────────────────────────┼───────────────────┼──────────────────────────────────┤
+  │ Custom/ReleasePass │ Hardcoded in custom-rules.ts │ ✓ Yes             │ "No H1 heading found on page"    │
+  └────────────────────┴──────────────────────────────┴───────────────────┴──────────────────────────────────┘
+  Controlled Names (can modify)
+
+  Linkinator (in preflight/index.ts):
+  - "Broken internal link: ${link.url}"
+  - "Broken external link: ${link.url}"
+  - "Redirect chain: ${link.url} (${hops} hops)"
+  - "All links are valid"
+
+  Custom Rules (in custom-rules.ts) - all 18+ rules, examples:
+  - "No H1 heading found on page"
+  - "Multiple H1 headings found (${count})"
+  - "Page blocked from indexing via X-Robots-Tag header"
+  - "Found ${count} placeholder link(s) with href="#""
+
+  Not Controlled (Lighthouse)
+
+  - Names come directly from Google's API
+  - We could override them, but that adds maintenance burden
+
+  ---
+  Final Questions
+
+  1. Lighthouse names: Keep as-is from API, or override with our own? (Recommend: keep as-is)
+  2. Implementation order: I'm thinking:
+    - Phase 1: Worker - Add batch ReleaseRule lookup, use for severity
+    - Phase 2: Worker - Add releaseRuleCode to Linkinator results
+    - Phase 3: UI - Update display logic (name/description changes, reorder details)
+    - Phase 4: UI - Add Error Details section with meta display
+
+  Agree with this order?
+  3. Ready to plan? If no more questions, I'll create a detailed implementation plan.
+
+--
+
+ Analysis: ResultItem.name Sources
+  ┌────────────────────┬──────────────────────────────┬───────────────────┬──────────────────────────────────┐
+  │      Provider      │            Source            │ Controlled by Us? │             Examples             │
+  ├────────────────────┼──────────────────────────────┼───────────────────┼──────────────────────────────────┤
+  │ Lighthouse         │ PageSpeed API (audit.title)  │ ✗ No              │ "Document has a <title> element" │
+  ├────────────────────┼──────────────────────────────┼───────────────────┼──────────────────────────────────┤
+  │ Linkinator         │ Hardcoded in index.ts        │ ✓ Yes             │ "Broken internal link: {url}"    │
+  ├────────────────────┼──────────────────────────────┼───────────────────┼──────────────────────────────────┤
+  │ Custom/ReleasePass │ Hardcoded in custom-rules.ts │ ✓ Yes             │ "No H1 heading found on page"    │
+  └────────────────────┴──────────────────────────────┴───────────────────┴──────────────────────────────────┘
+  Controlled Names (can modify)
+
+  Linkinator (in preflight/index.ts):
+  - "Broken internal link: ${link.url}"
+  - "Broken external link: ${link.url}"
+  - "Redirect chain: ${link.url} (${hops} hops)"
+  - "All links are valid"
+
+  Custom Rules (in custom-rules.ts) - all 18+ rules, examples:
+  - "No H1 heading found on page"
+  - "Multiple H1 headings found (${count})"
+  - "Page blocked from indexing via X-Robots-Tag header"
+  - "Found ${count} placeholder link(s) with href="#""
+
+  Not Controlled (Lighthouse)
+
+  - Names come directly from Google's API
+  - We could override them, but that adds maintenance burden
+
+  ---
+
+Questions 2:
+  1. Lighthouse names: Keep as-is from API, or override with our own? (Recommend: keep as-is)
+  2. Implementation order: I'm thinking:
+    - Phase 1: Worker - Add batch ReleaseRule lookup, use for severity
+    - Phase 2: Worker - Add releaseRuleCode to Linkinator results
+    - Phase 3: UI - Update display logic (name/description changes, reorder details)
+    - Phase 4: UI - Add Error Details section with meta display
+
+Answers 2:
+1 - Keep as-is
+2 - Yes
 
 
+Implementation Plan Summary
+--------------------------
 
+Phase 1: Worker - ReleaseRule Severity Lookup
 
-Failed:
-- Use name from result item
+- Expand ReleaseRuleCache to include all fields (severity, name, description, impact, fix, docUrl)
+- Pass rulesMap to all provider functions
+- Use ReleaseRule severity with hardcoded fallback for:
+- Lighthouse SEO audits
+- Linkinator link checks
+- Custom rules
 
-Failed for select rules: PREFLIGHT_H1_MULTIPLE, PREFLIGHT_EMPTY_LINK, BROKEN_EXTERNAL_LINK, BROKEN_EXTERNAL_LINK
-- Output content from meta (JSON)
+Phase 2: Worker - Linkinator releaseRuleCode
+
+- Codes already being set (BROKEN_INTERNAL_LINK, BROKEN_EXTERNAL_LINK, REDIRECT_CHAIN, LINK_CHECK_PASSED)
+- Verify seed data exists in ReleaseRule table
+
+Phase 3: UI - Display Logic Updates
+
+- Failed tests: Show ResultItem.name only (not rule.name + description)
+- Passed tests: Keep current ReleaseRule.name - ReleaseRule.description
+- Reorder details: Impact first, Fix second, URL third
+
+Phase 4: UI - Error Details Section
+
+- Add new "Error Details" section for failed items
+- Only for LINKINATOR and ReleasePass providers
+- Render ResultItem.meta as nested ul/li structure
+
+Files to Modify
+
+1. worker/providers/preflight/index.ts
+2. worker/providers/preflight/custom-rules.ts
+3. components/releasepass/results/PreflightResults.tsx
+
+Full plan written to: Temp/preflight-improvements-plan.md
+
+--
+ Summary of Changes
+
+  Phase 1: Worker - ReleaseRule Severity Lookup
+
+  worker/providers/preflight/index.ts:
+  - Expanded ReleaseRuleCache interface to include name, description, impact, fix, docUrl
+  - Updated loadReleaseRules() to select all fields
+  - Added getSeverityFromRule() helper for severity lookup with fallback
+  - Updated runLighthouseSeo(), runLinkinator(), runCustomRulesWithErrorHandling() to accept rulesMap
+  - All providers now use ReleaseRule severity when available, fallback to hardcoded
+
+  worker/providers/preflight/custom-rules.ts:
+  - Added ReleaseRulesMap type and getSeverityFromRule() helper
+  - Updated runCustomRules() to accept rulesMap
+  - Updated createFail() to lookup severity from rulesMap with fallback
+  - Updated all check functions to accept and pass rulesMap
+
+  Phase 2: Linkinator releaseRuleCode
+
+  - Already correctly set via releaseRuleCode: item.code at line 252
+  - Codes: BROKEN_INTERNAL_LINK, BROKEN_EXTERNAL_LINK, REDIRECT_CHAIN, LINK_CHECK_PASSED
+
+  Phase 3 & 4: UI Updates
+
+  components/releasepass/results/PreflightResults.tsx:
+  - Failed tests: Now show only item.name (dynamic error message)
+  - Details order: Reordered to Impact first, Fix second, URL third
+  - Error Details: Added new section for LINKINATOR and ReleasePass providers showing ResultItem.meta as nested ul/li
+  - Added renderMetaFields() helper to recursively render meta data
+
+---
 
 Ability to view page on summary and details pages
-
-Bugs:
-If spelling check fails, details page still displays status

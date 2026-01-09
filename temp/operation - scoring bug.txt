@@ -1,0 +1,133 @@
+I would like you to look into a bug.
+
+When a test fails to execute (e.g. spelling or preflight) it creates a resultitem error. This creates a case where an operational error is recorded as a testrun error. In fact, the system does not recognize operational errors at all.
+
+As a result, a operational error has a severity and therefore displays a score.
+
+The DB system does have a field for storing operational status (testRun.status). In the case of spelling (confirmed) and perhaps the other tests (review code) status is being set as SUCCESS.
+
+So, we need to address the following:
+1) If a test fails to execute, testRun.status needs to be set to FAILED
+2) TestRun.score should be NULL (we should have nothing to calculate) and probably we should not record an operational failure in ResultItem
+3) If testRun.status = FAILED, that test should not be linked and status badge should be set with operational status as "FAILED" (or maybe "ERROR")
+4) Overall Release Status should be "INCOMPLETE". This should follow from having one (or more) of the tests having a NULL TestRun.score
+
+Next Steps:
+1 - Review issue and relevant code carefully
+2 - Ask questions
+3 - Draft plan once all questions have been exhausted
+4 - Execute on plan approval
+
+----
+
+1. Failure threshold: If a test has 5 URLs and 1 fails operationally but 4 succeed, should that be:
+    - FAILED (any operational error = fail)
+    - PARTIAL (some succeeded, some failed)
+    - SUCCESS with reduced score (current behavior)
+2. All URLs fail: If ALL URLs fail operationally, should that be FAILED with score: NULL?
+3. Error storage: Should operational errors be stored in TestRun.error field (currently only set when provider throws)?
+4. UI badge for FAILED: Should it show "Error" or "Failed"? Current styling exists for FAILED (red badge).
+5. Release Status with FAILED tests: If one test is FAILED, should Release Status be:
+- "Incomplete" (some tests couldn't run)
+- "Error" (operational failure)
+- Not shown (current behavior when score is null)
+
+---
+
+1 - PARTIAL
+2 - Yes
+3 - Yes - if this field isn't being used elsewhere (it looks null to me but review)
+4 - On frontend ERROR would be clearer - do we have a config for this?
+5 - Either - make a recommendation
+
+Analyze and provide followup questions.
+
+---
+
+1. Error message storage: For PARTIAL tests, should individual URL error messages be aggregated into TestRun.error, or is storing them in ResultItem.meta sufficient?
+     2. Clickability of FAILED tests: Currently all test results are clickable links. Should FAILED tests:
+       - Not be clickable (no results to show)
+       - Be clickable to show error details
+       - Show error inline in the summary view
+     3. ResultItem for operational errors: Should we stop creating ResultItems for operational errors entirely (cleaner separation), or keep them but with a different status (e.g., SKIP or new ERROR status)?
+
+
+1 - ResultItem.meta is used for preflight and not operational data. They shouldn't be mixed. Would it make since to add error on Urlresult? Take a look at the data structure and help make a recommendation. I am a little concerned about column names / uses getting messy.
+2 - Should to be clickable. Result Details should be for test results - not operational failures. Important to keep these separate.
+3 - Yes, let's stop using ResultItem for operational errors.
+
+Review and ask followup questions.
+
+--
+
+1 - Should UrlResult be created at all for operationally failed URLs?
+    - Option A: Create UrlResult with error set, no ResultItems
+    - Option B: Don't create UrlResult, track failed URLs elsewhere (TestRun.error as JSON array?)
+
+  I lean toward Option A - it preserves the URL list structure and makes it easy to show "URL X: Error - connection timeout"
+  2. TestRun.error for aggregation: When status is PARTIAL or FAILED, should TestRun.error contain:
+    - A summary message ("3 of 5 URLs failed")
+    - The first/worst error message
+    - Leave it null and derive from UrlResults
+  3. Score calculation for PARTIAL: If 3 URLs succeed with scores 80, 90, 70 and 2 URLs fail operationally, should the TestRun score be:
+    - Average of successful URLs only: (80+90+70)/3 = 80
+    - Penalized somehow for failures
+    - NULL (can't calculate without all URLs)
+
+1 - Option A.
+2 - Make a recommendation. A rollup is nice ("3 of 5") but Urlresult is the source.
+3 - No score AT ALL without all URLs
+
+Review, ask any final questions. If no further questions, provide a summary of requirements and then draft plan for execution.
+
+
+ ---
+  Implementation Plan
+
+  Phase 1: Schema Update
+
+  1. Add error String? to UrlResult in prisma/schema.prisma
+  2. Add same to worker/prisma/schema.prisma
+  3. Run npx prisma migrate dev
+  4. Run npx prisma generate in both root and worker
+
+  Phase 2: Worker - Provider Updates
+
+  2a. Spelling Provider (worker/providers/spelling/index.ts)
+  - Change return type to include success/failure indicator
+  - On URL error: Create UrlResult with error field, no ResultItems
+  - Track failed URL count
+  - Return { score: number | null, failedUrls: number, totalUrls: number }
+
+  2b. Preflight Provider (worker/providers/preflight/index.ts)
+  - Same pattern as spelling
+
+  2c. Performance Provider (worker/providers/pagespeed/performance.ts)
+  - Same pattern (already stores error differently, but normalize)
+
+  Phase 3: Worker - Process Logic (worker/jobs/process.ts)
+
+  - Update to handle new return type from providers
+  - If any URL failed: call failTestRun() with summary error message
+  - If all URLs succeeded: call completeTestRun() with score
+
+  Phase 4: UI Updates
+
+  4a. Badge Labels (components/releasepass/TestResultsSummary.tsx)
+  - Update getStatusBadge(): FAILED → "Error"
+
+  4b. Test Clickability (components/releasepass/TestResultsSummary.tsx)
+  - FAILED tests render as plain text (not Link)
+  - Show error message inline or as tooltip
+
+  4c. Release Status (lib/scoring/index.ts + ReleaseStatusBadge.tsx)
+  - Update calculateReleaseScore() to detect FAILED tests
+  - Add "Incomplete" status to return type
+  - Update badge to show "Incomplete" when applicable
+
+  Phase 5: Type Updates
+
+  - Update lib/types/releasepass.ts if needed for new UrlResult.error field
+
+  ---
+  Ready to execute on approval.

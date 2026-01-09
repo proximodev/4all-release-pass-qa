@@ -187,7 +187,12 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
 
   const getStatusBadge = (status: string) => {
     const styles = TEST_STATUS_STYLES[status] || { bg: 'bg-medium-gray', text: 'text-black' }
-    const label = status === 'RUNNING' ? 'In Progress' : status.charAt(0) + status.slice(1).toLowerCase()
+    // Map status to display label
+    const labelMap: Record<string, string> = {
+      RUNNING: 'In Progress',
+      FAILED: 'Error',
+    }
+    const label = labelMap[status] || status.charAt(0) + status.slice(1).toLowerCase()
     return (
       <span className={`px-2 py-0.5 text-sm font-medium ${styles.bg} ${styles.text} ${styles.border || ''}`}>
         {label}
@@ -428,6 +433,7 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
                     if (testType === 'PERFORMANCE') {
                       const mobileResult = testRun?.urlResults?.find(ur => ur.url === url && ur.viewport === 'mobile')
                       const desktopResult = testRun?.urlResults?.find(ur => ur.url === url && ur.viewport === 'desktop')
+                      const isFailed = testRun?.status === 'FAILED'
 
                       // Build link - use mobile result ID if available
                       const linkHref = mobileResult?.id
@@ -438,27 +444,41 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
 
                       return (
                         <div key={testType} className="flex items-center justify-between py-0.5">
-                          <Link
-                            href={linkHref}
-                            className="underline hover:text-brand-cyan"
-                          >
-                            {TEST_TYPE_LABELS[testType] || testType}
-                          </Link>
+                          {isFailed ? (
+                            <span className="text-black/60">
+                              {TEST_TYPE_LABELS[testType] || testType}
+                            </span>
+                          ) : (
+                            <Link
+                              href={linkHref}
+                              className="underline hover:text-brand-cyan"
+                            >
+                              {TEST_TYPE_LABELS[testType] || testType}
+                            </Link>
+                          )}
                           <div className="flex items-center gap-2">
-                            {mobileResult?.performanceScore != null && (
-                              <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(mobileResult.performanceScore)}`} title="Mobile">
-                                {mobileResult.performanceScore}
+                            {isFailed ? (
+                              <span className="px-2 py-0.5 text-s font-medium bg-red text-white">
+                                Error
                               </span>
-                            )}
-                            {desktopResult?.performanceScore != null && (
-                              <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(desktopResult.performanceScore)}`} title="Desktop">
-                                {desktopResult.performanceScore}
-                              </span>
-                            )}
-                            {mobileResult?.performanceScore == null && desktopResult?.performanceScore == null && (
-                              <span className="px-2 py-0.5 text-s font-medium bg-medium-gray text-black">
-                                View
-                              </span>
+                            ) : (
+                              <>
+                                {mobileResult?.performanceScore != null && (
+                                  <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(mobileResult.performanceScore)}`} title="Mobile">
+                                    {mobileResult.performanceScore}
+                                  </span>
+                                )}
+                                {desktopResult?.performanceScore != null && (
+                                  <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(desktopResult.performanceScore)}`} title="Desktop">
+                                    {desktopResult.performanceScore}
+                                  </span>
+                                )}
+                                {mobileResult?.performanceScore == null && desktopResult?.performanceScore == null && (
+                                  <span className="px-2 py-0.5 text-s font-medium bg-medium-gray text-black">
+                                    View
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
@@ -467,6 +487,7 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
 
                     // For other test types, use single urlResult
                     const urlResult = testRun?.urlResults?.find(ur => ur.url === url)
+                    const isFailed = testRun?.status === 'FAILED'
 
                     // Calculate per-URL score based on test type
                     let score: number | null = null
@@ -482,13 +503,25 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
 
                     return (
                       <div key={testType} className="flex items-center justify-between py-0.5">
-                        <Link
-                          href={linkHref}
-                          className="underline hover:text-brand-cyan"
-                        >
-                          {TEST_TYPE_LABELS[testType] || testType}
-                        </Link>
-                        {getScoreBadge(score, testType)}
+                        {isFailed ? (
+                          <span className="text-black/60">
+                            {TEST_TYPE_LABELS[testType] || testType}
+                          </span>
+                        ) : (
+                          <Link
+                            href={linkHref}
+                            className="underline hover:text-brand-cyan"
+                          >
+                            {TEST_TYPE_LABELS[testType] || testType}
+                          </Link>
+                        )}
+                        {isFailed ? (
+                          <span className="px-2 py-0.5 text-s font-medium bg-red text-white">
+                            Error
+                          </span>
+                        ) : (
+                          getScoreBadge(score, testType)
+                        )}
                       </div>
                     )
                   })}

@@ -66,12 +66,25 @@ export default function ReleaseStatusBadge() {
   // Calculate release score
   const result = calculateReleaseScore(releaseRun.testRuns, releaseRun.selectedTests)
 
-  // Don't render if no completed scored tests
-  if (result.score === null || result.status === null) {
+  // Don't render if no status (tests still running or not started)
+  if (result.status === null) {
     return null
   }
 
-  const badgeClasses = getScoreBadgeClasses(result.score)
+  // Handle Incomplete status (operational failures)
+  if (result.status === 'Incomplete') {
+    return (
+      <div className="flex items-center gap-2 pr-8">
+        <span>Release Status:</span>
+        <span className="px-2 text-m py-0.25 bg-red text-white">
+          Incomplete
+        </span>
+      </div>
+    )
+  }
+
+  // Normal Pass/Fail status with score-based coloring
+  const badgeClasses = getScoreBadgeClasses(result.score!)
 
   return (
     <div className="flex items-center gap-2 pr-8">

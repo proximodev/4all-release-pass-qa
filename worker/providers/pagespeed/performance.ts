@@ -22,19 +22,38 @@ interface TestRunWithRelations {
   releaseRun: { id: string; urls: unknown; selectedTests: unknown } | null;
 }
 
-interface PerformanceResult {
+interface PerformanceUrlSuccess {
   url: string;
+  success: true;
   mobile: PageSpeedResult | null;
   desktop: PageSpeedResult | null;
-  error?: string;
+}
+
+interface PerformanceUrlError {
+  url: string;
+  success: false;
+  error: string;
+}
+
+type PerformanceUrlOutcome = PerformanceUrlSuccess | PerformanceUrlError;
+
+/**
+ * Result returned by processPerformance to indicate success/failure
+ */
+export interface PerformanceProviderResult {
+  score: number | null;  // null if any URL failed operationally
+  failedUrls: number;
+  totalUrls: number;
+  error?: string;  // Summary error message if failedUrls > 0
 }
 
 /**
  * Process a Performance test run
  *
- * @returns The average performance score (0-100)
+ * Returns a result object indicating success/failure.
+ * If any URL fails operationally (both mobile + desktop fail), score is null and test should be marked FAILED.
  */
-export async function processPerformance(testRun: TestRunWithRelations): Promise<number> {
+export async function processPerformance(testRun: TestRunWithRelations): Promise<PerformanceProviderResult> {
   console.log(`[PERFORMANCE] Starting for test run ${testRun.id}`);
 
   // Get URLs to test
@@ -53,7 +72,7 @@ export async function processPerformance(testRun: TestRunWithRelations): Promise
   }
 
   // Run PageSpeed for each URL
-  const results: PerformanceResult[] = [];
+  const allOutcomes: PerformanceUrlOutcome[] = [];
   let totalScore = 0;
   let scoredCount = 0;
 
@@ -73,8 +92,29 @@ export async function processPerformance(testRun: TestRunWithRelations): Promise
         }),
       ]);
 
-      results.push({
+      // If both failed, treat as operational error
+      if (!mobileResult && !desktopResult) {
+        allOutcomes.push({
+          url,
+          success: false,
+          error: 'Both mobile and desktop tests failed',
+        });
+
+        // Create UrlResult with error (no metrics)
+        await prisma.urlResult.create({
+          data: {
+            testRunId: testRun.id,
+            url,
+            error: 'Both mobile and desktop tests failed',
+          },
+        });
+        continue;
+      }
+
+      // At least one viewport succeeded
+      allOutcomes.push({
         url,
+        success: true,
         mobile: mobileResult,
         desktop: desktopResult,
       });
@@ -97,21 +137,48 @@ export async function processPerformance(testRun: TestRunWithRelations): Promise
         }
       }
 
-      // If both failed, record error
-      if (!mobileResult && !desktopResult) {
-        results[results.length - 1].error = 'Both mobile and desktop tests failed';
-      }
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[PERFORMANCE] Failed for ${url}:`, errorMessage);
-      results.push({
+
+      allOutcomes.push({
         url,
-        mobile: null,
-        desktop: null,
+        success: false,
         error: errorMessage,
       });
+
+      // Create UrlResult with error
+      await prisma.urlResult.create({
+        data: {
+          testRunId: testRun.id,
+          url,
+          error: errorMessage,
+        },
+      });
     }
+  }
+
+  // Separate successful results from errors
+  const successResults = allOutcomes.filter((o): o is PerformanceUrlSuccess => o.success);
+  const errorResults = allOutcomes.filter((o): o is PerformanceUrlError => !o.success);
+
+  const failedUrls = errorResults.length;
+  const totalUrls = allOutcomes.length;
+
+  if (failedUrls > 0) {
+    // Any operational failure = no score
+    const errorSummary = failedUrls === totalUrls
+      ? errorResults[0].error
+      : `${failedUrls} of ${totalUrls} URLs failed operationally`;
+
+    console.log(`[PERFORMANCE] Failed. ${failedUrls} of ${totalUrls} URLs had operational errors`);
+
+    return {
+      score: null,
+      failedUrls,
+      totalUrls,
+      error: errorSummary,
+    };
   }
 
   // Calculate average score
@@ -120,7 +187,7 @@ export async function processPerformance(testRun: TestRunWithRelations): Promise
   console.log(`[PERFORMANCE] Completed. Average score: ${averageScore} (from ${scoredCount} measurements)`);
 
   // Log any pages with poor scores
-  for (const result of results) {
+  for (const result of successResults) {
     const mobileScore = result.mobile?.performanceScore ?? null;
     const desktopScore = result.desktop?.performanceScore ?? null;
 
@@ -129,7 +196,11 @@ export async function processPerformance(testRun: TestRunWithRelations): Promise
     }
   }
 
-  return averageScore;
+  return {
+    score: averageScore,
+    failedUrls: 0,
+    totalUrls,
+  };
 }
 
 /**

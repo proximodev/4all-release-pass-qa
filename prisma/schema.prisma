@@ -244,6 +244,9 @@ model UrlResult {
   // Raw data
   additionalMetrics Json? // Provider-specific extras
 
+  // Operational error (fetch failed, API error, etc.)
+  error String? // If set, URL failed to process - no ResultItems created
+
   testRun     TestRun      @relation(fields: [testRunId], references: [id], onDelete: Cascade)
   resultItems ResultItem[]
 

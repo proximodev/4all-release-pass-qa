@@ -36,8 +36,9 @@ interface ResultItemToCreate {
   ignored?: boolean;
 }
 
-interface UrlCheckResults {
+interface UrlCheckSuccess {
   url: string;
+  success: true;
   seoScore: number | null;
   resultItems: ResultItemToCreate[];
   linkCount: number;
@@ -47,12 +48,31 @@ interface UrlCheckResults {
   linkinatorRaw?: any;
 }
 
+interface UrlCheckError {
+  url: string;
+  success: false;
+  error: string;  // Operational error message
+}
+
+type UrlCheckOutcome = UrlCheckSuccess | UrlCheckError;
+
+/**
+ * Result returned by processPagePreflight to indicate success/failure
+ */
+export interface PreflightProviderResult {
+  score: number | null;  // null if any URL failed operationally
+  failedUrls: number;
+  totalUrls: number;
+  error?: string;  // Summary error message if failedUrls > 0
+}
+
 /**
  * Process a Page Preflight test run
  *
- * @returns Score (0-100) based on failed item severity
+ * Returns a result object indicating success/failure.
+ * If any URL fails operationally, score is null and test should be marked FAILED.
  */
-export async function processPagePreflight(testRun: TestRunWithRelations): Promise<number> {
+export async function processPagePreflight(testRun: TestRunWithRelations): Promise<PreflightProviderResult> {
   console.log(`[PAGE_PREFLIGHT] Starting for test run ${testRun.id}`);
 
   // Get URLs to test
@@ -70,7 +90,7 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
     console.log(`[PAGE_PREFLIGHT] Limited to 50 URLs (was ${urls.length})`);
   }
 
-  const allUrlResults: UrlCheckResults[] = [];
+  const allOutcomes: UrlCheckOutcome[] = [];
   const rawPayload: { lighthouse: any[]; linkinator: any[] } = {
     lighthouse: [],
     linkinator: [],
@@ -86,16 +106,15 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
       console.log(`[PAGE_PREFLIGHT] Found ${ignoredCodes.size} ignored rule(s) for ${url}`);
     }
 
-    const urlCheckResult: UrlCheckResults = {
-      url,
-      seoScore: null,
-      resultItems: [],
-      linkCount: 0,
-      brokenLinkCount: 0,
-      score: 100,  // Will be calculated after processing
-    };
-
     try {
+      const urlCheckResult: Omit<UrlCheckSuccess, 'success' | 'score'> & { resultItems: ResultItemToCreate[] } = {
+        url,
+        seoScore: null,
+        resultItems: [],
+        linkCount: 0,
+        brokenLinkCount: 0,
+      };
+
       // Run Lighthouse SEO checks
       const { resultItems: seoItems, result: lighthouseResult } = await runLighthouseSeo(url);
       urlCheckResult.resultItems.push(...seoItems);
@@ -124,85 +143,102 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
       const customItems = await runCustomRulesWithErrorHandling(url);
       urlCheckResult.resultItems.push(...customItems);
 
+      // Apply ignored rules to result items
+      const resultItems = applyIgnoredRules(urlCheckResult.resultItems, ignoredCodes);
+
+      // Calculate per-URL score from non-ignored failed items
+      const score = calculateScore(
+        resultItems.filter(i => i.status === ResultStatus.FAIL && !i.ignored)
+      );
+      console.log(`[PAGE_PREFLIGHT] URL score for ${url}: ${score}`);
+
+      allOutcomes.push({
+        ...urlCheckResult,
+        success: true,
+        resultItems,
+        score,
+      });
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[PAGE_PREFLIGHT] Error checking ${url}:`, errorMessage);
 
-      // Add a failed result item for the error
-      urlCheckResult.resultItems.push({
-        provider: IssueProvider.INTERNAL,
-        code: 'CHECK_FAILED',
-        name: 'URL Check Failed',
-        status: ResultStatus.FAIL,
-        severity: IssueSeverity.HIGH,
-        meta: { error: errorMessage },
+      // Track operational error - no ResultItems created
+      allOutcomes.push({
+        url,
+        success: false,
+        error: errorMessage,
       });
     }
-
-    // Apply ignored rules to result items
-    urlCheckResult.resultItems = applyIgnoredRules(urlCheckResult.resultItems, ignoredCodes);
-
-    // Calculate per-URL score from non-ignored failed items
-    urlCheckResult.score = calculateScore(
-      urlCheckResult.resultItems.filter(i => i.status === ResultStatus.FAIL && !i.ignored)
-    );
-    console.log(`[PAGE_PREFLIGHT] URL score for ${url}: ${urlCheckResult.score}`);
-
-    allUrlResults.push(urlCheckResult);
   }
+
+  // Separate successful results from errors
+  const successResults = allOutcomes.filter((o): o is UrlCheckSuccess => o.success);
+  const errorResults = allOutcomes.filter((o): o is UrlCheckError => !o.success);
 
   // Store results in database
   let totalPassCount = 0;
   let totalFailCount = 0;
 
-  for (const urlResult of allUrlResults) {
-    // Create UrlResult first
-    const createdUrlResult = await prisma.urlResult.create({
-      data: {
-        testRunId: testRun.id,
-        url: urlResult.url,
-        preflightScore: urlResult.score,  // Store calculated score for summary display
-        issueCount: urlResult.resultItems.filter(r => r.status === ResultStatus.FAIL).length,
-        additionalMetrics: {
-          seoScore: urlResult.seoScore,
-          linkCount: urlResult.linkCount,
-          brokenLinkCount: urlResult.brokenLinkCount,
-          lighthouse: urlResult.lighthouseRaw ? {
-            seoScore: urlResult.lighthouseRaw.seoScore,
-            performanceScore: urlResult.lighthouseRaw.performanceScore,
-            accessibilityScore: urlResult.lighthouseRaw.accessibilityScore,
-          } : null,
-          linkinator: urlResult.linkinatorRaw ? {
-            totalLinks: urlResult.linkinatorRaw.totalLinks,
-            redirects: urlResult.linkinatorRaw.redirects?.length || 0,
-          } : null,
+  for (const outcome of allOutcomes) {
+    if (outcome.success) {
+      // Success: Create UrlResult with score and ResultItems
+      const createdUrlResult = await prisma.urlResult.create({
+        data: {
+          testRunId: testRun.id,
+          url: outcome.url,
+          preflightScore: outcome.score,
+          issueCount: outcome.resultItems.filter(r => r.status === ResultStatus.FAIL).length,
+          additionalMetrics: {
+            seoScore: outcome.seoScore,
+            linkCount: outcome.linkCount,
+            brokenLinkCount: outcome.brokenLinkCount,
+            lighthouse: outcome.lighthouseRaw ? {
+              seoScore: outcome.lighthouseRaw.seoScore,
+              performanceScore: outcome.lighthouseRaw.performanceScore,
+              accessibilityScore: outcome.lighthouseRaw.accessibilityScore,
+            } : null,
+            linkinator: outcome.linkinatorRaw ? {
+              totalLinks: outcome.linkinatorRaw.totalLinks,
+              redirects: outcome.linkinatorRaw.redirects?.length || 0,
+            } : null,
+          },
         },
-      },
-    });
+      });
 
-    // Create ResultItems linked to this UrlResult
-    if (urlResult.resultItems.length > 0) {
-      await prisma.resultItem.createMany({
-        data: urlResult.resultItems.map(item => ({
-          urlResultId: createdUrlResult.id,
-          provider: item.provider,
-          code: item.code,
-          releaseRuleCode: item.code, // Preflight codes match ReleaseRule codes
-          name: item.name,
-          status: item.status,
-          severity: item.severity,
-          meta: item.meta,
-          ignored: item.ignored ?? false,
-        })),
+      // Create ResultItems linked to this UrlResult
+      if (outcome.resultItems.length > 0) {
+        await prisma.resultItem.createMany({
+          data: outcome.resultItems.map(item => ({
+            urlResultId: createdUrlResult.id,
+            provider: item.provider,
+            code: item.code,
+            releaseRuleCode: item.code,
+            name: item.name,
+            status: item.status,
+            severity: item.severity,
+            meta: item.meta,
+            ignored: item.ignored ?? false,
+          })),
+        });
+      }
+
+      // Count pass/fail
+      totalPassCount += outcome.resultItems.filter(r => r.status === ResultStatus.PASS).length;
+      totalFailCount += outcome.resultItems.filter(r => r.status === ResultStatus.FAIL).length;
+    } else {
+      // Error: Create UrlResult with error field, no ResultItems
+      await prisma.urlResult.create({
+        data: {
+          testRunId: testRun.id,
+          url: outcome.url,
+          error: outcome.error,
+        },
       });
     }
-
-    // Count pass/fail
-    totalPassCount += urlResult.resultItems.filter(r => r.status === ResultStatus.PASS).length;
-    totalFailCount += urlResult.resultItems.filter(r => r.status === ResultStatus.FAIL).length;
   }
 
-  console.log(`[PAGE_PREFLIGHT] Stored ${allUrlResults.length} URL results`);
+  console.log(`[PAGE_PREFLIGHT] Stored ${allOutcomes.length} URL results`);
   console.log(`[PAGE_PREFLIGHT] Total checks: ${totalPassCount} passed, ${totalFailCount} failed`);
 
   // Update TestRun with rawPayload
@@ -211,14 +247,34 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
     data: { rawPayload },
   });
 
-  // Calculate average score across all URLs
-  const urlScores = allUrlResults.map(r => r.score);
+  // Determine result based on whether any URLs failed
+  const failedUrls = errorResults.length;
+  const totalUrls = allOutcomes.length;
+
+  if (failedUrls > 0) {
+    // Any operational failure = no score
+    const errorSummary = failedUrls === totalUrls
+      ? errorResults[0].error
+      : `${failedUrls} of ${totalUrls} URLs failed operationally`;
+
+    console.log(`[PAGE_PREFLIGHT] Failed. ${failedUrls} of ${totalUrls} URLs had operational errors`);
+
+    return {
+      score: null,
+      failedUrls,
+      totalUrls,
+      error: errorSummary,
+    };
+  }
+
+  // All URLs succeeded - calculate average score
+  const urlScores = successResults.map(r => r.score);
   const averageScore = urlScores.length > 0
     ? Math.round(urlScores.reduce((sum, s) => sum + s, 0) / urlScores.length)
     : 100;
 
   // Log summary
-  const failedItems = allUrlResults.flatMap(r => r.resultItems.filter(i => i.status === ResultStatus.FAIL));
+  const failedItems = successResults.flatMap(r => r.resultItems.filter(i => i.status === ResultStatus.FAIL));
   const blockerCount = failedItems.filter(i => i.severity === IssueSeverity.BLOCKER).length;
   const criticalCount = failedItems.filter(i => i.severity === IssueSeverity.CRITICAL).length;
   const highCount = failedItems.filter(i => i.severity === IssueSeverity.HIGH).length;
@@ -229,7 +285,11 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
   console.log(`[PAGE_PREFLIGHT] Per-URL scores: ${urlScores.join(', ')}`);
   console.log(`[PAGE_PREFLIGHT] Failed by severity: ${blockerCount} blocker, ${criticalCount} critical, ${highCount} high, ${mediumCount} medium, ${lowCount} low`);
 
-  return averageScore;
+  return {
+    score: averageScore,
+    failedUrls: 0,
+    totalUrls,
+  };
 }
 
 /**
@@ -324,16 +384,8 @@ async function runLighthouseSeo(url: string): Promise<{ resultItems: ResultItemT
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[PAGE_PREFLIGHT] Lighthouse SEO failed for ${url}:`, errorMsg);
-
-    // Create a failed result item to record the error
-    resultItems.push({
-      provider: IssueProvider.LIGHTHOUSE,
-      code: 'LIGHTHOUSE_API_ERROR',
-      name: 'Lighthouse SEO Check Failed',
-      status: ResultStatus.FAIL,
-      severity: IssueSeverity.HIGH,
-      meta: { error: errorMsg },
-    });
+    // Re-throw to be handled as operational error at URL level
+    throw new Error(`Lighthouse SEO failed: ${errorMsg}`);
   }
 
   return { resultItems, result };
@@ -422,16 +474,8 @@ async function runLinkinator(url: string): Promise<{ resultItems: ResultItemToCr
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[PAGE_PREFLIGHT] Linkinator failed for ${url}:`, errorMsg);
-
-    // Create a failed result item to record the error
-    resultItems.push({
-      provider: IssueProvider.LINKINATOR,
-      code: 'LINKINATOR_ERROR',
-      name: 'Link Check Failed',
-      status: ResultStatus.FAIL,
-      severity: IssueSeverity.MEDIUM,
-      meta: { error: errorMsg },
-    });
+    // Re-throw to be handled as operational error at URL level
+    throw new Error(`Link check failed: ${errorMsg}`);
   }
 
   return { resultItems, result };
@@ -519,8 +563,8 @@ function calculateScore(failedItems: ResultItemToCreate[]): number {
 }
 
 /**
- * Run custom rules with error handling
- * Returns result items even on partial failure
+ * Run custom rules
+ * Throws on operational errors
  */
 async function runCustomRulesWithErrorHandling(url: string): Promise<ResultItemToCreate[]> {
   try {
@@ -535,15 +579,7 @@ async function runCustomRulesWithErrorHandling(url: string): Promise<ResultItemT
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[PAGE_PREFLIGHT] Custom rules failed for ${url}:`, errorMsg);
-
-    // Return a single error item so we know custom rules failed
-    return [{
-      provider: IssueProvider.ReleasePass,
-      code: 'CUSTOM_RULES_ERROR',
-      name: 'Custom Rules Check Failed',
-      status: ResultStatus.FAIL,
-      severity: IssueSeverity.HIGH,
-      meta: { error: errorMsg },
-    }];
+    // Re-throw to be handled as operational error at URL level
+    throw new Error(`Custom rules failed: ${errorMsg}`);
   }
 }

@@ -40,6 +40,7 @@ interface ResultItemToCreate {
 
 interface UrlSpellingResult {
   url: string;
+  success: true;
   resultItems: ResultItemToCreate[];
   issueCount: number;
   wordCount: number;
@@ -47,13 +48,32 @@ interface UrlSpellingResult {
   score: number;  // Calculated score (0-100)
 }
 
+interface UrlSpellingError {
+  url: string;
+  success: false;
+  error: string;  // Operational error message
+}
+
+type UrlSpellingOutcome = UrlSpellingResult | UrlSpellingError;
+
+/**
+ * Result returned by processSpelling to indicate success/failure
+ */
+export interface SpellingProviderResult {
+  score: number | null;  // null if any URL failed operationally
+  failedUrls: number;
+  totalUrls: number;
+  error?: string;  // Summary error message if failedUrls > 0
+}
+
 /**
  * Process a Spelling test run
  *
- * Returns a score (0-100) based on failed item severity.
- * Pass/fail is determined by score threshold (see lib/scoring.ts).
+ * Returns a result object indicating success/failure.
+ * If any URL fails operationally, score is null and test should be marked FAILED.
+ * Pass/fail for successful tests is determined by score threshold (see lib/scoring.ts).
  */
-export async function processSpelling(testRun: TestRunWithRelations): Promise<number> {
+export async function processSpelling(testRun: TestRunWithRelations): Promise<SpellingProviderResult> {
   console.log(`[SPELLING] Starting for test run ${testRun.id}`);
 
   // Check LanguageTool configuration
@@ -78,7 +98,7 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<nu
     console.log(`[SPELLING] Limited to 20 URLs (was ${urls.length})`);
   }
 
-  const allResults: UrlSpellingResult[] = [];
+  const allOutcomes: UrlSpellingOutcome[] = [];
   const rawPayload: { languagetool: any[] } = { languagetool: [] };
 
   // Process each URL
@@ -92,90 +112,99 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<nu
     }
 
     try {
-      const result = await checkUrlSpelling(url);
+      const checkResult = await checkUrlSpelling(url);
 
       // Apply ignored rules to result items
-      result.resultItems = applyIgnoredRules(result.resultItems, ignoredCodes);
+      const resultItems = applyIgnoredRules(checkResult.resultItems, ignoredCodes);
 
       // Calculate score from non-ignored failed items
-      result.score = calculateScoreFromItems(
-        result.resultItems.filter(i => !i.ignored)
+      const score = calculateScoreFromItems(
+        resultItems.filter(i => !i.ignored)
       );
 
-      allResults.push(result);
+      const result: UrlSpellingResult = {
+        ...checkResult,
+        success: true,
+        resultItems,
+        score,
+      };
+
+      allOutcomes.push(result);
 
       // Store raw response for debugging
       rawPayload.languagetool.push({
         url,
-        issueCount: result.issueCount,
-        wordCount: result.wordCount,
-        language: result.language,
+        issueCount: checkResult.issueCount,
+        wordCount: checkResult.wordCount,
+        language: checkResult.language,
       });
 
       console.log(
-        `[SPELLING] ${url}: ${result.issueCount} issues, ${result.wordCount} words, language: ${result.language}`
+        `[SPELLING] ${url}: ${checkResult.issueCount} issues, ${checkResult.wordCount} words, language: ${checkResult.language}`
       );
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error(`[SPELLING] Failed to check ${url}:`, errorMsg);
 
-      // Create an error result with score penalty
-      const errorItems = [
-        {
-          provider: IssueProvider.LANGUAGETOOL,
-          code: 'SPELLING_CHECK_FAILED',
-          name: 'Spelling check failed',
-          status: ResultStatus.FAIL,
-          severity: IssueSeverity.HIGH,
-          meta: { error: errorMsg },
-        },
-      ];
-      allResults.push({
+      // Track operational error - no ResultItems created
+      allOutcomes.push({
         url,
-        resultItems: errorItems,
-        issueCount: 0,
-        wordCount: 0,
-        language: 'unknown',
-        score: calculateScoreFromItems(errorItems),
+        success: false,
+        error: errorMsg,
       });
     }
   }
 
+  // Separate successful results from errors
+  const successResults = allOutcomes.filter((o): o is UrlSpellingResult => o.success);
+  const errorResults = allOutcomes.filter((o): o is UrlSpellingError => !o.success);
+
   // Store results in database
   let totalIssueCount = 0;
 
-  for (const result of allResults) {
-    // Create UrlResult with score
-    const urlResult = await prisma.urlResult.create({
-      data: {
-        testRunId: testRun.id,
-        url: result.url,
-        preflightScore: result.score,  // Store calculated score
-        issueCount: result.issueCount,
-        additionalMetrics: {
-          wordCount: result.wordCount,
-          language: result.language,
+  for (const outcome of allOutcomes) {
+    if (outcome.success) {
+      // Success: Create UrlResult with score and ResultItems
+      const urlResult = await prisma.urlResult.create({
+        data: {
+          testRunId: testRun.id,
+          url: outcome.url,
+          preflightScore: outcome.score,
+          issueCount: outcome.issueCount,
+          additionalMetrics: {
+            wordCount: outcome.wordCount,
+            language: outcome.language,
+          },
         },
-      },
-    });
+      });
 
-    // Create ResultItems
-    if (result.resultItems.length > 0) {
-      await prisma.resultItem.createMany({
-        data: result.resultItems.map((item) => ({
-          urlResultId: urlResult.id,
-          provider: item.provider,
-          code: item.code,
-          name: item.name,
-          status: item.status,
-          severity: item.severity,
-          meta: item.meta,
-          ignored: item.ignored ?? false,
-        })),
+      // Create ResultItems
+      if (outcome.resultItems.length > 0) {
+        await prisma.resultItem.createMany({
+          data: outcome.resultItems.map((item) => ({
+            urlResultId: urlResult.id,
+            provider: item.provider,
+            code: item.code,
+            name: item.name,
+            status: item.status,
+            severity: item.severity,
+            meta: item.meta,
+            ignored: item.ignored ?? false,
+          })),
+        });
+      }
+
+      totalIssueCount += outcome.issueCount;
+    } else {
+      // Error: Create UrlResult with error field, no ResultItems
+      await prisma.urlResult.create({
+        data: {
+          testRunId: testRun.id,
+          url: outcome.url,
+          error: outcome.error,
+        },
       });
     }
-
-    totalIssueCount += result.issueCount;
   }
 
   // Update TestRun with raw payload
@@ -184,16 +213,40 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<nu
     data: { rawPayload },
   });
 
-  // Calculate average score across all URLs
-  const urlScores = allResults.map(r => r.score);
+  // Determine result based on whether any URLs failed
+  const failedUrls = errorResults.length;
+  const totalUrls = allOutcomes.length;
+
+  if (failedUrls > 0) {
+    // Any operational failure = no score
+    const errorSummary = failedUrls === totalUrls
+      ? errorResults[0].error  // All failed: use first error message
+      : `${failedUrls} of ${totalUrls} URLs failed operationally`;
+
+    console.log(`[SPELLING] Failed. ${failedUrls} of ${totalUrls} URLs had operational errors`);
+
+    return {
+      score: null,
+      failedUrls,
+      totalUrls,
+      error: errorSummary,
+    };
+  }
+
+  // All URLs succeeded - calculate average score
+  const urlScores = successResults.map(r => r.score);
   const averageScore = urlScores.length > 0
     ? Math.round(urlScores.reduce((sum, s) => sum + s, 0) / urlScores.length)
     : 100;
 
-  console.log(`[SPELLING] Completed. ${allResults.length} URLs checked, ${totalIssueCount} total issues`);
+  console.log(`[SPELLING] Completed. ${totalUrls} URLs checked, ${totalIssueCount} total issues`);
   console.log(`[SPELLING] Average score: ${averageScore}, per-URL scores: ${urlScores.join(', ')}`);
 
-  return averageScore;
+  return {
+    score: averageScore,
+    failedUrls: 0,
+    totalUrls,
+  };
 }
 
 /**
@@ -248,8 +301,9 @@ function getUrlsToTest(testRun: TestRunWithRelations): string[] {
 
 /**
  * Check spelling for a single URL
+ * Throws on operational errors (fetch failed, API error)
  */
-async function checkUrlSpelling(url: string): Promise<UrlSpellingResult> {
+async function checkUrlSpelling(url: string): Promise<Omit<UrlSpellingResult, 'success'>> {
   // Fetch the page
   const response = await fetchWithTimeout(url, {
     timeoutMs: 30000,

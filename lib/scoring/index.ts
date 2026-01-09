@@ -141,14 +141,16 @@ export const SCORED_TEST_TYPES = ['PAGE_PREFLIGHT', 'PERFORMANCE', 'SPELLING'] a
  * Result of release-level score calculation.
  */
 export interface ReleaseScoreResult {
-  /** Average score across completed scored tests, null if none completed */
+  /** Average score across completed scored tests, null if none completed or incomplete */
   score: number | null
-  /** Pass/Fail status based on score, null if no score */
-  status: 'Pass' | 'Fail' | null
+  /** Pass/Fail/Incomplete status - Incomplete if any test has operational failure */
+  status: 'Pass' | 'Fail' | 'Incomplete' | null
   /** Number of scored tests that have completed */
   completedTests: number
   /** Total number of scored tests selected for this release */
   totalScoredTests: number
+  /** Number of tests that failed operationally */
+  failedTests?: number
 }
 
 /**
@@ -168,11 +170,29 @@ export function calculateReleaseScore(
     type => SCORED_TEST_TYPES.includes(type as typeof SCORED_TEST_TYPES[number])
   )
 
+  // Check for any FAILED tests (operational errors)
+  const failedScoredRuns = testRuns.filter(
+    run =>
+      SCORED_TEST_TYPES.includes(run.type as typeof SCORED_TEST_TYPES[number]) &&
+      run.status === 'FAILED'
+  )
+
+  // If any test failed operationally, return Incomplete
+  if (failedScoredRuns.length > 0) {
+    return {
+      score: null,
+      status: 'Incomplete',
+      completedTests: 0,
+      totalScoredTests: scoredSelectedTests.length,
+      failedTests: failedScoredRuns.length,
+    }
+  }
+
   // Get completed scored test runs with valid scores
   const completedScoredRuns = testRuns.filter(
     run =>
       SCORED_TEST_TYPES.includes(run.type as typeof SCORED_TEST_TYPES[number]) &&
-      (run.status === 'SUCCESS' || run.status === 'PARTIAL') &&
+      run.status === 'SUCCESS' &&
       run.score !== null
   )
 

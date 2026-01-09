@@ -1,16 +1,24 @@
 import { TestRun, TestType, TestStatus } from '@prisma/client';
 import { startHeartbeat } from '../lib/heartbeat';
 import { completeTestRun, failTestRun } from './claim';
-import { processPerformance } from '../providers/pagespeed';
-import { processPagePreflight } from '../providers/preflight';
+import { processPerformance, type PerformanceProviderResult } from '../providers/pagespeed';
+import { processPagePreflight, type PreflightProviderResult } from '../providers/preflight';
 import { processSiteAudit } from '../providers/seranking';
-import { processSpelling } from '../providers/spelling';
+import { processSpelling, type SpellingProviderResult } from '../providers/spelling';
 
 // Type for TestRun with relations (from claimNextQueuedRun)
 type TestRunWithRelations = TestRun & {
   project: { id: string; name: string; siteUrl: string };
   config: { scope: string; urls: string[] } | null;
   releaseRun: { id: string; urls: unknown; selectedTests: unknown } | null;
+};
+
+// Common result type for providers that support operational error tracking
+type ProviderResult = {
+  score: number | null;
+  failedUrls: number;
+  totalUrls: number;
+  error?: string;
 };
 
 /**
@@ -24,32 +32,45 @@ export async function processTestRun(testRun: TestRunWithRelations): Promise<voi
   const stopHeartbeat = startHeartbeat(testRun.id);
 
   try {
+    let result: ProviderResult | null = null;
     let score: number | null = null;
 
     switch (testRun.type) {
       case TestType.PAGE_PREFLIGHT:
-        score = await processPagePreflight(testRun);
+        result = await processPagePreflight(testRun);
         break;
 
       case TestType.PERFORMANCE:
-        score = await processPerformance(testRun);
+        result = await processPerformance(testRun);
         break;
 
       case TestType.SCREENSHOTS:
         await processScreenshots(testRun);
-        // Screenshots don't have a numeric score
+        // Screenshots don't have a numeric score or operational error tracking yet
         break;
 
       case TestType.SPELLING:
-        score = await processSpelling(testRun);
+        result = await processSpelling(testRun);
         break;
 
       case TestType.SITE_AUDIT:
+        // Site Audit still returns just a number (not updated yet)
         score = await processSiteAudit(testRun);
         break;
 
       default:
         throw new Error(`Unknown test type: ${testRun.type}`);
+    }
+
+    // Handle provider result with operational error tracking
+    if (result !== null) {
+      if (result.failedUrls > 0) {
+        // Any operational failure = test FAILED with no score
+        console.error(`Test run ${testRun.id} failed: ${result.error}`);
+        await failTestRun(testRun.id, result.error || 'One or more URLs failed operationally');
+        return;
+      }
+      score = result.score;
     }
 
     // Mark as successful with score

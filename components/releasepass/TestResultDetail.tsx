@@ -415,9 +415,16 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
                   </div>
                 )}
 
-                {/* Analysis placeholder */}
-                <div className="flex-1 min-w-[300px] text-sm text-black/60 italic">
-
+                {/* View Page link */}
+                <div className="flex-1 text-right">
+                  <a
+                    href={urlResult.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 border border-black rounded text-sm bg-white hover:bg-black hover:text-white"
+                  >
+                    View Page
+                  </a>
                 </div>
               </div>
             </div>

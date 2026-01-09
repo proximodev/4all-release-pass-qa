@@ -8,5 +8,6 @@
  */
 
 export { processPerformance } from './performance';
+export type { PerformanceProviderResult } from './performance';
 export { runPageSpeed, runPageSpeedBothViewports } from './client';
 export type { PageSpeedResult, SeoAudit, Strategy } from './client';

@@ -1,0 +1,16 @@
+Baseline:
+
+Empty links (#)
+- Update to exclude links in head
+
+Failed:
+- Use name from result item
+
+Failed for select rules: PREFLIGHT_H1_MULTIPLE, PREFLIGHT_EMPTY_LINK, BROKEN_EXTERNAL_LINK, BROKEN_EXTERNAL_LINK
+- Output content from meta (JSON)
+
+Ability to view page on summary and details pages
+
+
+Bugs:
+If spelling check fails, details page still displays status

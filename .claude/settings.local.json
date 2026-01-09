@@ -46,7 +46,8 @@
       "WebFetch(domain:github.com)",
       "Bash(git -C \"C:/Users/doug/WebstormProjects/4all-release-pass-qa\" diff worker/providers/spelling/index.ts)",
       "WebFetch(domain:www.w3.org)",
-      "Bash(npm run copy-config:*)"
+      "Bash(npm run copy-config:*)",
+      "Bash(grep:*)"
     ]
   }
 }

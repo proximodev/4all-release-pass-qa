@@ -1,0 +1,45 @@
+Baseline:
+--------
+
+1 - Empty links (#)
+- Update to exclude links in head
+
+Questions 1:
+1. Reporting behavior for excluded nav dropdowns:
+- Option A: Completely silent (no ResultItem created)
+- Option B: Report as INFO severity (logged but no penalty)
+- Option C: Report as PASS with note that dropdown triggers were detected and excluded
+2. Severity for remaining empty links (outside nav context): Keep as BLOCKER, or downgrade?
+3. Should I add richer context to flagged empty links? Currently only captures immediate parent tag. Could add:
+- Whether it's inside any nav element (even if not a dropdown trigger)
+- Full ancestor path (e.g., "footer > div > a")
+
+Answers 1:
+1 - Leaning Option B. But give this a different code such as PREFLIGHT_EMPTY_NAV_LINK. Discuss and challenge.
+2 - Let's keep as blocker. However, we do have a ReleaseRun table and should use that as a source of truth. Hardcoded value can be a fallback. Review code and let us discuss.
+3 - Yes, let's include more context. For navlink case, this should have it's own code and issue description and detail. For PREFLIGHT_EMPTY_NAV_LINK what would you recommend? For other links, let's review this separately.
+
+--
+
+1 - I think INFO is good. But would INFO be listed with FAILED or PASSED groupings? Review
+2 - Please clarify: Worker does use the lookup table - correct? Or do only some tests use lookup? I believe this is a different and larger task - and quite critical. We may want to leverage both - errors might lean dynamic for name (since they will offer additional detail / context) and other fields from db. Where pass may be all DB. Let's mark for review AFTER empty links is done.
+3 - Name and description are good.
+
+--
+
+
+
+
+
+
+
+Failed:
+- Use name from result item
+
+Failed for select rules: PREFLIGHT_H1_MULTIPLE, PREFLIGHT_EMPTY_LINK, BROKEN_EXTERNAL_LINK, BROKEN_EXTERNAL_LINK
+- Output content from meta (JSON)
+
+Ability to view page on summary and details pages
+
+Bugs:
+If spelling check fails, details page still displays status

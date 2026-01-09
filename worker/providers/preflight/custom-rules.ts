@@ -34,7 +34,8 @@
  */
 
 import * as cheerio from 'cheerio';
-import type { CheerioAPI } from 'cheerio';
+import type { CheerioAPI, Cheerio } from 'cheerio';
+import type { Element } from 'domhandler';
 import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { fetchWithTimeout } from '../../lib/fetch';
 
@@ -873,23 +874,107 @@ function checkSecurityRules($: CheerioAPI, page: FetchedPage): ResultItemToCreat
 // =============================================================================
 
 /**
+ * Build ancestor path for an element (for context in error reporting)
+ * Returns a string like "body > header > nav > ul > li"
+ */
+function getAncestorPath($: CheerioAPI, $el: Cheerio<Element>, maxDepth = 5): string {
+  const ancestors: string[] = [];
+  let current = $el.parent();
+
+  while (current.length > 0 && ancestors.length < maxDepth) {
+    const tagName = current.prop('tagName')?.toLowerCase();
+    if (!tagName || tagName === 'html' || tagName === 'body') break;
+    ancestors.unshift(tagName);
+    current = current.parent();
+  }
+
+  return ancestors.join(' > ') || 'root';
+}
+
+/**
+ * Detect if an empty link is a navigation dropdown trigger.
+ * These are intentional patterns where href="#" is used to trigger a submenu.
+ *
+ * Detection criteria:
+ * 1. Must be inside a navigation context (nav, header nav, [role="navigation"])
+ * 2. AND one of:
+ *    - Has aria-haspopup="true" or aria-expanded attribute (ARIA dropdown)
+ *    - Parent <li> contains a nested <ul> or <ol> (classic dropdown)
+ *    - Has sibling <ul> or [role="menu"] element (adjacent submenu)
+ */
+function isNavDropdownTrigger($: CheerioAPI, $el: Cheerio<Element>): {
+  isDropdown: boolean;
+  detectionMethod?: string;
+} {
+  // Must be inside navigation context
+  const inNav = $el.closest('nav, header nav, [role="navigation"]').length > 0;
+  if (!inNav) {
+    return { isDropdown: false };
+  }
+
+  // Check for ARIA dropdown attributes (most reliable)
+  const hasAriaHaspopup = $el.attr('aria-haspopup') === 'true';
+  const hasAriaExpanded = $el.attr('aria-expanded') !== undefined;
+  if (hasAriaHaspopup || hasAriaExpanded) {
+    return { isDropdown: true, detectionMethod: 'aria-attributes' };
+  }
+
+  // Check if parent <li> contains nested <ul> or <ol> (classic dropdown pattern)
+  const $parentLi = $el.parent('li');
+  if ($parentLi.length > 0 && $parentLi.children('ul, ol').length > 0) {
+    return { isDropdown: true, detectionMethod: 'nested-list' };
+  }
+
+  // Check for sibling submenu element
+  if ($el.siblings('ul, [role="menu"]').length > 0) {
+    return { isDropdown: true, detectionMethod: 'sibling-menu' };
+  }
+
+  return { isDropdown: false };
+}
+
+/**
  * Check link rules:
  * - PREFLIGHT_EMPTY_LINK: Links with href="#" only (placeholder links)
+ *
+ * Excludes navigation dropdown triggers (intentional patterns) and reports
+ * the count of excluded items in the PASS meta.
  */
 function checkLinkRules($: CheerioAPI): ResultItemToCreate[] {
   const results: ResultItemToCreate[] = [];
 
-  // Find links with href="#" (placeholder/empty links)
-  const emptyLinks: { text: string; context: string }[] = [];
+  // Track empty links and excluded nav dropdowns separately
+  const emptyLinks: {
+    text: string;
+    ancestorPath: string;
+    inNav: boolean;
+  }[] = [];
+
+  const excludedNavDropdowns: {
+    text: string;
+    detectionMethod: string;
+  }[] = [];
 
   $('a[href="#"]').each((_, el) => {
     const $el = $(el);
     const text = $el.text().trim().substring(0, 50) || '(no text)';
-    // Get parent element for context
-    const parent = $el.parent();
-    const context = parent.length > 0 ? parent.prop('tagName')?.toLowerCase() || 'unknown' : 'root';
 
-    emptyLinks.push({ text, context });
+    // Check if this is a nav dropdown trigger
+    const dropdownCheck = isNavDropdownTrigger($, $el);
+
+    if (dropdownCheck.isDropdown) {
+      // Exclude from error reporting, track for meta
+      excludedNavDropdowns.push({
+        text,
+        detectionMethod: dropdownCheck.detectionMethod!,
+      });
+    } else {
+      // This is a potentially problematic empty link
+      const ancestorPath = getAncestorPath($, $el);
+      const inNav = $el.closest('nav, [role="navigation"]').length > 0;
+
+      emptyLinks.push({ text, ancestorPath, inNav });
+    }
   });
 
   if (emptyLinks.length > 0) {
@@ -901,12 +986,15 @@ function checkLinkRules($: CheerioAPI): ResultItemToCreate[] {
         {
           count: emptyLinks.length,
           examples: emptyLinks.slice(0, 10), // Limit to 10
+          excludedNavDropdowns: excludedNavDropdowns.length,
         }
       )
     );
   } else {
     results.push(
-      createPass('PREFLIGHT_EMPTY_LINK', 'No placeholder links detected', {})
+      createPass('PREFLIGHT_EMPTY_LINK', 'No placeholder links detected', {
+        excludedNavDropdowns: excludedNavDropdowns.length,
+      })
     );
   }
 

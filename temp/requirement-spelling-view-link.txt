@@ -1,0 +1,61 @@
+Request:
+--------
+On the spelling results page, I would like to add a link in the Context column that opens the current page with "Text Fragmen(aka #:~:text=) parameter that passes the highlight text.
+
+The link should be inline and simply look like "(View)" and open in a new tab.
+
+Review code and ask questions.
+
+---
+
+Questions:
+1. URL source: The ResultsProps doesn't currently include the page URL. I'll need to add a url prop and pass it from TestResultDetail (which has urlResult.url). Is that acceptable?
+2. Text fragment content: The Text Fragments API supports different formats:
+- Simple: #:~:text=misspelled (just the word)
+- With context: #:~:text=before-,misspelled,-after (prefix and suffix for disambiguation)
+
+Since we have the full context string with offset/length, I can extract prefix and suffix text to help browsers find the exact match. Should I use the simple format (just the highlighted word) or include surrounding context for more accurate matching?
+3. Link placement: Should "(View)" appear:
+- After the highlighted context text (inline within the cell)
+- Or separate, perhaps right-aligned in the same cell?
+
+Answers:
+1 - Results has a "view page" button which is the current page. All ResultItems for a details page will have the same URL.
+2 - Let's do with context
+3 - Inline AFTER the context text. I think this will be best.
+
+--
+
+Questions:
+Empty context handling: Some items might not have context data (contextText is empty or contextLength is 0). In those cases, should I:
+- Hide the "(View)" link entirely
+- Show "(View)" but link to the page without a text fragment (just the URL)
+2. Link styling: Should "(View)" use the text-brand-cyan style like other links in the app, or stay as default text color?
+3. Prefix/suffix length: The Text Fragments API works better with shorter prefix/suffix (a few words). The context string might be long. Should I:
+- Use the full prefix/suffix from the context
+- Trim to last/first ~20-30 characters (or a few words) for cleaner URLs
+
+Answers:
+1 - yes, hide view link
+2 - default. no inline styles
+3 - trim
+
+--
+
+Files to modify:
+
+1. components/releasepass/results/types.ts
+- Add optional url?: string prop to ResultsProps
+2. components/releasepass/TestResultDetail.tsx
+- Pass url={urlResult?.url} to SpellingResults component
+3. components/releasepass/results/SpellingResults.tsx
+- Accept url prop
+- Create helper function buildTextFragmentUrl(url, prefix, target, suffix) that:
+    - Trims prefix to last ~30 chars (or last few words)
+  - Trims suffix to first ~30 chars (or first few words)
+  - URL-encodes the text fragment components
+  - Returns full URL with #:~:text=prefix-,target,-suffix
+- Add "(View)" link after contextDisplay when context data exists and URL is available
+- Link opens in new tab with target="_blank" rel="noopener noreferrer"
+
+Ready to implement?

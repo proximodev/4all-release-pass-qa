@@ -38,6 +38,11 @@ interface ResultItemToCreate {
   ignored?: boolean;
 }
 
+interface FilteredProperNoun {
+  word: string;
+  reason: string;
+}
+
 interface UrlSpellingResult {
   url: string;
   success: true;
@@ -46,6 +51,7 @@ interface UrlSpellingResult {
   wordCount: number;
   language: string;
   score: number;  // Calculated score (0-100)
+  filteredProperNouns: FilteredProperNoun[];
 }
 
 interface UrlSpellingError {
@@ -131,12 +137,13 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<Sp
 
       allOutcomes.push(result);
 
-      // Store raw response for debugging
+      // Store raw response for debugging (includes filtered proper nouns for tuning)
       rawPayload.languagetool.push({
         url,
         issueCount: checkResult.issueCount,
         wordCount: checkResult.wordCount,
         language: checkResult.language,
+        filteredProperNouns: checkResult.filteredProperNouns,
       });
 
       console.log(
@@ -341,6 +348,7 @@ async function checkUrlSpelling(url: string): Promise<Omit<UrlSpellingResult, 's
       wordCount,
       language: 'unknown',
       score: 100,  // No issues = perfect score
+      filteredProperNouns: [],
     };
   }
 
@@ -350,31 +358,70 @@ async function checkUrlSpelling(url: string): Promise<Omit<UrlSpellingResult, 's
     language: 'auto',
   });
 
+  // Filter out likely proper nouns before creating ResultItems
+  const filteredMatches: SpellingMatch[] = [];
+  const ignoredMatches: { match: SpellingMatch; reason: string }[] = [];
+
+  for (const match of spellingResult.matches) {
+    const result = shouldIgnoreAsProperNoun(match);
+    if (result.ignore) {
+      ignoredMatches.push({ match, reason: result.reason! });
+    } else {
+      filteredMatches.push(match);
+    }
+  }
+
+  // Log filtered matches for debugging
+  if (ignoredMatches.length > 0) {
+    console.log(`[SPELLING] Filtered ${ignoredMatches.length} likely proper noun(s):`);
+    for (const { match, reason } of ignoredMatches) {
+      const word = match.context.text.substring(
+        match.context.offset,
+        match.context.offset + match.context.length
+      );
+      console.log(`  - "${word}" (${reason})`);
+    }
+  }
+
   const resultItems: ResultItemToCreate[] = [];
 
-  // If no issues found, create a PASS item
-  if (spellingResult.matches.length === 0) {
+  // If no issues found after filtering, create a PASS item
+  if (filteredMatches.length === 0) {
     resultItems.push({
       provider: IssueProvider.LANGUAGETOOL,
       code: 'SPELLING_CHECK_PASSED',
       name: `No spelling or grammar issues found (${wordCount} words)`,
       status: ResultStatus.PASS,
-      meta: { wordCount, language: spellingResult.language.code },
+      meta: {
+        wordCount,
+        language: spellingResult.language.code,
+        filteredCount: ignoredMatches.length,
+      },
     });
   } else {
-    // Create a ResultItem for each issue
-    for (const match of spellingResult.matches) {
+    // Create a ResultItem for each remaining issue
+    for (const match of filteredMatches) {
       resultItems.push(mapMatchToResultItem(match));
     }
   }
 
+  // Build filtered proper nouns list for rawPayload
+  const filteredProperNouns: FilteredProperNoun[] = ignoredMatches.map(({ match, reason }) => ({
+    word: match.context.text.substring(
+      match.context.offset,
+      match.context.offset + match.context.length
+    ),
+    reason,
+  }));
+
   return {
     url,
     resultItems,
-    issueCount: spellingResult.matches.length,
+    issueCount: filteredMatches.length,
     wordCount,
     language: spellingResult.language.code,
     score: calculateScoreFromItems(resultItems),  // Calculate initial score
+    filteredProperNouns,
   };
 }
 
@@ -429,6 +476,43 @@ function extractVisibleText($: CheerioAPI): string {
 function countWords(text: string): number {
   if (!text) return 0;
   return text.split(/\s+/).filter((word) => word.length > 0).length;
+}
+
+/**
+ * Check if a spelling match should be ignored as a likely proper noun
+ *
+ * Heuristics:
+ * 1. Internal caps (camelCase): iPhone, OpenAI, McGraw
+ * 2. Short all-caps (2-6 chars): NASA, FBI, LLC
+ * 3. Title Case (2+ chars) preceded by lowercase (mid-sentence proper noun): "in Coconino"
+ *
+ * Returns { ignore: true, reason: string } if should be filtered out
+ */
+function shouldIgnoreAsProperNoun(match: SpellingMatch): { ignore: boolean; reason?: string } {
+  const context = match.context.text;
+  const offset = match.context.offset;
+  const length = match.context.length;
+  const word = context.substring(offset, offset + length);
+
+  // Heuristic: Internal caps (camelCase/PascalCase with internal lowercase then uppercase)
+  if (/[a-z][A-Z]/.test(word)) {
+    return { ignore: true, reason: 'internal-caps' };
+  }
+
+  // Heuristic: Short all-caps (2-6 chars) - likely acronym
+  if (/^[A-Z]{2,6}$/.test(word)) {
+    return { ignore: true, reason: 'all-caps-acronym' };
+  }
+
+  // Heuristic: Title Case (2+ chars), preceded by lowercase letter (mid-sentence proper noun)
+  if (/^[A-Z][a-z]+$/.test(word) && word.length >= 2) {
+    const charBefore = offset > 0 ? context[offset - 1] : '';
+    if (/[a-z]/.test(charBefore)) {
+      return { ignore: true, reason: 'title-case-mid-sentence' };
+    }
+  }
+
+  return { ignore: false };
 }
 
 /**

@@ -1,0 +1,155 @@
+Request:
+--------
+I am seeing a lot of false positives on spelling for many proper nouns. Evaluate this or a similar heuristics to filter them out.
+
+Ignore a misspelling match if any of these are true:
+1 Token is Title Case and not sentence-initial and longer than, say, 3 chars (Coconino)
+2 Token is followed by an entity suffix: County, Inc, LLC, Co., City, University, Street, etc.
+3 Token appears in a list pattern (commas + repeated suffix like County)
+4 Token appears multiple times across the page/site (high likelihood it’s intended)
+5 Token contains internal caps (iPhone, OpenAI) or all-caps acronyms (NASA)
+
+It seems like 1 and 5 (both easy to implement) would account for most cases. Evaluate and critique.
+
+-------
+
+  Heuristic Evaluation
+  ┌─────┬──────────────────────────────────────────────┬───────────────┬────────────┬────────────────────────────────┐
+  │  #  │                  Heuristic                   │ Effectiveness │ Complexity │              Risk              │
+  ├─────┼──────────────────────────────────────────────┼───────────────┼────────────┼────────────────────────────────┤
+  │ 1   │ Title Case + not sentence-initial + >3 chars │ High          │ Medium     │ Medium - could skip real typos │
+  ├─────┼──────────────────────────────────────────────┼───────────────┼────────────┼────────────────────────────────┤
+  │ 2   │ Followed by entity suffix                    │ Medium        │ Low        │ Low - very targeted            │
+  ├─────┼──────────────────────────────────────────────┼───────────────┼────────────┼────────────────────────────────┤
+  │ 3   │ List pattern detection                       │ Low           │ High       │ Low                            │
+  ├─────┼──────────────────────────────────────────────┼───────────────┼────────────┼────────────────────────────────┤
+  │ 4   │ Multiple occurrences                         │ High          │ Medium     │ Low - strong signal            │
+  ├─────┼──────────────────────────────────────────────┼───────────────┼────────────┼────────────────────────────────┤
+  │ 5   │ Internal caps / all-caps                     │ Medium        │ Low        │ Very Low                       │
+  └─────┴──────────────────────────────────────────────┴───────────────┴────────────┴────────────────────────────────┘
+  Critique
+
+  Heuristic 1 - The "sentence-initial" detection is the tricky part. Options:
+  - Check if preceded by . , ? , ! , or is first word in context
+  - But what about headings, list items, titles? These are all "sentence-initial"
+  - Simpler alternative: Title Case + preceded by a lowercase word (proves it's mid-sentence)
+
+  Heuristic 5 - Easy win but narrow scope. Most proper nouns are just "Coconino" not "iPhone"
+
+  Heuristic 4 - Underrated. If "Coconino" appears 5 times and is flagged 5 times, it's almost certainly intentional. Requires aggregating results before filtering.
+
+  Recommended Approach
+
+  Phase 1 (simple, immediate impact):
+  - Heuristic 5: Skip internal caps / all-caps (regex: /[a-z][A-Z]|^[A-Z]{2,}$/)
+  - Heuristic 1 (simplified): Skip if Title Case AND preceded by lowercase letter in context
+
+  Phase 2 (higher impact, more work):
+  - Heuristic 4: Aggregate by word, auto-ignore if count ≥ 2 on same page
+
+  Questions
+
+  1. Where to implement? Worker-side (filter before saving) or store and mark as autoIgnored?
+  2. For Heuristic 4: Should we aggregate per-page or per-test-run (all URLs)?
+  3. Override mechanism: If auto-ignored, should users be able to "un-ignore" (force flag)?
+
+---
+
+Let's do Phase 1. This should cover the bulk of problems.
+
+Answers:
+1 - Worker side
+2 - Let's hold on Phase 2 and address as needed
+3 - Unless you think there actual risk, let's just not save this. I'd rather not have the noise.
+
+
+--
+
+Questions:
+1. All-caps length limit: Should all-caps filtering only apply to short words (2-5 chars) that look like acronyms (NASA, FBI, LLC)? Or any all-caps word? Long all-caps like "RECIEVE" in a header would still be a real typo.
+2. Title Case minimum length: You mentioned >3 chars originally. Should we keep that? This would still flag "Tte" (typo) but skip "Coconino". Or is any length fine since we require a preceding lowercase letter?
+3. Logging: Should we log filtered matches anywhere for debugging/tuning, or just silently drop them?
+
+Answers:
+1 - Max 6 characters
+2 - Minimum length 2+ - interrogate this
+3 - Yes, let's log.
+
+---
+Preliminary Plan
+
+File to modify: worker/providers/spelling/index.ts (or wherever LanguageTool results are processed)
+
+Implementation:
+
+1. After receiving LanguageTool matches, filter out matches where:
+function shouldIgnoreMatch(word: string, context: string, offset: number): boolean {
+// Heuristic 5: Internal caps (iPhone, OpenAI) or short all-caps acronym
+if (/[a-z][A-Z]/.test(word)) return true  // camelCase
+if (/^[A-Z]{2,5}$/.test(word)) return true  // short acronym
+
+// Heuristic 1: Title Case preceded by lowercase (mid-sentence proper noun)
+if (/^[A-Z][a-z]+$/.test(word) && word.length > 2) {
+  const charBefore = context[offset - 1]
+  if (charBefore && /[a-z]/.test(charBefore)) return true
+}
+
+return false
+}
+2. Apply filter before creating ResultItems
+
+---
+
+Changes to worker/providers/spelling/index.ts:
+
+1. Added shouldIgnoreAsProperNoun() helper (lines 444-469):
+  - Internal caps check: /[a-z][A-Z]/ catches "iPhone", "OpenAI", "McGraw"
+  - All-caps acronym check: /^[A-Z]{2,6}$/ catches "NASA", "FBI", "LLC"
+  - Title Case mid-sentence: /^[A-Z][a-z]+$/ + preceded by lowercase catches "in Coconino"
+2. Integrated filtering in checkUrlSpelling() (lines 353-398):
+  - Filters matches before creating ResultItems
+  - Logs filtered words with reason: [SPELLING] Filtered 3 likely proper noun(s): - "Coconino" (title-case-mid-sentence)
+  - Uses filtered count for issueCount
+  - Stores filteredCount in PASS item meta for visibility
+
+What gets filtered (not saved):
+- "iPhone" → internal-caps
+- "NASA" → all-caps-acronym
+- "in Coconino County" → title-case-mid-sentence
+
+What still gets flagged:
+- "coconino" (lowercase - likely typo)
+- "RECIEVED" (7+ chars all-caps - not acronym pattern)
+- "The Teh" (sentence-initial, not preceded by lowercase)
+
+-----
+
+The filtered proper nouns are now stored in rawPayload. Here's the final structure:
+
+  {
+    "languagetool": [
+      {
+        "url": "https://example.com/page",
+        "issueCount": 3,
+        "wordCount": 450,
+        "language": "en-US",
+        "filteredProperNouns": [
+          { "word": "Coconino", "reason": "title-case-mid-sentence" },
+          { "word": "iPhone", "reason": "internal-caps" },
+          { "word": "NASA", "reason": "all-caps-acronym" }
+        ]
+      }
+    ]
+  }
+
+  To query across runs:
+  SELECT
+    tr.id,
+    tr."createdAt",
+    rp.value->'filteredProperNouns' as filtered
+  FROM "TestRun" tr
+  CROSS JOIN LATERAL jsonb_array_elements(tr."rawPayload"->'languagetool') as rp(value)
+  WHERE tr.type = 'SPELLING'
+  ORDER BY tr."createdAt" DESC;
+
+  Or in Prisma Studio, just view the rawPayload JSON field on any Spelling TestRun.

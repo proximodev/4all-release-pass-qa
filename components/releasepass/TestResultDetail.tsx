@@ -181,6 +181,12 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
   }, [searchParams, testType, router])
 
   const handleTestTypeChange = useCallback((newTestType: string) => {
+    // Handle special "summary" option
+    if (newTestType === 'SUMMARY') {
+      router.push(`/releasepass/preflight?project=${releaseRun?.project.id}&test=${testId}`)
+      return
+    }
+
     const option = PREFLIGHT_TEST_TYPES.find(o => o.value === newTestType)
     if (!option) return
 
@@ -358,6 +364,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
               onChange={(e) => handleTestTypeChange(e.target.value)}
               className="px-3 py-2 border border-dark-gray/40 rounded bg-white"
             >
+              <option value="SUMMARY">Result Summary</option>
               {availableTestTypes.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}

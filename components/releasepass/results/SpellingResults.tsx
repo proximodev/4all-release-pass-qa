@@ -4,6 +4,49 @@ import { Fragment, memo, useMemo, useState } from 'react'
 import { getSeveritySortOrder } from '@/lib/scoring'
 import type { ResultsProps } from './types'
 import { IgnoreToggleButton } from './IgnoreToggleButton'
+import {underline} from "next/dist/lib/picocolors";
+
+/**
+ * Build a URL with Text Fragments for highlighting text on the page
+ * Format: url#:~:text=prefix-,target,-suffix
+ */
+function buildTextFragmentUrl(
+  url: string,
+  prefix: string,
+  target: string,
+  suffix: string
+): string {
+  // Trim prefix to last ~30 chars (find word boundary)
+  let trimmedPrefix = prefix
+  if (prefix.length > 30) {
+    const lastSpace = prefix.slice(-30).indexOf(' ')
+    trimmedPrefix = lastSpace > 0 ? prefix.slice(-30 + lastSpace + 1) : prefix.slice(-30)
+  }
+
+  // Trim suffix to first ~30 chars (find word boundary)
+  let trimmedSuffix = suffix
+  if (suffix.length > 30) {
+    const firstSpace = suffix.slice(0, 30).lastIndexOf(' ')
+    trimmedSuffix = firstSpace > 0 ? suffix.slice(0, firstSpace) : suffix.slice(0, 30)
+  }
+
+  // URL-encode the components
+  const encodedPrefix = encodeURIComponent(trimmedPrefix.trim())
+  const encodedTarget = encodeURIComponent(target)
+  const encodedSuffix = encodeURIComponent(trimmedSuffix.trim())
+
+  // Build fragment with available parts
+  let fragment = encodedTarget
+  if (encodedPrefix && encodedSuffix) {
+    fragment = `${encodedPrefix}-,${encodedTarget},-${encodedSuffix}`
+  } else if (encodedPrefix) {
+    fragment = `${encodedPrefix}-,${encodedTarget}`
+  } else if (encodedSuffix) {
+    fragment = `${encodedTarget},-${encodedSuffix}`
+  }
+
+  return `${url}#:~:text=${fragment}`
+}
 
 function SpellingResults({
   failedItems,
@@ -13,6 +56,7 @@ function SpellingResults({
   loadingItems,
   resultItems,
   onIgnoreToggle,
+  url,
 }: ResultsProps) {
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
 
@@ -89,8 +133,9 @@ function SpellingResults({
                   const contextOffset = meta?.contextOffset ?? 0
                   const contextLength = meta?.contextLength ?? 0
 
-                  // Build highlighted context
+                  // Build highlighted context with View link
                   let contextDisplay: React.ReactNode = null
+                  let viewLink: React.ReactNode = null
                   if (contextText && contextLength > 0) {
                     const before = contextText.substring(0, contextOffset)
                     const highlighted = contextText.substring(contextOffset, contextOffset + contextLength)
@@ -100,6 +145,20 @@ function SpellingResults({
                         {before}<mark className="bg-yellow-200 px-0.5">{highlighted}</mark>{after}
                       </span>
                     )
+                    // Build View link with text fragment
+                    if (url) {
+                      const fragmentUrl = buildTextFragmentUrl(url, before, highlighted, after)
+                      viewLink = (
+                        <a
+                          href={fragmentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          (<span className="underline">View Text</span>)
+                        </a>
+                      )
+                    }
                   } else if (contextText) {
                     contextDisplay = contextText
                   }
@@ -111,7 +170,7 @@ function SpellingResults({
                         onClick={() => hasDetails && setExpandedItemId(isExpanded ? null : item.id)}
                       >
                         <td className={`py-2 pr-6 align-top ${isIgnored ? 'line-through' : ''}`}>{testName}</td>
-                        <td className={`py-2 pr-6 align-top ${isIgnored ? 'line-through' : ''}`}>{contextDisplay}</td>
+                        <td className={`py-2 pr-6 align-top ${isIgnored ? 'line-through' : ''}`}>{contextDisplay} {viewLink}</td>
                         <td className={`py-2 pr-6 align-top whitespace-nowrap ${isIgnored ? 'line-through' : ''}`}>{severityValue}</td>
                         {onIgnoreToggle && (
                           <td className="py-2 text-center">

@@ -20,4 +20,5 @@ export interface ResultsProps {
   setExpandedItemId: (id: string | null) => void
   loadingItems: boolean
   onIgnoreToggle?: (itemId: string, ignored: boolean) => Promise<IgnoreToggleResult | null>
+  url?: string
 }

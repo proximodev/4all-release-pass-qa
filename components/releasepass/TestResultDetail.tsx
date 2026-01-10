@@ -462,6 +462,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
                 setExpandedItemId={setExpandedItemId}
                 loadingItems={loadingItems}
                 onIgnoreToggle={handleIgnoreToggle}
+                url={urlResult?.url}
               />
             )}
             {testType === 'PERFORMANCE' && (

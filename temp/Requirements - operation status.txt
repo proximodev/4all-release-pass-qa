@@ -1,3 +1,6 @@
+Operational Status
+--------------------------
+
 I would like you to look into a bug.
 
 When a test fails to execute (e.g. spelling or preflight) it creates a resultitem error. This creates a case where an operational error is recorded as a testrun error. In fact, the system does not recognize operational errors at all.

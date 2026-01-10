@@ -249,37 +249,35 @@ Files to Modify
 
 Full plan written to: Temp/preflight-improvements-plan.md
 
---
- Summary of Changes
+---
+Summary of Changes
 
-  Phase 1: Worker - ReleaseRule Severity Lookup
+Phase 1: Worker - ReleaseRule Severity Lookup
 
-  worker/providers/preflight/index.ts:
-  - Expanded ReleaseRuleCache interface to include name, description, impact, fix, docUrl
-  - Updated loadReleaseRules() to select all fields
-  - Added getSeverityFromRule() helper for severity lookup with fallback
-  - Updated runLighthouseSeo(), runLinkinator(), runCustomRulesWithErrorHandling() to accept rulesMap
-  - All providers now use ReleaseRule severity when available, fallback to hardcoded
+worker/providers/preflight/index.ts:
+- Expanded ReleaseRuleCache interface to include name, description, impact, fix, docUrl
+- Updated loadReleaseRules() to select all fields
+- Added getSeverityFromRule() helper for severity lookup with fallback
+- Updated runLighthouseSeo(), runLinkinator(), runCustomRulesWithErrorHandling() to accept rulesMap
+- All providers now use ReleaseRule severity when available, fallback to hardcoded
 
-  worker/providers/preflight/custom-rules.ts:
-  - Added ReleaseRulesMap type and getSeverityFromRule() helper
-  - Updated runCustomRules() to accept rulesMap
-  - Updated createFail() to lookup severity from rulesMap with fallback
-  - Updated all check functions to accept and pass rulesMap
+worker/providers/preflight/custom-rules.ts:
+- Added ReleaseRulesMap type and getSeverityFromRule() helper
+- Updated runCustomRules() to accept rulesMap
+- Updated createFail() to lookup severity from rulesMap with fallback
+- Updated all check functions to accept and pass rulesMap
 
-  Phase 2: Linkinator releaseRuleCode
+Phase 2: Linkinator releaseRuleCode
 
-  - Already correctly set via releaseRuleCode: item.code at line 252
-  - Codes: BROKEN_INTERNAL_LINK, BROKEN_EXTERNAL_LINK, REDIRECT_CHAIN, LINK_CHECK_PASSED
+- Already correctly set via releaseRuleCode: item.code at line 252
+- Codes: BROKEN_INTERNAL_LINK, BROKEN_EXTERNAL_LINK, REDIRECT_CHAIN, LINK_CHECK_PASSED
 
-  Phase 3 & 4: UI Updates
+Phase 3 & 4: UI Updates
 
-  components/releasepass/results/PreflightResults.tsx:
-  - Failed tests: Now show only item.name (dynamic error message)
-  - Details order: Reordered to Impact first, Fix second, URL third
-  - Error Details: Added new section for LINKINATOR and ReleasePass providers showing ResultItem.meta as nested ul/li
-  - Added renderMetaFields() helper to recursively render meta data
+components/releasepass/results/PreflightResults.tsx:
+- Failed tests: Now show only item.name (dynamic error message)
+- Details order: Reordered to Impact first, Fix second, URL third
+- Error Details: Added new section for LINKINATOR and ReleasePass providers showing ResultItem.meta as nested ul/li
+- Added renderMetaFields() helper to recursively render meta data
 
 ---
-
-Ability to view page on summary and details pages

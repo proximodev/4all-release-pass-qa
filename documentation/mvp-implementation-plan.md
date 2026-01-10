@@ -5,7 +5,7 @@
 
 This document outlines the recommended order of operations for implementing the ReleasePass MVP and identifies additional documentation that should be created during implementation.
 
-> **Release Run Model**: This plan reflects the Release Run-centric architecture where tests are grouped into cohesive launch candidates. See `RELEASE-PASS-CHANGES.MD` for the full model specification.
+> **Release Run Model**: This plan reflects the Release Run-centric architecture where tests are grouped into cohesive launch candidates. See `functional-spec.md` for the full model specification.
 
 ---
 

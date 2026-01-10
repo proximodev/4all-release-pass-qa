@@ -43,6 +43,26 @@ interface FilteredProperNoun {
   reason: string;
 }
 
+/**
+ * Entity suffixes that indicate the preceding word is likely a proper noun.
+ * Case-sensitive matching - suffixes must appear exactly as listed.
+ */
+const ENTITY_SUFFIXES = [
+  // Geographic
+  'County', 'City', 'State', 'Township', 'Village', 'District',
+  // Business
+  'Inc', 'Inc.', 'LLC', 'LLC.', 'Co', 'Co.', 'Corp', 'Corp.',
+  'Ltd', 'Ltd.', 'LLP', 'Corporation', 'Limited',
+  // Academic
+  'University', 'College', 'School', 'Institute', 'Academy',
+  // Streets
+  'Street', 'St', 'St.', 'Avenue', 'Ave', 'Ave.', 'Road', 'Rd', 'Rd.',
+  'Boulevard', 'Blvd', 'Blvd.', 'Drive', 'Dr', 'Dr.', 'Lane', 'Ln',
+  'Way', 'Highway', 'Hwy',
+  // Other
+  'Foundation', 'Association', 'Center', 'Hospital', 'Church', 'Park', 'Building',
+];
+
 interface UrlSpellingResult {
   url: string;
   success: true;
@@ -484,7 +504,8 @@ function countWords(text: string): number {
  * Heuristics:
  * 1. Internal caps (camelCase): iPhone, OpenAI, McGraw
  * 2. Short all-caps (2-6 chars): NASA, FBI, LLC
- * 3. Title Case (2+ chars) preceded by lowercase (mid-sentence proper noun): "in Coconino"
+ * 3. Title Case followed by entity suffix: "Coconino County", "Acme Inc"
+ * 4. Title Case (2+ chars) preceded by lowercase (mid-sentence proper noun): "in Coconino"
  *
  * Returns { ignore: true, reason: string } if should be filtered out
  */
@@ -502,6 +523,19 @@ function shouldIgnoreAsProperNoun(match: SpellingMatch): { ignore: boolean; reas
   // Heuristic: Short all-caps (2-6 chars) - likely acronym
   if (/^[A-Z]{2,6}$/.test(word)) {
     return { ignore: true, reason: 'all-caps-acronym' };
+  }
+
+  // Heuristic: Title Case word followed by entity suffix (e.g., "Coconino County")
+  if (/^[A-Z][a-z]+$/.test(word)) {
+    const afterWord = context.substring(offset + length);
+    // Extract next token (skip whitespace, grab word characters and periods for abbreviations)
+    const nextTokenMatch = afterWord.match(/^\s+([\w.]+)/);
+    if (nextTokenMatch) {
+      const nextToken = nextTokenMatch[1];
+      if (ENTITY_SUFFIXES.includes(nextToken)) {
+        return { ignore: true, reason: 'followed-by-entity-suffix' };
+      }
+    }
   }
 
   // Heuristic: Title Case (2+ chars), preceded by lowercase letter (mid-sentence proper noun)

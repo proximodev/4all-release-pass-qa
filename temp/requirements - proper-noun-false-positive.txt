@@ -153,3 +153,52 @@ The filtered proper nouns are now stored in rawPayload. Here's the final structu
   ORDER BY tr."createdAt" DESC;
 
   Or in Prisma Studio, just view the rawPayload JSON field on any Spelling TestRun.
+
+
+ ----
+
+Update:
+ Add Token is followed by an entity suffix: County, Inc, LLC, Co., City, University, Street
+
+Questions:
+  1. Case sensitivity - Should suffix matching be case-insensitive? e.g., "coconino county" (lowercase) vs "Coconino County"
+  2. Word before suffix - Should the flagged word need to be Title Case for this to apply? Or any casing? (e.g., filter "coconino County" or only "Coconino County"?)
+  3. Suffix proximity - Look immediately after the word (next token), or within a character window? Context strings are typically ~40 chars.
+  4. Abbreviation handling - Include both forms? Inc / Inc. / Incorporated
+
+1 - Case sensitive
+2 - Must be title case
+3 - Next token
+4 - Yes
+
+---
+
+ ---
+  Implementation Plan
+
+  File: worker/providers/spelling/index.ts
+
+  Step 1: Add constant array after the interfaces (~line 45)
+  const ENTITY_SUFFIXES = [
+    // Geographic
+    'County', 'City', 'State', 'Township', 'Village', 'District',
+    // Business
+    'Inc', 'Inc.', 'LLC', 'LLC.', 'Co', 'Co.', 'Corp', 'Corp.',
+    'Ltd', 'Ltd.', 'LLP', 'Corporation', 'Limited',
+    // Academic
+    'University', 'College', 'School', 'Institute', 'Academy',
+    // Streets
+    'Street', 'St', 'St.', 'Avenue', 'Ave', 'Ave.', 'Road', 'Rd', 'Rd.',
+    'Boulevard', 'Blvd', 'Blvd.', 'Drive', 'Dr', 'Dr.', 'Lane', 'Ln',
+    'Way', 'Highway', 'Hwy',
+    // Other
+    'Foundation', 'Association', 'Center', 'Hospital', 'Church', 'Park', 'Building',
+  ];
+
+  Step 2: Add new heuristic in shouldIgnoreAsProperNoun() (~line 505, after all-caps check)
+  - Check if flagged word is Title Case (/^[A-Z][a-z]+$/)
+  - Extract next token from context after the word
+  - Match against ENTITY_SUFFIXES (case-sensitive)
+  - Return { ignore: true, reason: 'followed-by-entity-suffix' }
+
+  Result: "Coconino County" → filtered, "coconino County" → still flagged

@@ -68,8 +68,7 @@ export interface UrlResultData {
   issueCount?: number
   additionalMetrics?: Record<string, any>
   resultItems?: ResultItem[]
-  preflightScore?: number | null
-  performanceScore?: number | null
+  score?: number | null
 }
 
 /**

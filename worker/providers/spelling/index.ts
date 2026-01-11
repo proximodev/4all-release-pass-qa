@@ -200,7 +200,7 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<Sp
           data: {
             testRunId: testRun.id,
             url: outcome.url,
-            preflightScore: outcome.score,
+            score: outcome.score,
             issueCount: outcome.issueCount,
             additionalMetrics: {
               wordCount: outcome.wordCount,

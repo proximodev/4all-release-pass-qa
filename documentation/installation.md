@@ -465,9 +465,8 @@ model UrlResult {
   tbt                Float?     // Total Blocking Time (ms)
   tti                Float?     // Time to Interactive (seconds)
 
-  // Scores
-  performanceScore   Int?       // PageSpeed performance score (0-100)
-  accessibilityScore Int?       // Lighthouse accessibility score (0-100)
+  // Score (meaning depends on parent TestRun.type)
+  score              Int?       // Calculated score (0-100)
 
   // Site Audit specific
   issueCount         Int?       // Total issues for this URL
@@ -486,7 +485,6 @@ model UrlResult {
 
   @@index([testRunId])
   @@index([url])
-  @@index([performanceScore])
 }
 
 model Issue {

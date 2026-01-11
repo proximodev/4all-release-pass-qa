@@ -463,17 +463,17 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
                               </span>
                             ) : (
                               <>
-                                {mobileResult?.performanceScore != null && (
-                                  <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(mobileResult.performanceScore)}`} title="Mobile">
-                                    {mobileResult.performanceScore}
+                                {mobileResult?.score != null && (
+                                  <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(mobileResult.score)}`} title="Mobile">
+                                    {mobileResult.score}
                                   </span>
                                 )}
-                                {desktopResult?.performanceScore != null && (
-                                  <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(desktopResult.performanceScore)}`} title="Desktop">
-                                    {desktopResult.performanceScore}
+                                {desktopResult?.score != null && (
+                                  <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(desktopResult.score)}`} title="Desktop">
+                                    {desktopResult.score}
                                   </span>
                                 )}
-                                {mobileResult?.performanceScore == null && desktopResult?.performanceScore == null && (
+                                {mobileResult?.score == null && desktopResult?.score == null && (
                                   <span className="px-2 py-0.5 text-s font-medium bg-medium-gray text-black">
                                     View
                                   </span>
@@ -491,9 +491,9 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
 
                     // Calculate per-URL score based on test type
                     let score: number | null = null
-                    if ((testType === 'PAGE_PREFLIGHT' || testType === 'SPELLING') && urlResult?.preflightScore != null) {
+                    if ((testType === 'PAGE_PREFLIGHT' || testType === 'SPELLING') && urlResult?.score != null) {
                       // Preflight & Spelling: use stored per-URL score
-                      score = urlResult.preflightScore
+                      score = urlResult.score
                     }
 
                     // Build link - use urlResultId if available

@@ -50,7 +50,8 @@
       "Bash(grep:*)",
       "Bash(npm explain:*)",
       "Bash(npm info:*)",
-      "Bash(npm test)"
+      "Bash(npm test)",
+      "Bash(npx prisma db execute:*)"
     ]
   }
 }

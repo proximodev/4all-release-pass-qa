@@ -48,8 +48,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 url: true,
                 viewport: true,
                 issueCount: true,
-                preflightScore: true,
-                performanceScore: true,
+                score: true,
                 additionalMetrics: true,
                 // resultItems excluded - fetch via /url-results/[id] endpoint
                 _count: {

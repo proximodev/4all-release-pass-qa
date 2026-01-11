@@ -251,12 +251,12 @@ async function storeUrlResult(
       tbt: result.tbt,
       tti: result.tti,
 
-      // Scores
-      performanceScore: result.performanceScore,
-      accessibilityScore: result.accessibilityScore,
+      // Score
+      score: result.performanceScore,
 
       // Additional metrics
       additionalMetrics: {
+        accessibilityScore: result.accessibilityScore,
         hasFieldData: result.hasFieldData,
         fieldLcp: result.fieldLcp,
         fieldCls: result.fieldCls,

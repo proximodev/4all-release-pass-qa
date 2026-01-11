@@ -11,7 +11,7 @@ import { calculateScoreFromItems } from '@/lib/scoring'
 /**
  * Recalculate and update the score for a UrlResult.
  * Fetches all ResultItems, calculates score excluding ignored items,
- * and updates the preflightScore field.
+ * and updates the score field.
  *
  * @param urlResultId - The UrlResult to recalculate
  * @returns The new score
@@ -39,7 +39,7 @@ export async function recalculateUrlResultScore(urlResultId: string): Promise<nu
   // Update UrlResult
   await prisma.urlResult.update({
     where: { id: urlResultId },
-    data: { preflightScore: newScore },
+    data: { score: newScore },
   })
 
   return newScore
@@ -47,7 +47,7 @@ export async function recalculateUrlResultScore(urlResultId: string): Promise<nu
 
 /**
  * Recalculate and update the score for a TestRun.
- * Averages the preflightScore of all UrlResults.
+ * Averages the score of all UrlResults.
  *
  * @param testRunId - The TestRun to recalculate
  * @returns The new average score
@@ -56,12 +56,12 @@ export async function recalculateTestRunScore(testRunId: string): Promise<number
   // Fetch all URL results with their scores
   const urlResults = await prisma.urlResult.findMany({
     where: { testRunId },
-    select: { preflightScore: true },
+    select: { score: true },
   })
 
   // Calculate average score
   const scores = urlResults
-    .map(ur => ur.preflightScore)
+    .map(ur => ur.score)
     .filter((s): s is number => s !== null)
 
   const averageScore = scores.length > 0

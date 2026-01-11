@@ -409,9 +409,7 @@ Failed ResultItems include a `severity` field that determines score penalties:
   * fcp — float (nullable; First Contentful Paint in seconds)
   * tbt — float (nullable; Total Blocking Time in ms)
   * tti — float (nullable; Time to Interactive in seconds)
-  * preflightScore — integer (nullable; calculated score for PAGE_PREFLIGHT, 0-100)
-  * performanceScore — integer (nullable; PageSpeed performance score, 0-100)
-  * accessibilityScore — integer (nullable; Lighthouse accessibility score, 0-100)
+  * score — integer (nullable; calculated score 0-100, meaning depends on parent TestRun.type)
   * issueCount — integer (nullable; total issues for this URL)
   * criticalIssues — integer (nullable; count of CRITICAL severity issues)
   * viewport — string (nullable; "mobile" or "desktop" for Performance tests)
@@ -421,7 +419,19 @@ Failed ResultItems include a `severity` field that determines score penalties:
   * updatedAt — datetime
   * → resultItems — one-to-many relation to ResultItem
 
-  UrlResult represents per-URL metrics for a given TestRun. Fields are sparsely populated depending on the test type (e.g., Performance vs Page Preflight). Each UrlResult contains multiple ResultItems representing individual check results.
+  UrlResult represents per-URL/test-type metrics for a given TestRun. Fields are sparsely populated depending on the test type (e.g., Performance vs Page Preflight). Each UrlResult contains multiple ResultItems representing individual check results.
+
+  ┌────────────────┬────────────────────────────────────────────────────┐
+  │   Test Type    │                 UrlResults per URL                 │
+  ├────────────────┼────────────────────────────────────────────────────┤
+  │ PERFORMANCE    │ 2 (mobile + desktop)                               │
+  ├────────────────┼────────────────────────────────────────────────────┤
+  │ PAGE_PREFLIGHT │ 1                                                  │
+  ├────────────────┼────────────────────────────────────────────────────┤
+  │ SPELLING       │ 1                                                  │
+  ├────────────────┼────────────────────────────────────────────────────┤
+  │ SCREENSHOTS    │ 1 (screenshots stored separately in ScreenshotSet) │
+  └────────────────┴────────────────────────────────────────────────────┘
 
 * ResultItem
   * id — UUID

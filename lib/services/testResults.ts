@@ -45,8 +45,8 @@ export function getPerformanceScores(
   const mobileResult = urlResults.find(ur => ur.url === url && ur.viewport === 'mobile')
   const desktopResult = urlResults.find(ur => ur.url === url && ur.viewport === 'desktop')
   return {
-    mobileScore: mobileResult?.performanceScore ?? null,
-    desktopScore: desktopResult?.performanceScore ?? null,
+    mobileScore: mobileResult?.score ?? null,
+    desktopScore: desktopResult?.score ?? null,
   }
 }
 
@@ -59,8 +59,8 @@ export function calculateUrlScore(
   performanceScores: PerformanceScores | null,
   fallbackScore: number
 ): number {
-  if (testType === 'PAGE_PREFLIGHT' && urlResult.preflightScore != null) {
-    return urlResult.preflightScore
+  if ((testType === 'PAGE_PREFLIGHT' || testType === 'SPELLING') && urlResult.score != null) {
+    return urlResult.score
   }
 
   if (testType === 'PERFORMANCE' && performanceScores) {

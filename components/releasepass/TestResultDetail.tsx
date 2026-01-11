@@ -261,10 +261,10 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
             return {
               ...tr,
               score: data.testRunScore,
-              // Also update the urlResult's preflightScore for Preflight tests
+              // Also update the urlResult's score
               urlResults: tr.urlResults?.map(ur =>
                 ur.id === selectedUrlResultId
-                  ? { ...ur, preflightScore: data.urlResultScore }
+                  ? { ...ur, score: data.urlResultScore }
                   : ur
               )
             }

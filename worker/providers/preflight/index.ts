@@ -243,7 +243,7 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
           data: {
             testRunId: testRun.id,
             url: outcome.url,
-            preflightScore: outcome.score,
+            score: outcome.score,
             issueCount: outcome.resultItems.filter(r => r.status === ResultStatus.FAIL).length,
             additionalMetrics: {
               seoScore: outcome.seoScore,

@@ -109,7 +109,7 @@ export default function TestSelector({
   if (!projectId) {
     return (
       <div className="w-full">
-        <label className="block font-medium mb-2">Test</label>
+        <label className="block font-medium mb-2">Release Test</label>
         <select
           disabled
           className="w-full py-2 pl-1 pr-4 border border-medium-gray rounded bg-white opacity-50 focus:outline-none focus:border-transparent "

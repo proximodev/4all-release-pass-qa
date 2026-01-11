@@ -1,0 +1,217 @@
+ ---
+  Overview
+  ┌────────────────────────────┬────────────────────────────────────────────┬──────────────────┬────────────┐
+  │          Location          │                  Pattern                   │ Transaction Type │ Complexity │
+  ├────────────────────────────┼────────────────────────────────────────────┼──────────────────┼────────────┤
+  │ cancel/route.ts:42-57      │ Independent updates                        │ Batched          │ Low        │
+  ├────────────────────────────┼────────────────────────────────────────────┼──────────────────┼────────────┤
+  │ rerun/route.ts:67-89       │ Delete → Create → Update (need created ID) │ Interactive      │ Low        │
+  ├────────────────────────────┼────────────────────────────────────────────┼──────────────────┼────────────┤
+  │ preflight/index.ts:234-289 │ Loop: Create parent → Create children      │ Interactive      │ Medium     │
+  ├────────────────────────────┼────────────────────────────────────────────┼──────────────────┼────────────┤
+  │ spelling/index.ts:192-235  │ Loop: Create parent → Create children      │ Interactive      │ Medium     │
+  └────────────────────────────┴────────────────────────────────────────────┴──────────────────┴────────────┘
+  ---
+  Location 1: app/api/release-runs/[id]/cancel/route.ts
+
+  Current Code (lines 42-57):
+  // Step 1: Update test runs to FAILED
+  await prisma.testRun.updateMany({...})
+
+  // Step 2: Update release run to FAIL
+  await prisma.releaseRun.update({...})
+
+  Risk: If step 2 fails, test runs are marked FAILED but release run status is stale.
+
+  Fix Type: Batched (no dependencies between operations)
+
+  Proposed Change:
+  await prisma.$transaction([
+    prisma.testRun.updateMany({
+      where: { releaseRunId: id, status: { in: ['QUEUED', 'RUNNING'] } },
+      data: { status: 'FAILED', finishedAt: new Date() }
+    }),
+    prisma.releaseRun.update({
+      where: { id },
+      data: { status: 'FAIL' }
+    })
+  ])
+
+  LOE: 5 minutes
+
+  ---
+  Location 2: app/api/release-runs/[id]/rerun/route.ts
+
+  Current Code (lines 67-89):
+  // Step 1: Delete existing test run
+  await prisma.testRun.deleteMany({...})
+
+  // Step 2: Create new test run
+  const newTestRun = await prisma.testRun.create({...})
+
+  // Step 3: Update release run status
+  await prisma.releaseRun.update({...})
+
+  return NextResponse.json({ testRunId: newTestRun.id, ... })
+
+  Risk: If step 3 fails, we have a new test run but release status doesn't reflect it.
+
+  Fix Type: Interactive (need newTestRun.id for response)
+
+  Proposed Change:
+  const newTestRun = await prisma.$transaction(async (tx) => {
+    // Delete existing
+    if (releaseRun.testRuns.length > 0) {
+      await tx.testRun.deleteMany({
+        where: { releaseRunId: id, type: testType }
+      })
+    }
+
+    // Create new
+    const created = await tx.testRun.create({
+      data: {
+        releaseRunId: id,
+        projectId: releaseRun.projectId,
+        type: testType,
+        status: 'QUEUED',
+      }
+    })
+
+    // Update release run
+    await tx.releaseRun.update({
+      where: { id },
+      data: { status: 'PENDING' }
+    })
+
+    return created
+  })
+
+  return NextResponse.json({ testRunId: newTestRun.id, ... })
+
+  LOE: 10 minutes
+
+  ---
+  Location 3: worker/providers/preflight/index.ts
+
+  Current Code (lines 234-289):
+  for (const outcome of allOutcomes) {
+    if (outcome.success) {
+      // Step 1: Create UrlResult
+      const createdUrlResult = await prisma.urlResult.create({...})
+
+      // Step 2: Create ResultItems (needs urlResult.id)
+      await prisma.resultItem.createMany({
+        data: outcome.resultItems.map(item => ({
+          urlResultId: createdUrlResult.id,
+          ...
+        }))
+      })
+    } else {
+      // Create error UrlResult (single operation, no transaction needed)
+      await prisma.urlResult.create({...})
+    }
+  }
+
+  // Step 3: Update TestRun with rawPayload
+  await prisma.testRun.update({...})
+
+  Risk: If ResultItem creation fails, orphaned UrlResult exists with no children.
+
+  Fix Type: Interactive (need createdUrlResult.id)
+
+  Proposed Change:
+  for (const outcome of allOutcomes) {
+    if (outcome.success) {
+      await prisma.$transaction(async (tx) => {
+        const createdUrlResult = await tx.urlResult.create({
+          data: {
+            testRunId: testRun.id,
+            url: outcome.url,
+            preflightScore: outcome.score,
+            issueCount: outcome.resultItems.filter(r => r.status === ResultStatus.FAIL).length,
+            additionalMetrics: {...},
+          },
+        });
+
+        if (outcome.resultItems.length > 0) {
+          await tx.resultItem.createMany({
+            data: outcome.resultItems.map(item => ({
+              urlResultId: createdUrlResult.id,
+              provider: item.provider,
+              code: item.code,
+              releaseRuleCode: item.code,
+              name: item.name,
+              status: item.status,
+              severity: item.severity,
+              meta: item.meta,
+              ignored: item.ignored ?? false,
+            })),
+          });
+        }
+      });
+
+      // Count pass/fail (outside transaction - read-only)
+      totalPassCount += outcome.resultItems.filter(r => r.status === ResultStatus.PASS).length;
+      totalFailCount += outcome.resultItems.filter(r => r.status === ResultStatus.FAIL).length;
+    } else {
+      // Single operation - no transaction needed
+      await prisma.urlResult.create({...});
+    }
+  }
+
+  // Update TestRun (separate operation - acceptable since UrlResults are already committed)
+  await prisma.testRun.update({...});
+
+  LOE: 15 minutes
+
+  Note: The final testRun.update is intentionally outside the loop transactions. If it fails, UrlResults/ResultItems are still valid - just rawPayload won't be saved (acceptable data state).
+
+  ---
+  Location 4: worker/providers/spelling/index.ts
+
+  Current Code (lines 192-235):
+  for (const outcome of allOutcomes) {
+    if (outcome.success) {
+      const urlResult = await prisma.urlResult.create({...})
+      await prisma.resultItem.createMany({
+        data: outcome.resultItems.map(item => ({
+          urlResultId: urlResult.id,
+          ...
+        }))
+      })
+    } else {
+      await prisma.urlResult.create({...})  // error case
+    }
+  }
+
+  await prisma.testRun.update({...})
+
+  Risk: Same as preflight - orphaned UrlResults if ResultItem creation fails.
+
+  Fix Type: Interactive (identical pattern to preflight)
+
+  Proposed Change: Same pattern as Location 3.
+
+  LOE: 15 minutes
+
+  ---
+  Summary
+  ┌────────────────────┬─────────┬──────────────────┐
+  │      Location      │   LOE   │ Transaction Type │
+  ├────────────────────┼─────────┼──────────────────┤
+  │ cancel/route.ts    │ 5 min   │ Batched          │
+  ├────────────────────┼─────────┼──────────────────┤
+  │ rerun/route.ts     │ 10 min  │ Interactive      │
+  ├────────────────────┼─────────┼──────────────────┤
+  │ preflight/index.ts │ 15 min  │ Interactive      │
+  ├────────────────────┼─────────┼──────────────────┤
+  │ spelling/index.ts  │ 15 min  │ Interactive      │
+  ├────────────────────┼─────────┼──────────────────┤
+  │ Total              │ ~45 min │                  │
+  └────────────────────┴─────────┴──────────────────┘
+  ---
+  Testing Approach
+
+  After implementation:
+  1. Verify normal operation still works (create release run, run tests)
+  2. Simulate failure scenarios (harder to test, but code inspection confirms rollback behavior)

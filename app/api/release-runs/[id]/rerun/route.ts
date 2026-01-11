@@ -62,30 +62,35 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Delete existing test run for this type (cascades to UrlResults and ResultItems)
-    if (releaseRun.testRuns.length > 0) {
-      await prisma.testRun.deleteMany({
-        where: {
+    // Delete, create, and update atomically
+    const newTestRun = await prisma.$transaction(async (tx) => {
+      // Delete existing test run for this type (cascades to UrlResults and ResultItems)
+      if (releaseRun.testRuns.length > 0) {
+        await tx.testRun.deleteMany({
+          where: {
+            releaseRunId: id,
+            type: testType,
+          }
+        })
+      }
+
+      // Create new test run with QUEUED status
+      const created = await tx.testRun.create({
+        data: {
           releaseRunId: id,
+          projectId: releaseRun.projectId,
           type: testType,
+          status: 'QUEUED',
         }
       })
-    }
 
-    // Create new test run with QUEUED status
-    const newTestRun = await prisma.testRun.create({
-      data: {
-        releaseRunId: id,
-        projectId: releaseRun.projectId,
-        type: testType,
-        status: 'QUEUED',
-      }
-    })
+      // Update release run status to PENDING since we have a new queued test
+      await tx.releaseRun.update({
+        where: { id },
+        data: { status: 'PENDING' }
+      })
 
-    // Update release run status to PENDING since we have a new queued test
-    await prisma.releaseRun.update({
-      where: { id },
-      data: { status: 'PENDING' }
+      return created
     })
 
     return NextResponse.json({

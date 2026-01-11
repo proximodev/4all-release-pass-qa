@@ -1,7 +1,20 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const MAX_BODY_SIZE = 512 * 1024 // 512KB
+
 export async function middleware(request: NextRequest) {
+    // Check request body size for methods that have bodies
+    if (['POST', 'PATCH', 'PUT'].includes(request.method)) {
+        const contentLength = parseInt(request.headers.get('content-length') || '0', 10)
+        if (contentLength > MAX_BODY_SIZE) {
+            return NextResponse.json(
+                { error: 'Request body too large', maxSize: '512KB' },
+                { status: 413 }
+            )
+        }
+    }
+
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 

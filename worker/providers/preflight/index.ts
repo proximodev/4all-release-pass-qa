@@ -17,6 +17,7 @@ import { runPageSpeed, SeoAudit, PageSpeedResult } from '../pagespeed/client';
 import { checkLinks, LinkCheckResult, LinkCheckSummary } from '../linkinator/client';
 import { runCustomRules } from './custom-rules';
 import { SCORING_CONFIG, getScoreStatus, isWhitelistedCdn, isExcludedEndpoint } from '../../lib/scoring';
+import { createLimiter, CONCURRENCY } from '../../lib/concurrency';
 
 /**
  * Cached ReleaseRule data for severity and display
@@ -141,87 +142,90 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
     console.log(`[PAGE_PREFLIGHT] Limited to 50 URLs (was ${urls.length})`);
   }
 
-  const allOutcomes: UrlCheckOutcome[] = [];
   const rawPayload: { lighthouse: any[]; linkinator: any[] } = {
     lighthouse: [],
     linkinator: [],
   };
 
-  // Process each URL
-  for (const url of limitedUrls) {
-    console.log(`[PAGE_PREFLIGHT] Checking: ${url}`);
+  // Process URLs concurrently with limited parallelism
+  const limit = createLimiter(CONCURRENCY.PREFLIGHT);
 
-    // Fetch ignored rules for this URL
-    const ignoredCodes = await getIgnoredRuleCodes(testRun.projectId, url);
-    if (ignoredCodes.size > 0) {
-      console.log(`[PAGE_PREFLIGHT] Found ${ignoredCodes.size} ignored rule(s) for ${url}`);
-    }
+  const allOutcomes = await Promise.all(
+    limitedUrls.map((url, index) => limit(async (): Promise<UrlCheckOutcome> => {
+      console.log(`[PAGE_PREFLIGHT] [${index + 1}/${limitedUrls.length}] Checking: ${url}`);
 
-    try {
-      const urlCheckResult: Omit<UrlCheckSuccess, 'success' | 'score'> & { resultItems: ResultItemToCreate[] } = {
-        url,
-        seoScore: null,
-        resultItems: [],
-        linkCount: 0,
-        brokenLinkCount: 0,
-      };
-
-      // Run Lighthouse SEO checks
-      const { resultItems: seoItems, result: lighthouseResult } = await runLighthouseSeo(url, rulesMap);
-      urlCheckResult.resultItems.push(...seoItems);
-
-      if (lighthouseResult) {
-        urlCheckResult.seoScore = lighthouseResult.seoScore;
-        urlCheckResult.lighthouseRaw = lighthouseResult;
-        rawPayload.lighthouse.push({ url, result: lighthouseResult });
+      // Fetch ignored rules for this URL
+      const ignoredCodes = await getIgnoredRuleCodes(testRun.projectId, url);
+      if (ignoredCodes.size > 0) {
+        console.log(`[PAGE_PREFLIGHT] Found ${ignoredCodes.size} ignored rule(s) for ${url}`);
       }
 
-      // Run Linkinator checks
-      const { resultItems: linkItems, result: linkinatorResult } = await runLinkinator(url, rulesMap);
-      urlCheckResult.resultItems.push(...linkItems);
+      try {
+        const urlCheckResult: Omit<UrlCheckSuccess, 'success' | 'score'> & { resultItems: ResultItemToCreate[] } = {
+          url,
+          seoScore: null,
+          resultItems: [],
+          linkCount: 0,
+          brokenLinkCount: 0,
+        };
 
-      if (linkinatorResult) {
-        urlCheckResult.linkCount = linkinatorResult.totalLinks;
-        // Count actual broken links from ResultItems (excludes whitelisted CDNs)
-        urlCheckResult.brokenLinkCount = linkItems.filter(
-          item => item.code === 'BROKEN_INTERNAL_LINK' || item.code === 'BROKEN_EXTERNAL_LINK'
-        ).length;
-        urlCheckResult.linkinatorRaw = linkinatorResult;
-        rawPayload.linkinator.push({ url, result: linkinatorResult });
+        // Run Lighthouse SEO checks
+        const { resultItems: seoItems, result: lighthouseResult } = await runLighthouseSeo(url, rulesMap);
+        urlCheckResult.resultItems.push(...seoItems);
+
+        if (lighthouseResult) {
+          urlCheckResult.seoScore = lighthouseResult.seoScore;
+          urlCheckResult.lighthouseRaw = lighthouseResult;
+          rawPayload.lighthouse.push({ url, result: lighthouseResult });
+        }
+
+        // Run Linkinator checks
+        const { resultItems: linkItems, result: linkinatorResult } = await runLinkinator(url, rulesMap);
+        urlCheckResult.resultItems.push(...linkItems);
+
+        if (linkinatorResult) {
+          urlCheckResult.linkCount = linkinatorResult.totalLinks;
+          // Count actual broken links from ResultItems (excludes whitelisted CDNs)
+          urlCheckResult.brokenLinkCount = linkItems.filter(
+            item => item.code === 'BROKEN_INTERNAL_LINK' || item.code === 'BROKEN_EXTERNAL_LINK'
+          ).length;
+          urlCheckResult.linkinatorRaw = linkinatorResult;
+          rawPayload.linkinator.push({ url, result: linkinatorResult });
+        }
+
+        // Run custom rules (H1, viewport, etc.)
+        const customItems = await runCustomRulesWithErrorHandling(url, rulesMap);
+        urlCheckResult.resultItems.push(...customItems);
+
+        // Apply ignored rules to result items
+        const resultItems = applyIgnoredRules(urlCheckResult.resultItems, ignoredCodes);
+
+        // Calculate per-URL score from non-ignored failed items
+        const score = calculateScore(
+          resultItems.filter(i => i.status === ResultStatus.FAIL && !i.ignored)
+        );
+        console.log(`[PAGE_PREFLIGHT] URL score for ${url}: ${score}`);
+
+        return {
+          ...urlCheckResult,
+          success: true as const,
+          resultItems,
+          score,
+        };
+
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`[PAGE_PREFLIGHT] Error checking ${url}:`, errorMessage);
+
+        // Track operational error - no ResultItems created
+        return {
+          url,
+          success: false as const,
+          error: errorMessage,
+        };
       }
-
-      // Run custom rules (H1, viewport, etc.)
-      const customItems = await runCustomRulesWithErrorHandling(url, rulesMap);
-      urlCheckResult.resultItems.push(...customItems);
-
-      // Apply ignored rules to result items
-      const resultItems = applyIgnoredRules(urlCheckResult.resultItems, ignoredCodes);
-
-      // Calculate per-URL score from non-ignored failed items
-      const score = calculateScore(
-        resultItems.filter(i => i.status === ResultStatus.FAIL && !i.ignored)
-      );
-      console.log(`[PAGE_PREFLIGHT] URL score for ${url}: ${score}`);
-
-      allOutcomes.push({
-        ...urlCheckResult,
-        success: true,
-        resultItems,
-        score,
-      });
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[PAGE_PREFLIGHT] Error checking ${url}:`, errorMessage);
-
-      // Track operational error - no ResultItems created
-      allOutcomes.push({
-        url,
-        success: false,
-        error: errorMessage,
-      });
-    }
-  }
+    }))
+  );
 
   // Separate successful results from errors
   const successResults = allOutcomes.filter((o): o is UrlCheckSuccess => o.success);
@@ -233,52 +237,54 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
 
   for (const outcome of allOutcomes) {
     if (outcome.success) {
-      // Success: Create UrlResult with score and ResultItems
-      const createdUrlResult = await prisma.urlResult.create({
-        data: {
-          testRunId: testRun.id,
-          url: outcome.url,
-          preflightScore: outcome.score,
-          issueCount: outcome.resultItems.filter(r => r.status === ResultStatus.FAIL).length,
-          additionalMetrics: {
-            seoScore: outcome.seoScore,
-            linkCount: outcome.linkCount,
-            brokenLinkCount: outcome.brokenLinkCount,
-            lighthouse: outcome.lighthouseRaw ? {
-              seoScore: outcome.lighthouseRaw.seoScore,
-              performanceScore: outcome.lighthouseRaw.performanceScore,
-              accessibilityScore: outcome.lighthouseRaw.accessibilityScore,
-            } : null,
-            linkinator: outcome.linkinatorRaw ? {
-              totalLinks: outcome.linkinatorRaw.totalLinks,
-              redirects: outcome.linkinatorRaw.redirects?.length || 0,
-            } : null,
+      // Success: Create UrlResult and ResultItems atomically
+      await prisma.$transaction(async (tx) => {
+        const createdUrlResult = await tx.urlResult.create({
+          data: {
+            testRunId: testRun.id,
+            url: outcome.url,
+            preflightScore: outcome.score,
+            issueCount: outcome.resultItems.filter(r => r.status === ResultStatus.FAIL).length,
+            additionalMetrics: {
+              seoScore: outcome.seoScore,
+              linkCount: outcome.linkCount,
+              brokenLinkCount: outcome.brokenLinkCount,
+              lighthouse: outcome.lighthouseRaw ? {
+                seoScore: outcome.lighthouseRaw.seoScore,
+                performanceScore: outcome.lighthouseRaw.performanceScore,
+                accessibilityScore: outcome.lighthouseRaw.accessibilityScore,
+              } : null,
+              linkinator: outcome.linkinatorRaw ? {
+                totalLinks: outcome.linkinatorRaw.totalLinks,
+                redirects: outcome.linkinatorRaw.redirects?.length || 0,
+              } : null,
+            },
           },
-        },
+        });
+
+        // Create ResultItems linked to this UrlResult
+        if (outcome.resultItems.length > 0) {
+          await tx.resultItem.createMany({
+            data: outcome.resultItems.map(item => ({
+              urlResultId: createdUrlResult.id,
+              provider: item.provider,
+              code: item.code,
+              releaseRuleCode: item.code,
+              name: item.name,
+              status: item.status,
+              severity: item.severity,
+              meta: item.meta,
+              ignored: item.ignored ?? false,
+            })),
+          });
+        }
       });
 
-      // Create ResultItems linked to this UrlResult
-      if (outcome.resultItems.length > 0) {
-        await prisma.resultItem.createMany({
-          data: outcome.resultItems.map(item => ({
-            urlResultId: createdUrlResult.id,
-            provider: item.provider,
-            code: item.code,
-            releaseRuleCode: item.code,
-            name: item.name,
-            status: item.status,
-            severity: item.severity,
-            meta: item.meta,
-            ignored: item.ignored ?? false,
-          })),
-        });
-      }
-
-      // Count pass/fail
+      // Count pass/fail (outside transaction - read-only)
       totalPassCount += outcome.resultItems.filter(r => r.status === ResultStatus.PASS).length;
       totalFailCount += outcome.resultItems.filter(r => r.status === ResultStatus.FAIL).length;
     } else {
-      // Error: Create UrlResult with error field, no ResultItems
+      // Error: Create UrlResult with error field, no ResultItems (single operation)
       await prisma.urlResult.create({
         data: {
           testRunId: testRun.id,

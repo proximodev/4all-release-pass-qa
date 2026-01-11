@@ -2632,6 +2632,107 @@ See `documentation/mvp-implementation-plan.md` Phase 7 for detailed provider imp
 
 ---
 
+## Testing
+
+ReleasePass uses [Vitest](https://vitest.dev/) for testing, with React Testing Library for component tests.
+
+### Running Tests
+
+**Main Application (Next.js)**
+
+```bash
+# Run all tests once
+npm test
+
+# Run tests in watch mode (re-runs on file changes)
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+```
+
+**Worker Service**
+
+```bash
+cd worker
+
+# Run all tests once
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+```
+
+### Test File Locations
+
+Tests are co-located with the code they test:
+
+```
+lib/
+  scoring/
+    index.ts           # Source code
+    index.test.ts      # Tests for this module
+components/
+  SomeComponent.tsx
+  SomeComponent.test.tsx
+worker/
+  providers/
+    spelling/
+      index.ts
+      index.test.ts
+```
+
+### Writing New Tests
+
+**Unit Test Example**
+
+```typescript
+import { describe, it, expect } from 'vitest'
+import { myFunction } from './index'
+
+describe('myFunction', () => {
+  it('should return expected result', () => {
+    expect(myFunction('input')).toBe('expected output')
+  })
+})
+```
+
+**Component Test Example**
+
+```typescript
+import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { MyComponent } from './MyComponent'
+
+describe('MyComponent', () => {
+  it('should render correctly', () => {
+    render(<MyComponent title="Hello" />)
+    expect(screen.getByText('Hello')).toBeInTheDocument()
+  })
+})
+```
+
+### Naming Conventions
+
+- Test files: `*.test.ts` or `*.test.tsx`
+- Alternative: `*.spec.ts` or `*.spec.tsx`
+- Place tests next to the code being tested
+
+### Coverage Reports
+
+After running `npm run test:coverage`, view the HTML report:
+
+```bash
+# Open coverage report in browser
+open coverage/index.html   # macOS
+start coverage/index.html  # Windows
+```
+
+---
+
 ## Quick Reference Commands
 
 ```bash

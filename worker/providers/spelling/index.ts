@@ -19,6 +19,7 @@ import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { fetchWithTimeout } from '../../lib/fetch';
 import { checkSpelling, isConfigured, getConfigInfo, SpellingMatch } from './languagetool-client';
 import { calculateScoreFromItems } from '../../lib/scoring';
+import { createLimiter, CONCURRENCY } from '../../lib/concurrency';
 
 interface TestRunWithRelations {
   id: string;
@@ -124,63 +125,64 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<Sp
     console.log(`[SPELLING] Limited to 20 URLs (was ${urls.length})`);
   }
 
-  const allOutcomes: UrlSpellingOutcome[] = [];
   const rawPayload: { languagetool: any[] } = { languagetool: [] };
 
-  // Process each URL
-  for (const url of limitedUrls) {
-    console.log(`[SPELLING] Checking: ${url}`);
+  // Process URLs concurrently with limited parallelism
+  const limit = createLimiter(CONCURRENCY.SPELLING);
 
-    // Fetch ignored rules for this URL
-    const ignoredCodes = await getIgnoredRuleCodes(testRun.projectId, url);
-    if (ignoredCodes.size > 0) {
-      console.log(`[SPELLING] Found ${ignoredCodes.size} ignored rule(s) for ${url}`);
-    }
+  const allOutcomes = await Promise.all(
+    limitedUrls.map((url, index) => limit(async (): Promise<UrlSpellingOutcome> => {
+      console.log(`[SPELLING] [${index + 1}/${limitedUrls.length}] Checking: ${url}`);
 
-    try {
-      const checkResult = await checkUrlSpelling(url);
+      // Fetch ignored rules for this URL
+      const ignoredCodes = await getIgnoredRuleCodes(testRun.projectId, url);
+      if (ignoredCodes.size > 0) {
+        console.log(`[SPELLING] Found ${ignoredCodes.size} ignored rule(s) for ${url}`);
+      }
 
-      // Apply ignored rules to result items
-      const resultItems = applyIgnoredRules(checkResult.resultItems, ignoredCodes);
+      try {
+        const checkResult = await checkUrlSpelling(url);
 
-      // Calculate score from non-ignored failed items
-      const score = calculateScoreFromItems(
-        resultItems.filter(i => !i.ignored)
-      );
+        // Apply ignored rules to result items
+        const resultItems = applyIgnoredRules(checkResult.resultItems, ignoredCodes);
 
-      const result: UrlSpellingResult = {
-        ...checkResult,
-        success: true,
-        resultItems,
-        score,
-      };
+        // Calculate score from non-ignored failed items
+        const score = calculateScoreFromItems(
+          resultItems.filter(i => !i.ignored)
+        );
 
-      allOutcomes.push(result);
+        // Store raw response for debugging (includes filtered proper nouns for tuning)
+        rawPayload.languagetool.push({
+          url,
+          issueCount: checkResult.issueCount,
+          wordCount: checkResult.wordCount,
+          language: checkResult.language,
+          filteredProperNouns: checkResult.filteredProperNouns,
+        });
 
-      // Store raw response for debugging (includes filtered proper nouns for tuning)
-      rawPayload.languagetool.push({
-        url,
-        issueCount: checkResult.issueCount,
-        wordCount: checkResult.wordCount,
-        language: checkResult.language,
-        filteredProperNouns: checkResult.filteredProperNouns,
-      });
+        console.log(
+          `[SPELLING] ${url}: ${checkResult.issueCount} issues, ${checkResult.wordCount} words, language: ${checkResult.language}`
+        );
 
-      console.log(
-        `[SPELLING] ${url}: ${checkResult.issueCount} issues, ${checkResult.wordCount} words, language: ${checkResult.language}`
-      );
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`[SPELLING] Failed to check ${url}:`, errorMsg);
+        return {
+          ...checkResult,
+          success: true as const,
+          resultItems,
+          score,
+        };
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[SPELLING] Failed to check ${url}:`, errorMsg);
 
-      // Track operational error - no ResultItems created
-      allOutcomes.push({
-        url,
-        success: false,
-        error: errorMsg,
-      });
-    }
-  }
+        // Track operational error - no ResultItems created
+        return {
+          url,
+          success: false as const,
+          error: errorMsg,
+        };
+      }
+    }))
+  );
 
   // Separate successful results from errors
   const successResults = allOutcomes.filter((o): o is UrlSpellingResult => o.success);
@@ -191,39 +193,41 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<Sp
 
   for (const outcome of allOutcomes) {
     if (outcome.success) {
-      // Success: Create UrlResult with score and ResultItems
-      const urlResult = await prisma.urlResult.create({
-        data: {
-          testRunId: testRun.id,
-          url: outcome.url,
-          preflightScore: outcome.score,
-          issueCount: outcome.issueCount,
-          additionalMetrics: {
-            wordCount: outcome.wordCount,
-            language: outcome.language,
+      // Success: Create UrlResult and ResultItems atomically
+      await prisma.$transaction(async (tx) => {
+        const urlResult = await tx.urlResult.create({
+          data: {
+            testRunId: testRun.id,
+            url: outcome.url,
+            preflightScore: outcome.score,
+            issueCount: outcome.issueCount,
+            additionalMetrics: {
+              wordCount: outcome.wordCount,
+              language: outcome.language,
+            },
           },
-        },
-      });
-
-      // Create ResultItems
-      if (outcome.resultItems.length > 0) {
-        await prisma.resultItem.createMany({
-          data: outcome.resultItems.map((item) => ({
-            urlResultId: urlResult.id,
-            provider: item.provider,
-            code: item.code,
-            name: item.name,
-            status: item.status,
-            severity: item.severity,
-            meta: item.meta,
-            ignored: item.ignored ?? false,
-          })),
         });
-      }
+
+        // Create ResultItems
+        if (outcome.resultItems.length > 0) {
+          await tx.resultItem.createMany({
+            data: outcome.resultItems.map((item) => ({
+              urlResultId: urlResult.id,
+              provider: item.provider,
+              code: item.code,
+              name: item.name,
+              status: item.status,
+              severity: item.severity,
+              meta: item.meta,
+              ignored: item.ignored ?? false,
+            })),
+          });
+        }
+      });
 
       totalIssueCount += outcome.issueCount;
     } else {
-      // Error: Create UrlResult with error field, no ResultItems
+      // Error: Create UrlResult with error field, no ResultItems (single operation)
       await prisma.urlResult.create({
         data: {
           testRunId: testRun.id,

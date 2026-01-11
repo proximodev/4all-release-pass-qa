@@ -1,0 +1,96 @@
+ Recommendation:
+---------------
+Set up Vitest + React Testing Library
+Start with critical paths: scoring logic, API routes, form validation
+Add Playwright for E2E tests
+
+See /documentation/improvements.md
+
+Questions:
+----------
+1. Testing framework: Vitest (modern, fast, native ESM) or Jest (more established, larger ecosystem)? I recommend Vitest for this stack.
+2. Initial scope:
+- Unit tests only (functions, utilities, scoring logic)
+- Unit + Component tests (React components with React Testing Library)
+- Unit + Component + E2E (add Playwright for browser testing)
+Recommendation: Start with Unit + Component, add E2E later if needed.
+
+3. Worker tests: The worker is a separate TypeScript project. Should it have its own test configuration, or skip for now?
+4. CI integration: Should I add a GitHub Actions workflow to run tests on push/PR?
+5. Initial example tests: Should I write starter tests for a specific module (e.g., lib/scoring) to demonstrate patterns, or just set up infrastructure with no actual tests?
+
+Answers:
+1 - Vitest
+2 - Unit + Component tests
+3 - Recommendation? Lean yes
+4 - I think on-demand CLI tests are fine (include instructions in documentation)
+5 - Infra + scoring
+
+Review, ask followup questions.
+
+---
+Proposed Plan:
+
+Phase 1: Main App Test Infrastructure
+1. Install dependencies: vitest, @testing-library/react, @testing-library/jest-dom, jsdom
+2. Create vitest.config.ts configured for Next.js + TypeScript
+3. Add test scripts to package.json (test, test:watch, test:coverage)
+4. Create vitest.setup.ts for React Testing Library matchers
+
+Phase 2: Worker Test Infrastructure
+1. Install vitest in worker directory
+2. Create worker/vitest.config.ts
+3. Add test scripts to worker/package.json
+
+Phase 3: Example Tests
+1. Create lib/scoring/index.test.ts with tests for:
+- Score calculation from severity penalties
+- Pass/fail threshold logic
+- Edge cases (empty results, all pass, all fail)
+
+Phase 4: Documentation
+1. Add "Testing" section to documentation/installation.md:
+- How to run tests
+- How to write new tests
+- File naming conventions
+2. Add testing note to functional-spec.md
+
+Phase 5: Update improvements.md
+1. Mark #4 as Complete
+
+---
+
+Summary of Changes:
+
+Phase 1 & 2 - Main App Infrastructure
+- Installed: vitest, @testing-library/react, @testing-library/jest-dom, jsdom, @vitejs/plugin-react
+- Created: vitest.config.ts - configured for Next.js + TypeScript + jsdom
+- Created: vitest.setup.ts - React Testing Library matchers
+- Added scripts to package.json: test, test:watch, test:coverage
+
+Phase 2 - Worker Infrastructure
+- Installed: vitest in worker directory
+- Created: worker/vitest.config.ts - configured for Node.js environment
+- Added scripts to worker/package.json: test, test:watch, test:coverage
+
+Phase 3 - Example Tests
+- Created: lib/scoring/index.test.ts with 34 tests covering:
+- Score thresholds and configuration
+- isPassingScore, getScoreStatus, getScoreColor
+- Badge class generation
+- Severity sort order
+- calculateScoreFromItems (penalty accumulation, ignored items, edge cases)
+- calculateReleaseScore (averaging, FAILED status, PARTIAL handling)
+
+Phase 4 - Documentation
+- Added Testing section to documentation/installation.md
+- Added testing note to documentation/functional-spec.md
+
+Phase 5 - Improvements Tracking
+- Updated #4 to Partial status with priority test list
+- Updated metrics (Complete: 1, Partial: 2, Open: 30)
+
+Run Tests:
+npm test              # Main app
+cd worker && npm test # Worker
+

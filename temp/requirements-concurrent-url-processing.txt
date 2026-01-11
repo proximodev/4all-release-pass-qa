@@ -1,0 +1,361 @@
+1. Level of Change / Effort
+
+Effort: Low-Medium (~1-2 hours)
+
+The pattern is straightforward - replace sequential for loop with concurrent processing using a limiter:
+
+// Before
+for (const url of urls) {
+const result = await checkUrl(url)
+outcomes.push(result)
+}
+
+// After
+import pLimit from 'p-limit'
+const limit = pLimit(5) // 5 concurrent
+
+const outcomes = await Promise.all(
+urls.map(url => limit(() => checkUrl(url)))
+)
+
+Changes needed:
+- Add p-limit dependency (or implement simple semaphore)
+- Refactor both spelling and preflight loops
+- Adjust logging (concurrent logs will interleave)
+
+---
+2. Impact on Railway (Worker Service)
+
+Setup: None required - Railway doesn't need configuration changes.
+
+Resource Impact:
+┌──────────┬────────────────┬────────────────────────────────────────┐
+│  Metric  │   Sequential   │            Concurrent (5x)             │
+├──────────┼────────────────┼────────────────────────────────────────┤
+│ CPU      │ Low, sustained │ Higher bursts                          │
+├──────────┼────────────────┼────────────────────────────────────────┤
+│ Memory   │ ~50MB          │ ~100-150MB (5 concurrent HTTP clients) │
+├──────────┼────────────────┼────────────────────────────────────────┤
+│ Duration │ Long           │ ~5x shorter                            │
+└──────────┴────────────────┴────────────────────────────────────────┘
+Cost Impact:
+- Railway charges by resource usage × time
+- Concurrent: Higher CPU for shorter time ≈ roughly same or slightly lower cost
+- Main benefit: Jobs complete faster, freeing worker for next job
+
+API Rate Limits (external services):
+┌────────────────────────────┬──────────────────────┬────────────────────────────────────┐
+│          Service           │       Current        │              Concern               │
+├────────────────────────────┼──────────────────────┼────────────────────────────────────┤
+│ PageSpeed API              │ 1 req/sec sequential │ 5 concurrent could hit rate limits │
+├────────────────────────────┼──────────────────────┼────────────────────────────────────┤
+│ LanguageTool (self-hosted) │ No limit             │ No concern                         │
+├────────────────────────────┼──────────────────────┼────────────────────────────────────┤
+│ Linkinator                 │ Local library        │ No concern                         │
+└────────────────────────────┴──────────────────────┴────────────────────────────────────┘
+Recommendation: Start with concurrency of 3-5, can tune based on rate limit errors.
+
+---
+3. Impact on User - When Does It Help?
+┌──────┬─────────────────┬─────────────────┬─────────┐
+│ URLs │ Sequential Time │ Concurrent (5x) │ Speedup │
+├──────┼─────────────────┼─────────────────┼─────────┤
+│ 1    │ ~5s             │ ~5s             │ None    │
+├──────┼─────────────────┼─────────────────┼─────────┤
+│ 3    │ ~15s            │ ~5s             │ 3x      │
+├──────┼─────────────────┼─────────────────┼─────────┤
+│ 5    │ ~25s            │ ~5s             │ 5x      │
+├──────┼─────────────────┼─────────────────┼─────────┤
+│ 10   │ ~50s            │ ~10s            │ 5x      │
+├──────┼─────────────────┼─────────────────┼─────────┤
+│ 20   │ ~100s           │ ~20s            │ 5x      │
+└──────┴─────────────────┴─────────────────┴─────────┘
+Answer:
+- Single URL: No improvement
+- 2+ URLs: Linear improvement up to concurrency limit
+- Most runs: Significant improvement (most test runs have 5-20 URLs)
+
+---
+Summary
+┌───────────────┬────────────────────────────────────────────┐
+│    Factor     │                 Assessment                 │
+├───────────────┼────────────────────────────────────────────┤
+│ Effort        │ Low-Medium (1-2 hours)                     │
+├───────────────┼────────────────────────────────────────────┤
+│ Railway setup │ None                                       │
+├───────────────┼────────────────────────────────────────────┤
+│ Railway cost  │ Neutral to slightly better                 │
+├───────────────┼────────────────────────────────────────────┤
+│ User impact   │ Significant for typical runs (5-20 URLs)   │
+├───────────────┼────────────────────────────────────────────┤
+│ Risk          │ Low - add rate limit handling as safeguard │
+└───────────────┴────────────────────────────────────────────┘
+Recommendation: Worth doing. High value-to-effort ratio. Should I create a detailed implementation plan?
+
+--------------
+
+Implementation Plan: Concurrent URL Processing (#6)
+
+---
+Overview
+┌───────────────────────────────────────┬─────────────────────────────┬────────────────────────────────────┐
+│               Location                │           Current           │               Change               │
+├───────────────────────────────────────┼─────────────────────────────┼────────────────────────────────────┤
+│ worker/providers/spelling/index.ts    │ Sequential for loop         │ Promise.all with concurrency limit │
+├───────────────────────────────────────┼─────────────────────────────┼────────────────────────────────────┤
+│ worker/providers/preflight/index.ts   │ Sequential for loop         │ Promise.all with concurrency limit │
+├───────────────────────────────────────┼─────────────────────────────┼────────────────────────────────────┤
+│ worker/providers/linkinator/client.ts │ checkLinksMultiple (unused) │ Remove or leave as-is              │
+└───────────────────────────────────────┴─────────────────────────────┴────────────────────────────────────┘
+---
+Phase 1: Add Dependency
+
+File: worker/package.json
+
+Install p-limit - lightweight concurrency limiter (no dependencies, 2KB):
+
+cd worker && npm install p-limit
+
+Why p-limit:
+- Simple API: limit(() => asyncFn())
+- TypeScript support built-in
+- Well-maintained (50M+ weekly downloads)
+- No configuration needed
+
+---
+Phase 2: Create Shared Concurrency Config
+
+File: worker/lib/concurrency.ts (new)
+
+import pLimit from 'p-limit'
+
+// Concurrency limits by provider type
+// Conservative defaults to avoid rate limiting
+export const CONCURRENCY = {
+SPELLING: 5,      // LanguageTool (self-hosted, no limit)
+PREFLIGHT: 3,     // PageSpeed API has rate limits
+LINKINATOR: 5,    // Local library, target server is the constraint
+} as const
+
+// Create limiters
+export const createLimiter = (concurrency: number) => pLimit(concurrency)
+
+Rationale for limits:
+- Spelling: 5 concurrent (self-hosted LanguageTool has no rate limit)
+- Preflight: 3 concurrent (PageSpeed API rate limit ~1 req/sec, but we have retries)
+- Can be tuned later based on production behavior
+
+---
+Phase 3: Update Spelling Provider
+
+File: worker/providers/spelling/index.ts
+
+Current (lines 131-183):
+for (const url of limitedUrls) {
+// ... sequential processing
+}
+
+Proposed:
+import pLimit from 'p-limit'
+import { CONCURRENCY } from '../../lib/concurrency'
+
+// ... inside runSpellingTest():
+
+const limit = pLimit(CONCURRENCY.SPELLING)
+
+const allOutcomes = await Promise.all(
+limitedUrls.map(url => limit(async () => {
+  console.log(`[SPELLING] Checking: ${url}`)
+
+  const ignoredCodes = await getIgnoredRuleCodes(testRun.projectId, url)
+  if (ignoredCodes.size > 0) {
+    console.log(`[SPELLING] Found ${ignoredCodes.size} ignored rule(s) for ${url}`)
+  }
+
+  try {
+    const checkResult = await checkUrlSpelling(url)
+    const resultItems = applyIgnoredRules(checkResult.resultItems, ignoredCodes)
+    const score = calculateScoreFromItems(resultItems.filter(i => !i.ignored))
+
+    // Store raw response
+    rawPayload.languagetool.push({
+      url,
+      issueCount: checkResult.issueCount,
+      wordCount: checkResult.wordCount,
+      language: checkResult.language,
+      filteredProperNouns: checkResult.filteredProperNouns,
+    })
+
+    console.log(`[SPELLING] ${url}: ${checkResult.issueCount} issues`)
+
+    return {
+      ...checkResult,
+      success: true as const,
+      resultItems,
+      score,
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    console.error(`[SPELLING] Failed to check ${url}:`, errorMsg)
+
+    return {
+      url,
+      success: false as const,
+      error: errorMsg,
+    }
+  }
+}))
+)
+
+Key changes:
+- Replace for loop with Promise.all + map
+- Wrap each URL processing in limit()
+- Return outcome from async function (instead of pushing to array)
+- rawPayload.languagetool.push() happens inside the concurrent function (thread-safe in JS)
+
+---
+Phase 4: Update Preflight Provider
+
+File: worker/providers/preflight/index.ts
+
+Current (lines 151-220):
+for (const url of limitedUrls) {
+// ... sequential processing
+}
+
+Proposed: Same pattern as spelling - wrap the URL processing logic in a concurrent limiter.
+
+import pLimit from 'p-limit'
+import { CONCURRENCY } from '../../lib/concurrency'
+
+// ... inside runPreflightTest():
+
+const limit = pLimit(CONCURRENCY.PREFLIGHT)
+
+const allOutcomes = await Promise.all(
+limitedUrls.map(url => limit(async () => {
+  console.log(`[PAGE_PREFLIGHT] Checking: ${url}`)
+
+  const ignoredCodes = await getIgnoredRuleCodes(testRun.projectId, url)
+
+  try {
+    // Run Lighthouse SEO + Linkinator + Custom Rules
+    // ... existing logic ...
+
+    return { success: true as const, /* ... */ }
+  } catch (error) {
+    return { url, success: false as const, error: /* ... */ }
+  }
+}))
+)
+
+Additional consideration:
+- rawPayload.lighthouse.push() and rawPayload.linkinator.push() called inside concurrent functions
+- Order of results may differ from URL order (usually fine, but note in case ordering matters for display)
+
+---
+Phase 5: Handle Rate Limit Errors (Optional Enhancement)
+
+If PageSpeed API returns 429 (rate limited), we could:
+
+Option A: Simple - Let existing retry logic handle it
+- Current retryWithBackoff in the codebase should handle transient 429s
+
+Option B: Dynamic throttling
+- On 429, reduce concurrency temporarily
+- More complex, defer to later if needed
+
+Recommendation: Start with Option A, monitor in production.
+
+---
+Phase 6: Update Logging
+
+Concurrent logs will interleave. Consider adding URL index for clarity:
+
+limitedUrls.map((url, index) => limit(async () => {
+console.log(`[SPELLING] [${index + 1}/${limitedUrls.length}] Checking: ${url}`)
+// ...
+}))
+
+---
+Phase 7: Cleanup (Optional)
+
+File: worker/providers/linkinator/client.ts
+
+The checkLinksMultiple function (lines 139-168) is exported but never used. Options:
+- Remove it (cleaner)
+- Leave it (no harm)
+
+Recommendation: Leave it - might be useful for batch operations later.
+
+---
+Files to Modify
+┌─────────────────────────────────────┬───────────────────────────────────────────┐
+│                File                 │                  Change                   │
+├─────────────────────────────────────┼───────────────────────────────────────────┤
+│ worker/package.json                 │ Add p-limit dependency                    │
+├─────────────────────────────────────┼───────────────────────────────────────────┤
+│ worker/lib/concurrency.ts           │ New file - concurrency config             │
+├─────────────────────────────────────┼───────────────────────────────────────────┤
+│ worker/providers/spelling/index.ts  │ Replace for loop with Promise.all + limit │
+├─────────────────────────────────────┼───────────────────────────────────────────┤
+│ worker/providers/preflight/index.ts │ Replace for loop with Promise.all + limit │
+└─────────────────────────────────────┴───────────────────────────────────────────┘
+---
+Testing Approach
+
+1. Local test with 5+ URLs - Verify concurrent processing works
+2. Check logs - Confirm URLs processed in parallel (interleaved logs)
+3. Time comparison - 10 URLs should take ~2x single URL time, not 10x
+4. Error handling - Verify one URL failure doesn't break others
+
+---
+Estimated Time
+┌──────────────────────────────┬───────────────────────┐
+│            Phase             │         Time          │
+├──────────────────────────────┼───────────────────────┤
+│ Phase 1: Add dependency      │ 2 min                 │
+├──────────────────────────────┼───────────────────────┤
+│ Phase 2: Concurrency config  │ 5 min                 │
+├──────────────────────────────┼───────────────────────┤
+│ Phase 3: Spelling provider   │ 20 min                │
+├──────────────────────────────┼───────────────────────┤
+│ Phase 4: Preflight provider  │ 25 min                │
+├──────────────────────────────┼───────────────────────┤
+│ Phase 5: Rate limit handling │ Skip (existing retry) │
+├──────────────────────────────┼───────────────────────┤
+│ Phase 6: Logging updates     │ 5 min                 │
+├──────────────────────────────┼───────────────────────┤
+│ Total                        │ ~1 hour               │
+└──────────────────────────────┴───────────────────────┘
+---
+
+Approach confirmation
+---------------------
+
+Potential Concerns
+
+1. rawPayload order
+- Entries will be in completion order, not URL order
+- Fine for debugging data - no action needed
+
+2. PageSpeed rate limits
+- 400 requests/minute = 6.67/sec
+- Concurrency of 3 with ~5s requests = ~0.6 req/sec
+- Well within limits
+
+3. Target site load (Linkinator)
+- 3 concurrent crawlers on user's site
+- Acceptable for most sites
+- Could add config option later if needed
+
+---
+Confirmation
+
+This is the right approach because:
+1. Simple, proven pattern (p-limit + Promise.all)
+2. Minimal code change - replace loop, keep everything else
+3. Existing error handling and retry logic stays intact
+4. Conservative concurrency limits avoid rate limiting
+5. No shared mutable state issues
+

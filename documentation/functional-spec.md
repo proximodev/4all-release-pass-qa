@@ -7,7 +7,7 @@ We will combine SEO technical health, performance, visual QA, and grammar checks
 
 # Roadmap
 
-* **MVP:**
+* **V1.0 - MVP:**
   * Password protected web interface
   * User management
   * Project data model and management
@@ -19,11 +19,11 @@ We will combine SEO technical health, performance, visual QA, and grammar checks
     * Performance (PageSpeed Core Web Vitals)
     * Screenshots (Playwright)
     * Spelling/Grammar (LanguageTool)
-  * Note: Site Audit Full Site Crawl Mode (SE Ranking) is site-level, NOT part of Release Runs, deferred to V1.2
-* **V1.2**:
+* **V1.1**:
   * Visual diffs for regression detection
   * Baseline screenshot selection mechanism (TBD)
 * **V1.5**:
+  * Site Audit Full Site Crawl Mode (SE Ranking) (site-level, NOT part of Release Runs)
   * ManualTestStatus change history/audit trail
   * Per-user email notification preferences
 * **Later / TBD**:
@@ -149,6 +149,11 @@ Empty states, no tests yet, partial failures, and manual review indicators are c
 * User management (admin only)
 * Email notifications for completed Release Runs
 * UI provides dashboards for managing Release Runs, running tests, browsing results, and reviewing issues
+* **Testing infrastructure**:
+  * Vitest for unit and component tests
+  * React Testing Library for component testing
+  * Tests co-located with source code (*.test.ts, *.test.tsx)
+  * See `documentation/installation.md` Testing section for usage
 * Utilities rewritten and integrated:
   * Bulk Performance
   * HTML Cleaner

@@ -38,23 +38,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Release run not found' }, { status: 404 })
     }
 
-    // Update all queued/running test runs to FAILED
-    await prisma.testRun.updateMany({
-      where: {
-        releaseRunId: id,
-        status: { in: ['QUEUED', 'RUNNING'] }
-      },
-      data: {
-        status: 'FAILED',
-        finishedAt: new Date()
-      }
-    })
-
-    // Update release run status to FAIL
-    await prisma.releaseRun.update({
-      where: { id },
-      data: { status: 'FAIL' }
-    })
+    // Update test runs and release run atomically
+    await prisma.$transaction([
+      prisma.testRun.updateMany({
+        where: {
+          releaseRunId: id,
+          status: { in: ['QUEUED', 'RUNNING'] }
+        },
+        data: {
+          status: 'FAILED',
+          finishedAt: new Date()
+        }
+      }),
+      prisma.releaseRun.update({
+        where: { id },
+        data: { status: 'FAIL' }
+      })
+    ])
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { isValidUuid } from '@/lib/validation/common'
 import { z } from 'zod'
 
 interface RouteParams {
@@ -26,6 +27,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Verify user has access via: releaseRun.project.companyId === user.companyId
 
     const { id } = await params
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid release run ID format' }, { status: 400 })
+    }
+
     const body = await request.json()
 
     // Validate request body

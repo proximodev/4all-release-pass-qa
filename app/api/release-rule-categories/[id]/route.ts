@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { isValidUuid } from '@/lib/validation/common'
 import { z } from 'zod'
 
 interface RouteParams {
@@ -23,6 +24,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (error) return error
 
     const { id } = await params
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid category ID format' }, { status: 400 })
+    }
 
     const category = await prisma.releaseRuleCategory.findUnique({
       where: { id },
@@ -58,6 +63,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (error) return error
 
     const { id } = await params
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid category ID format' }, { status: 400 })
+    }
+
     const body = await request.json()
     const validation = updateCategorySchema.safeParse(body)
 
@@ -124,6 +134,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (error) return error
 
     const { id } = await params
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid category ID format' }, { status: 400 })
+    }
 
     // Check if category exists and has rules
     const category = await prisma.releaseRuleCategory.findUnique({

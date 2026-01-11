@@ -38,6 +38,7 @@ import type { CheerioAPI, Cheerio } from 'cheerio';
 import type { Element } from 'domhandler';
 import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { fetchWithTimeout } from '../../lib/fetch';
+import { retryWithBackoff } from '../../lib/retry';
 
 /**
  * Cached ReleaseRule data for severity lookup
@@ -113,16 +114,19 @@ export async function runCustomRules(
 }
 
 /**
- * Fetch page HTML and headers
+ * Fetch page HTML and headers with retry for transient failures
  */
 async function fetchPage(url: string): Promise<FetchedPage> {
-  const response = await fetchWithTimeout(url, {
-    timeoutMs: 30000,
-    headers: {
-      'User-Agent': 'ReleasePass-Bot/1.0 (https://releasepass.app)',
-      'Accept': 'text/html,application/xhtml+xml',
-    },
-  });
+  const response = await retryWithBackoff(
+    () => fetchWithTimeout(url, {
+      timeoutMs: 30000,
+      headers: {
+        'User-Agent': 'ReleasePass-Bot/1.0 (https://releasepass.app)',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+    }),
+    { maxRetries: 2, initialDelayMs: 1000 }
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);

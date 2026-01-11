@@ -109,7 +109,7 @@ export default function TestSelector({
   if (!projectId) {
     return (
       <div className="w-full">
-        <label className="block font-medium mb-2">Release Test</label>
+        <label className="block font-medium mb-2">Release Test Run</label>
         <select
           disabled
           className="w-full py-2 pl-1 pr-4 border border-medium-gray rounded bg-white opacity-50 focus:outline-none focus:border-transparent "
@@ -123,7 +123,7 @@ export default function TestSelector({
   if (loading) {
     return (
       <div className="w-full">
-        <label className="block font-medium mb-2">Test</label>
+        <label className="block font-medium mb-2">Release Test Run</label>
         <select
           disabled
           className="w-full px-3 py-2 border border-medium-gray rounded bg-white opacity-50 focus:outline-none focus:border-transparent "
@@ -136,14 +136,14 @@ export default function TestSelector({
 
   return (
     <div className="w-full">
-      <label className="block font-medium mb-2">Test</label>
+      <label className="block font-medium mb-2">Release Test Run</label>
       <select
         value={selectedTest}
         onChange={handleTestChange}
         className="w-full py-2 pl-2 pr-10 border border-medium-gray rounded focus:outline-none focus:border-transparent bg-white"
       >
         <option value="">Select</option>
-        <option value="new-test">(+) New Test</option>
+        <option value="new-test">(+) New Test Run</option>
         {items.map((item) => (
           <option key={item.id} value={item.id}>
             {formatItemName(item)}

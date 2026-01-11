@@ -1,5 +1,5 @@
 export const TEST_TYPES = [
-  { value: 'PAGE_PREFLIGHT', label: 'Technical Baseline', route: 'baseline', defaultChecked: true },
+  { value: 'PAGE_PREFLIGHT', label: 'Preflight Baseline', route: 'baseline', defaultChecked: true },
   { value: 'PERFORMANCE', label: 'Performance', route: 'performance', defaultChecked: true },
   { value: 'SPELLING', label: 'Spelling / Grammar', route: 'spelling', defaultChecked: true },
   { value: 'SCREENSHOTS', label: 'Browser Screenshots', route: 'browser', defaultChecked: true },

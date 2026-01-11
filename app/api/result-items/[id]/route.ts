@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { isValidUuid } from '@/lib/validation/common'
 import { z } from 'zod'
 import {
   recalculateUrlResultScore,
@@ -35,6 +36,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (error) return error
 
     const { id } = await params
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid result item ID format' }, { status: 400 })
+    }
+
     const body = await request.json()
 
     const validation = updateResultItemSchema.safeParse(body)

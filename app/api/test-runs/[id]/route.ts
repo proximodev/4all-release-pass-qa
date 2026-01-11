@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { isValidUuid } from '@/lib/validation/common'
 
 /**
  * GET /api/test-runs/[id] - Get test run details
@@ -17,6 +18,10 @@ export async function GET(
     if (error) return error
 
     const { id } = await params
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid test run ID format' }, { status: 400 })
+    }
 
     // TODO: Add resource-level authorization when multi-tenant is implemented
     // Verify user has access via: testRun.project.companyId === user.companyId

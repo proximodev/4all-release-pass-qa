@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { isValidUuid } from '@/lib/validation/common'
 
 interface RouteParams {
   params: Promise<{ id: string; urlResultId: string }>
@@ -21,6 +22,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Verify user has access via: urlResult.testRun.project.companyId === user.companyId
 
     const { id: releaseRunId, urlResultId } = await params
+
+    if (!isValidUuid(releaseRunId) || !isValidUuid(urlResultId)) {
+      return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 })
+    }
 
     // Fetch the URL result with its items
     const urlResult = await prisma.urlResult.findUnique({

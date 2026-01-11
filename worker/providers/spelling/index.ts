@@ -17,6 +17,7 @@ import type { CheerioAPI } from 'cheerio';
 import { prisma } from '../../lib/prisma';
 import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { fetchWithTimeout } from '../../lib/fetch';
+import { retryWithBackoff } from '../../lib/retry';
 import { checkSpelling, isConfigured, getConfigInfo, SpellingMatch } from './languagetool-client';
 import { calculateScoreFromItems } from '../../lib/scoring';
 import { createLimiter, CONCURRENCY } from '../../lib/concurrency';
@@ -335,14 +336,17 @@ function getUrlsToTest(testRun: TestRunWithRelations): string[] {
  * Throws on operational errors (fetch failed, API error)
  */
 async function checkUrlSpelling(url: string): Promise<Omit<UrlSpellingResult, 'success'>> {
-  // Fetch the page
-  const response = await fetchWithTimeout(url, {
-    timeoutMs: 30000,
-    headers: {
-      'User-Agent': 'ReleasePass-Bot/1.0 (https://releasepass.app)',
-      Accept: 'text/html,application/xhtml+xml',
-    },
-  });
+  // Fetch the page with retry for transient failures
+  const response = await retryWithBackoff(
+    () => fetchWithTimeout(url, {
+      timeoutMs: 30000,
+      headers: {
+        'User-Agent': 'ReleasePass-Bot/1.0 (https://releasepass.app)',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+    }),
+    { maxRetries: 2, initialDelayMs: 1000 }
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);

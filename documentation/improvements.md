@@ -101,67 +101,61 @@ This document outlines security, performance, and code quality improvements for 
 - `worker/providers/spelling/index.ts:131-185`
 - `worker/providers/preflight/index.ts:150-228`
 
-**Category**: Performance
-**Issue**: URLs processed sequentially in loops. For 20 spelling checks at ~30s each = 10 minutes total. Same for preflight.
-**Recommendation**: Use `Promise.all()` with concurrency limiting (e.g., 5 concurrent).
-**Status**: Complete - Added concurrent URL processing (Jan 2026)
-- Created `worker/lib/concurrency.ts` with configurable limits
-- Spelling: 5 concurrent (self-hosted LanguageTool)
-- Preflight: 3 concurrent (PageSpeed API rate limits)
+**Category**: Performance  
+**Issue**: URLs processed sequentially in loops. For 20 spelling checks at ~30s each = 10 minutes total. Same for preflight.  
+**Recommendation**: Use `Promise.all()` with concurrency limiting (e.g., 5 concurrent).  
+**Status**: Complete - Added concurrent URL processing (Jan 2026  )
+- Created `worker/lib/concurrency.ts` with configurable limits  
+- Spelling: 5 concurrent (self-hosted LanguageTool)  
+- Preflight: 3 concurrent (PageSpeed API rate limits)  
 - Uses p-limit for simple, proven concurrency control  
 
 ### 7. Missing Retry Logic for Critical I/O Operations
-**Location**:  
+**Location**:
 - `worker/lib/heartbeat.ts:8-16`
-- `worker/providers/spelling/index.ts:335`
-- `worker/providers/preflight/custom-rules.ts:119`
+- `worker/providers/spelling/index.ts:340`
+- `worker/providers/preflight/custom-rules.ts:120`
 
 **Category**: Reliability  
 **Issue**: Critical operations don't use `retryWithBackoff()`. Heartbeat updates silently fail, page HTML fetches have no retry. Network hiccups cause entire test failures.  
 **Recommendation**: Add retries for all I/O operations.  
-**Status**: Open  
+
+**Status**: Partial - Page fetch retries complete (Jan 2026)  
+- Added `retryWithBackoff()` wrapper to `fetchWithTimeout` in spelling provider  
+- Added `retryWithBackoff()` wrapper to `fetchWithTimeout` in custom-rules provider  
+- Configuration: 2 retries, 1 second initial delay, exponential backoff  
+- Remaining: Heartbeat retry logic (lower priority - silent failures acceptable)  
 
 ### 8. Database Operations Without Timeouts
-**Location**:  
+**Location**:
 - `worker/providers/preflight/index.ts:237-258`
 - `worker/providers/spelling/index.ts:195-222`
 
 **Category**: Reliability  
 **Issue**: Database operations (especially large `createMany()` calls) have no timeout. Slow queries or connection pool exhaustion could hang the worker indefinitely.  
-**Recommendation**: Add query timeout via `Promise.race()` or Prisma configuration.  
-**Status**: Open  
+**Recommendation**: Add query timeout via Prisma transaction `{ timeout: 30000 }` option.  
+**Status**: Deferred (low risk - small transactions, managed PostgreSQL, no reported issues)  
 
 ### 9. Missing CSP and Security Headers
-**Location**: `next.config.ts`  
-**Category**: Security  
-**Issue**: Security header configuration is incomplete. Missing Content-Security-Policy (CSP), X-Permitted-Cross-Domain-Policies, Permissions-Policy. HSTS header missing `preload` directive.  
+**Location**: `next.config.ts`
+**Category**: Security
+**Issue**: Security header configuration is incomplete. Missing Content-Security-Policy (CSP), X-Permitted-Cross-Domain-Policies, Permissions-Policy. HSTS header missing `preload` directive.
 **Recommendation**: Add comprehensive security headers including CSP.  
-**Status**: Open  
+**Status**: Deferred (internal tool, auth-gated, no cross-user content; CSP requires significant tuning)  
 
-### 10. Race Conditions in Component Async Operations
-**Location**:  
-- `components/layout/Breadcrumb.tsx:24-31` - uncontrolled fetch without AbortController
-- `components/releasepass/TestResultDetail.tsx:70-85` - missing useCallback dependencies
-- `components/releasepass/ReleaseStatusBadge.tsx:22-34` - stale closure issues
-
-**Category**: Reliability  
-**Issue**: Multiple useEffect hooks with async operations lack proper cleanup and dependency handling. Can cause stale state and memory leaks.  
-**Recommendation**: Implement AbortController cleanup, fix useCallback dependencies.  
-**Status**: Open  
-
-### 11. Heavy `any` Type Usage
-**Location**: 17+ files, especially API route error handlers and worker code  
-**Category**: Type Safety  
-**Issue**: Extensive `catch (error: any)` and `as any` casts bypass TypeScript safety.  
-**Recommendation**:  
+### 10. Heavy `any` Type Usage
+**Location**: 17+ files, especially API route error handlers and worker code
+**Category**: Type Safety
+**Issue**: Extensive `catch (error: any)` and `as any` casts bypass TypeScript safety.
+**Recommendation**:
 ```typescript
 catch (error: unknown) {
   const message = error instanceof Error ? error.message : 'Unknown error'
 }
 ```
-**Status**: Open  
+**Status**: Deferred (no runtime bugs, type safety improvement only; fix opportunistically)  
 
-### 12. No Rate Limiting
+### 11. No Rate Limiting
 **Location**: All API routes  
 **Category**: Security  
 **Issue**: No rate limiting middleware. Also no rate limiting for external API calls in worker (PageSpeed, SE Ranking).  
@@ -169,7 +163,7 @@ catch (error: unknown) {
 **Recommendation**: Use `@upstash/ratelimit` or implement per-provider rate limiting in worker.  
 **Status**: Deferred (internal tool with ~10 trusted users)  
 
-### 13. Wrong npm Package Installed - `tailwind` vs `tailwindcss`
+### 12. Wrong npm Package Installed - `tailwind` vs `tailwindcss`
 **Location**: `package.json`  
 **Category**: Dependencies  
 **Issue**: The `tailwind@4.0.0` package is installed, which is a deprecated CQRS/event-sourcing library, NOT the CSS framework. The correct package `tailwindcss@4.1.17` is also installed. The wrong package brings in 27 transitive dependencies with 19 known vulnerabilities in npm audit (lodash, jsonwebtoken, express, etc.).  
@@ -184,15 +178,19 @@ npm uninstall tailwind
 
 ## MEDIUM PRIORITY ISSUES
 
-### 14. Missing UUID Validation on Route Parameters
-**Location**: Most dynamic route handlers  
-**Category**: Data Integrity  
-**Issue**: `[id]` parameters used directly in Prisma queries without UUID format validation. Invalid UUIDs create unclear error messages.  
-**Affected routes**: `/api/projects/[id]`, `/api/release-runs/[id]`, `/api/test-runs/[id]`, `/api/users/[id]`, `/api/result-items/[id]`  
-**Recommendation**: Add `isValidUuid()` validation at route entry.  
-**Status**: Open  
+### 13. Missing UUID Validation on Route Parameters
+**Location**: Most dynamic route handlers
+**Category**: Data Integrity
+**Issue**: `[id]` parameters used directly in Prisma queries without UUID format validation. Invalid UUIDs create unclear error messages.
+**Affected routes**: `/api/projects/[id]`, `/api/release-runs/[id]`, `/api/test-runs/[id]`, `/api/users/[id]`, `/api/result-items/[id]`
+**Recommendation**: Add `isValidUuid()` validation at route entry.
 
-### 15. Silent Error Handling in Components
+**Status**: Complete (Jan 2026)
+- Added UUID validation to 8 route files, 17 handlers
+- Returns 400 with clear error message for invalid UUID format
+- Uses existing `isValidUuid()` from `lib/validation/common.ts`  
+
+### 14. Silent Error Handling in Components
 **Location**: Multiple pages and components  
 **Category**: Reliability  
 **Issue**: Fetch errors caught but silently ignored. Users see loading state indefinitely if API fails. No error state displayed.  
@@ -204,35 +202,35 @@ npm uninstall tailwind
 **Recommendation**: Implement error state tracking and display user-friendly error messages.  
 **Status**: Open  
 
-### 16. URL Validation Missing SSRF Protection
+### 15. URL Validation Missing SSRF Protection
 **Location**: `lib/validation/project.ts:3-8`  
 **Category**: Security  
 **Issue**: Project schema validates URLs with `.url()` but doesn't use `safeUrlSchema` which includes SSRF protection. Projects could be created pointing to internal/private URLs.  
 **Recommendation**: Use `safeUrlSchema` for `siteUrl` and `sitemapUrl` fields.  
 **Status**: Open  
 
-### 17. Inconsistent Error Handling Patterns
+### 16. Inconsistent Error Handling Patterns
 **Location**: All API routes  
 **Category**: Code Quality  
 **Issue**: Mixed patterns - some routes check ZodError, some check Prisma P2025, some don't. No standardized error response format.  
 **Recommendation**: Create `lib/errors.ts` with `handleApiError()` utility.  
 **Status**: Open  
 
-### 18. No Error Monitoring
+### 17. No Error Monitoring
 **Location**: N/A (Missing)  
 **Category**: Observability  
 **Issue**: Sentry mentioned in CLAUDE.md but not implemented. No visibility into production errors.  
 **Recommendation**: Implement Sentry for both app and worker.  
 **Status**: Open  
 
-### 19. Form Double-Submission Vulnerability
+### 18. Form Double-Submission Vulnerability
 **Location**: All form pages (`projects/new`, `settings/users/new`, etc.)  
 **Category**: Reliability  
 **Issue**: No prevention of double submissions. User can click submit multiple times before navigation, potentially creating duplicate records.  
 **Recommendation**: Implement submission guard or disable form during submission.  
 **Status**: Open  
 
-### 20. Console.log Statements Throughout
+### 19. Console.log Statements Throughout
 **Location**: 30+ instances across worker and components  
 **Category**: Code Quality  
 **Issue**: Extensive console logging. Not searchable or structured.  
@@ -241,14 +239,14 @@ npm uninstall tailwind
 - API routes guard with `NODE_ENV === 'development'`
 - Structured logging deferred to post-MVP
 
-### 21. Delete Without State Verification
+### 20. Delete Without State Verification
 **Location**: `app/api/release-runs/[id]/route.ts:110-112`  
 **Category**: Data Integrity  
 **Issue**: DELETE operation allows deleting a release run without verifying its state. If actively executing (RUNNING), would corrupt worker state and leave orphaned TestRuns.  
 **Recommendation**: Validate release run is in terminal state before deletion, or use soft delete.  
 **Status**: Open  
 
-### 22. No Pagination on List Endpoints
+### 21. No Pagination on List Endpoints
 **Location**: `app/api/projects/route.ts`, `app/api/release-runs/route.ts`, `app/api/test-runs/route.ts`  
 **Category**: Performance  
 **Issue**: `findMany` without limits. Will fetch all records as database grows.  
@@ -256,14 +254,33 @@ npm uninstall tailwind
 - Query performance acceptable up to ~500 records
 - Revisit when usage indicates >200 release runs per project
 
-### 23. Missing URL Normalization
-**Location**: `worker/providers/spelling/index.ts:113`  
-**Category**: Best Practices  
-**Issue**: URLs deduplicated with `new Set()` but `https://example.com/` and `https://example.com` treated as different.  
-**Recommendation**: Normalize URLs (trailing slash, lowercase) before deduplicating.  
-**Status**: Open  
+### 22. Missing URL Normalization
+**Location**: `worker/providers/spelling/index.ts:113`
+**Category**: Best Practices
+**Issue**: URLs deduplicated with `new Set()` but `https://example.com/` and `https://example.com` treated as different.
+**Recommendation**: Normalize URLs (trailing slash, lowercase) before deduplicating.
+**Status**: Open
 
-### 24. No Static Generation
+### 22.5 Worker Writes Not Idempotent
+**Location**:
+- `worker/providers/spelling/index.ts:199,232` - UrlResult.create
+- `worker/providers/preflight/index.ts:242,288` - UrlResult.create
+- `worker/providers/pagespeed/performance.ts:104,151,240` - UrlResult.create
+- `worker/providers/seranking/index.ts:56` - UrlResult.create
+
+**Category**: Data Integrity
+**Issue**: Worker uses `create` instead of `upsert` for UrlResults, ResultItems, and ScreenshotSets. No unique constraints exist on composite keys. If worker crashes mid-processing and restarts, duplicate records could be created for partially-processed URLs.
+**Current Mitigation**: Rerun logic deletes entire TestRun (cascading to children) before creating new one, preventing duplicates from user-initiated reruns.
+**Risk**: Worker crash during processing could create duplicates. No reported issues to date.
+**Recommendation**:
+1. Add unique constraints to schema:
+   - UrlResult: `@@unique([testRunId, url])`
+   - ResultItem: `@@unique([urlResultId, provider, code])`
+   - ScreenshotSet: `@@unique([testRunId, url, viewport])`
+2. Change `create` to `upsert` in all worker providers
+**Status**: Open (revisit when implementing Screenshots provider)
+
+### 23. No Static Generation
 **Location**: All pages  
 **Category**: Performance  
 **Issue**: All pages dynamically rendered. No `generateStaticParams` or ISR used.  
@@ -274,80 +291,80 @@ npm uninstall tailwind
 
 ## LOWER PRIORITY ISSUES
 
-### 25. Large Component Files
+### 24. Large Component Files
 **Location**: `TestResultsSummary.tsx` (530 lines), `TestResultDetail.tsx` (370 lines)  
 **Category**: Code Quality  
 **Issue**: Components too large with multiple responsibilities.  
 **Recommendation**: Break into smaller, focused components.  
 **Status**: Open  
 
-### 26. Missing PropTypes/Interface Documentation
+### 25. Missing PropTypes/Interface Documentation
 **Location**: Most components  
 **Category**: Code Quality  
 **Issue**: Component interfaces lack JSDoc comments.  
 **Status**: Open  
 
-### 27. Missing Next.js Image Optimization
+### 26. Missing Next.js Image Optimization
 **Location**: `next.config.ts`  
 **Category**: Performance  
 **Issue**: No image optimization settings configured.  
 **Recommendation**: Add images config with formats and remote patterns.  
 **Status**: Open  
 
-### 28. No Bundle Analysis
+### 27. No Bundle Analysis
 **Location**: N/A (Missing)  
 **Category**: Performance  
 **Issue**: No visibility into bundle size or duplicate dependencies.  
 **Recommendation**: Add `@next/bundle-analyzer` for production builds.  
 **Status**: Open  
 
-### 29. Database Connection Pooling
+### 28. Database Connection Pooling
 **Location**: `lib/prisma.ts`  
 **Category**: Performance  
 **Issue**: No explicit connection pool configuration for serverless.  
 **Status**: Deferred (revisit if connection issues occur)  
 
-### 30. Convert to Monorepo Structure
+### 29. Convert to Monorepo Structure
 **Location**: Project root  
 **Category**: Code Quality  
 **Issue**: App and worker share configuration via JSON imports. Pattern becomes harder to maintain as shared code grows.  
 **Recommendation**: Convert to monorepo using pnpm workspaces or Turborepo.  
 **Status**: Open (future enhancement)  
 
-### 31. Custom Rules Fetch Optimization
+### 30. Custom Rules Fetch Optimization
 **Location**: `worker/providers/preflight/custom-rules.ts`  
 **Category**: Performance  
 **Issue**: Custom rules perform separate HTTP fetch per URL even though PageSpeed API already fetches the page.  
 **Status**: Open (future optimization)  
 
-### 32. Modal Accessibility Issues
+### 31. Modal Accessibility Issues
 **Location**: Delete confirmation modals across multiple pages  
 **Category**: Accessibility  
 **Issue**: Modals lack ARIA dialog attributes, focus management, keyboard support (Escape key).  
 **Recommendation**: Use proper modal/dialog component with full ARIA support.  
 **Status**: Open  
 
-### 33. Inconsistent Date Formatting
+### 32. Inconsistent Date Formatting
 **Location**: Multiple list pages  
 **Category**: Best Practices  
 **Issue**: Using `toLocaleDateString()` without locale specification. Output varies by browser/system.  
 **Recommendation**: Use date-fns or dayjs with explicit locale and format.  
 **Status**: Open  
 
-### 34. Missing TypeScript Strict Settings
+### 33. Missing TypeScript Strict Settings
 **Location**: `tsconfig.json`, `worker/tsconfig.json`  
 **Category**: Type Safety  
 **Issue**: Both configs set `strict: true` but lack granular settings like `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`.  
 **Recommendation**: Add additional strict settings to catch more issues.  
 **Status**: Open  
 
-### 35. ESLint Config Missing Custom Rules
+### 34. ESLint Config Missing Custom Rules
 **Location**: `eslint.config.mjs`  
 **Category**: Code Quality  
 **Issue**: Only uses Next.js presets. Missing rules for `no-console` in production, import ordering, etc.  
 **Status**: Open  
 
-### 36. Invalid Tailwind Class Names
+### 35. Invalid Tailwind Class Names
 **Location**:  
 - `components/layout/Header.tsx:89` - `rounded-smif` (typo)
 - `components/releasepass/TestResultDetail.tsx:496` - `min-h=[440px]` (should be `min-h-[440px]`)
@@ -357,13 +374,24 @@ npm uninstall tailwind
 **Recommendation**: Fix typos.  
 **Status**: Open  
 
-### 37. Paste Cleaner Uses dangerouslySetInnerHTML
-**Location**: `app/(dashboard)/utilities/paste-cleaner/page.tsx:294`  
-**Category**: Code Quality  
-**Issue**: Using `dangerouslySetInnerHTML` to render output. The `cleanAndFormat` function sanitizes HTML but complex edge cases may slip through.  
-**Impact**: Low for internal tool - users paste their own content and view their own output. No user-to-user attack vector.  
-**Recommendation**: Consider adding DOMPurify as defense-in-depth if paste cleaner is used for external content in future.  
-**Status**: Open  
+### 36. Paste Cleaner Uses dangerouslySetInnerHTML
+**Location**: `app/(dashboard)/utilities/paste-cleaner/page.tsx:294`
+**Category**: Code Quality
+**Issue**: Using `dangerouslySetInnerHTML` to render output. The `cleanAndFormat` function sanitizes HTML but complex edge cases may slip through.
+**Impact**: Low for internal tool - users paste their own content and view their own output. No user-to-user attack vector.
+**Recommendation**: Consider adding DOMPurify as defense-in-depth if paste cleaner is used for external content in future.
+**Status**: Open
+
+### 37. React Component Async Cleanup
+**Location**:
+- `components/layout/Breadcrumb.tsx:24-46` - fetch without AbortController cleanup
+- `components/releasepass/TestResultDetail.tsx:64-68` - missing useEffect dependency
+
+**Category**: Code Quality
+**Issue**: Minor React best-practice issues. Breadcrumb fetches lack AbortController cleanup (can cause setState on unmounted component warning). TestResultDetail has ESLint dependency warning.
+**Note**: ReleaseStatusBadge originally flagged but found to be correctly implemented.
+**Impact**: Console warnings only, no functional bugs. React 18+ handles gracefully.
+**Status**: Deferred (fix opportunistically when touching these files)
 
 ---
 
@@ -399,31 +427,30 @@ Verify Row-Level Security policies are enabled on all tables. The `NEXT_PUBLIC_S
 ## PRIORITY REMEDIATION PLAN
 
 ### Phase 1 - Critical (Immediate)
-1. Remove wrong `tailwind` package (#13) - `npm uninstall tailwind`
+1. Remove wrong `tailwind` package (#12) - `npm uninstall tailwind`
 2. Update Next.js to 16.1.1 (security fixes)
 3. Add unique constraint on ManualTestStatus (#2)
 
 ### Phase 2 - High Priority (This Sprint)
 4. ~~Add transactions for multi-step DB operations (#5)~~ - Complete
 5. ~~Implement concurrent URL processing in worker (#6)~~ - Complete
-6. Add retry logic for I/O operations (#7)
-7. Add database operation timeouts (#8)
-8. Add CSP headers (#9)
-9. Fix component async/cleanup issues (#10)
+6. ~~Add retry logic for I/O operations (#7)~~ - Partial (page fetches complete)
+7. ~~Add database operation timeouts (#8)~~ - Deferred
+8. ~~Add CSP headers (#9)~~ - Deferred
 
 ### Phase 3 - Medium Priority (Next Sprint)
-10. ~~Add request body size validation (#1)~~ - Complete
-11. Add UUID validation to routes (#14)
-12. Implement error UI for failed fetches (#15)
-13. Add SSRF protection to project URLs (#16)
-14. Set up Sentry error monitoring (#18)
+9. ~~Add request body size validation (#1)~~ - Complete
+10. ~~Add UUID validation to routes (#13)~~ - Complete
+11. Implement error UI for failed fetches (#14)
+12. Add SSRF protection to project URLs (#15)
+13. Set up Sentry error monitoring (#17)
 
 ### Phase 4 - Ongoing
-15. Replace `any` types (#11)
-16. Standardize error handling (#17)
-17. ~~Implement basic test suite (#4)~~ - Infrastructure complete, add priority tests as needed
-18. Refactor large components (#25)
-19. Add remaining optimizations
+14. Replace `any` types (#10)
+15. Standardize error handling (#16)
+16. ~~Implement basic test suite (#4)~~ - Infrastructure complete, add priority tests as needed
+17. Refactor large components (#24)
+18. Add remaining optimizations
 
 ---
 
@@ -431,18 +458,18 @@ Verify Row-Level Security policies are enabled on all tables. The `NEXT_PUBLIC_S
 
 | Status | Count |
 |--------|-------|
-| Complete | 3 |
-| Deferred | 4 |
-| Partial | 2 |
-| Open | 28 |
-| **Total** | **37** |
+| Complete | 4 |
+| Deferred | 8 |
+| Partial | 3 |
+| Open | 23 |
+| **Total** | **38** |
 
 | Priority | Count |
 |----------|-------|
 | Critical | 4 |
-| High | 9 |
-| Medium | 11 |
-| Lower | 13 |
+| High | 8 |
+| Medium | 12 |
+| Lower | 14 |
 
 ---
 

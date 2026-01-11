@@ -1,9 +1,56 @@
 # ReleasePass: QA Platform Functional Spec
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Roadmap](#roadmap)
+- [Technical Stack](#technical-stack)
+- [Design](#design)
+- [Information Architecture & UX](#information-architecture--ux)
+  - [Global Navigation](#global-navigation)
+  - [ReleasePass Workspace](#releasepass-workspace)
+    - [Navigation Structure](#navigation-structure)
+    - [Preflight Tab](#preflight-tab)
+    - [Site Audit Tab](#site-audit-tab)
+    - [Project Selection (Shared)](#project-selection-shared)
+    - [Release Readiness](#release-readiness)
+    - [Test Results Views](#test-results-views)
+  - [Projects](#projects)
+  - [Utilities](#utilities)
+  - [Settings (Users)](#settings-users)
+  - [States & Edge Cases](#states--edge-cases)
+- [Functional Requirements](#functional-requirements)
+  - [General](#general)
+  - [Release Readiness](#release-readiness-1)
+    - [Release Run Model](#release-run-model)
+    - [Release Run Status](#release-run-status)
+    - [Test Scoring Model](#test-scoring-model)
+    - [ResultItem Severity Levels](#resultitem-severity-levels)
+    - [Pass/Fail Threshold](#passfail-threshold)
+    - [Color Mapping](#color-mapping)
+    - [Behavior](#behavior)
+  - [Data Schema](#data-schema)
+  - [QA Tests](#qa-tests)
+    - [Test Execution Scope & URL Selection](#test-execution-scope--url-selection)
+    - [Page Preflight (Page-Level, Part of Release Runs)](#page-preflight-page-level-part-of-release-runs)
+    - [Site Audit Full Crawl (Site-Level, NOT Part of Release Runs) - Future v1.2](#site-audit-full-crawl-site-level-not-part-of-release-runs---future-v12)
+    - [Performance (Page-Level, Part of Release Runs)](#performance-page-level-part-of-release-runs)
+    - [Screenshots (Page-Level, Part of Release Runs)](#screenshots-page-level-part-of-release-runs)
+    - [Spelling (Page-Level, Part of Release Runs)](#spelling-page-level-part-of-release-runs)
+  - [Version 1.2](#version-12)
+    - [Visual Quality — Diffs (Visual Regression Testing)](#visual-quality--diffs-visual-regression-testing)
+  - [Version 2.x / Later](#version-2x--later)
+    - [Content & Analytics Sanity (Gaps Only)](#content--analytics-sanity-gaps-only)
+    - [Accessibility (a11y)](#accessibility-a11y)
+
+---
+
 # Overview
 Platform will deliver an automated pre- and post-deployment QA layer purpose-built for modern websites. Instead of trying to do everything, we focus on the tests that matter most at launch: ensuring your site is healthy, fast, visually correct, and free of embarrassing errors.
 
 We will combine SEO technical health, performance, visual QA, and grammar checks into one branded, automated workflow. The result is a clear pass/fail report and prioritized fixes you can trust.
+
+[Back to top](#table-of-contents)
 
 # Roadmap
 
@@ -14,14 +61,18 @@ We will combine SEO technical health, performance, visual QA, and grammar checks
   * **Release Run model** — frozen URL snapshots tested as cohesive launch candidates
   * Test datamodel with history (scoped to Release Runs)
   * Readiness score per Release Run (PENDING / READY / FAIL)
+  * Preflight Rules with ability to customize severity, categorization and test/issue metadata
+  * Scored and Manual testing 
   * QA Tests (Page-Level, part of Release Runs):
     * Page Preflight (PageSpeed Lighthouse SEO + Linkinator + Custom Rules)
     * Performance (PageSpeed Core Web Vitals)
-    * Screenshots (Playwright)
     * Spelling/Grammar (LanguageTool)
+    * Screenshots (Playwright)
 * **V1.1**:
+  * Asana Integration
+  * Release Readiness Report
+* **V1.2**
   * Visual diffs for regression detection
-  * Baseline screenshot selection mechanism (TBD)
 * **V1.5**:
   * Site Audit Full Site Crawl Mode (SE Ranking) (site-level, NOT part of Release Runs)
   * ManualTestStatus change history/audit trail
@@ -30,13 +81,18 @@ We will combine SEO technical health, performance, visual QA, and grammar checks
   * Marketing/analytics sanity checks (tag firing, JSON-LD)
   * Accessibility scans (WCAG baseline) for organizations needing compliance or inclusivity assurance.
 
+[Back to top](#table-of-contents)
 
 # Technical Stack
 See technical-stack.md
 
+[Back to top](#table-of-contents)
+
 # Design
 
 * [https://www.figma.com/design/YMiFr3zrjXxKxdh1olKpwo/4all--internal-?node-id=4646-106\&t=VkE5uL05QSDQcSzB-1](https://www.figma.com/design/YMiFr3zrjXxKxdh1olKpwo/4all--internal-?node-id=4646-106&t=VkE5uL05QSDQcSzB-1)
+
+[Back to top](#table-of-contents)
 
 # Information Architecture & UX
 ## Global Navigation
@@ -48,9 +104,15 @@ Persistent brand bar appears across the platform with the following navigation:
 * Projects
   * Projects (list/edit)
   * Add Project
+* Utilities
+  * PageSpeed
+  * Paste Cleaner
 * Settings
-  * Users (list/edit)
-  * Add User
+  * Users (list/edit/add)
+  * Preflight Rules
+  * Preflight Categories
+
+[Back to top](#table-of-contents)
 
 ## ReleasePass Workspace
 
@@ -58,7 +120,7 @@ Persistent brand bar appears across the platform with the following navigation:
 ReleasePass is the primary QA workspace with two tabs:
 
 - **Preflight**: Page-level tests (Baseline, Performance, Spelling, Browser) organized by Release Run
-- **Site Audit**: Site-wide crawl using SE Ranking API, organized by independent test runs
+- **Site Audit**: Site-wide crawl using SE Ranking API, organized by independent test runs (v1.5)
 
 ### Preflight Tab
 Primary navigation organized around **Release Runs** — the unit of release qualification.
@@ -96,16 +158,24 @@ Specifics will vary by test and will be defined and update in design and this do
 ## Projects
 Allows listing and adding projects. Add form includes name, URL, sitemap, and notes.
 
+[Back to top](#table-of-contents)
+
 ## Utilities
 Bulk Performance, HTML Cleaner, and Bullshit Tester integrated into the authenticated UI.
+
+[Back to top](#table-of-contents)
 
 **NOTE**: Utilities are not part of MVP scope. Detailed specifications will be added in a future version.
 
 ## Settings (Users)
 List, edit and add users.
 
+[Back to top](#table-of-contents)
+
 ## States & Edge Cases
 Empty states, no tests yet, partial failures, and manual review indicators are consistently handled.
+
+[Back to top](#table-of-contents)
 
 # Functional Requirements
 ## General
@@ -159,9 +229,13 @@ Empty states, no tests yet, partial failures, and manual review indicators are c
   * HTML Cleaner
   * Bullshit Tester
 
+[Back to top](#table-of-contents)
+
 ## Release Readiness
 
 Release Readiness is computed **per Release Run**, not from "latest tests across time". The key question is: "Is *this release* ready?"
+
+[Back to top](#table-of-contents)
 
 ### Release Run Model
 
@@ -217,11 +291,14 @@ Failed ResultItems include a `severity` field that determines score penalties:
 * Not stored as a physical table; derived dynamically from TestRuns and ManualTestStatus
 
 ## Data Schema
-General rules:
+
+### General rules:
 * All primary keys are UUID strings stored in an `id` field.
 * All tables include `createdAt` and `updatedAt` timestamp fields.
 * Foreign key fields reference the `id` of the related entity.
 * Date/time fields are stored as ISO-8601 datetimes in the database.
+
+### Tables
 
 * Company  (conceptual for future multi-tenant support; not exposed in MVP UI)
   * id — UUID
@@ -229,26 +306,37 @@ General rules:
   * createdAt — datetime
   * updatedAt — datetime
 
-* Projects
+* Project
   * id — UUID
   * companyId — UUID (nullable in MVP; reserved for future Company linkage)
   * name — string
   * siteUrl — string
   * sitemapUrl — string (nullable)
   * notes — text (nullable)
+  * authConfig — JSON (nullable; project-level authentication configuration)
+  * deletedAt — datetime (nullable; soft delete timestamp)
   * createdAt — datetime
   * updatedAt — datetime
 
-* ReleaseRun
-  * id — UUID
-  * projectId — UUID (FK to Projects.id)
-  * status — enum (`PENDING`, `READY`, `FAIL`)
-  * urls — JSON (frozen array of URLs to test)
-  * selectedTests — JSON (array of selected page-level test types)
-  * createdAt — datetime
-  * updatedAt — datetime
+  **authConfig structure**:
+  ```json
+  {
+    "mode": "NONE | BASIC_AUTH | COOKIE_HEADER",
+    "username": "...",
+    "password": "...",
+    "cookieHeader": "..."
+  }
+  ```
+  * `NONE` (default) — No authentication
+  * `BASIC_AUTH` — HTTP Basic Auth; requires username/password
+  * `COOKIE_HEADER` — Session cookie passed in Cookie header
 
-  ReleaseRun represents a single launch candidate tested as a cohesive unit. URLs are frozen once execution begins and cannot be modified. All TestRuns within a ReleaseRun share the same URL set.
+  **Auth support by test type**:
+  * Screenshots — Playwright passes auth headers/cookies
+  * Linkinator — HTTP headers passed for link checking
+  * Preflight — Custom rules that fetch URLs use auth headers
+  * Spelling — N/A (uses Cheerio on already-fetched HTML)
+  * Performance — N/A (PageSpeed API has no auth support; test runs anyway)
 
 * Users
   * id — UUID
@@ -261,6 +349,20 @@ General rules:
   * updatedAt — datetime
 
   > Passwords are NOT stored in this table. Authentication credentials are managed by Supabase Auth.
+  
+* ReleaseRun
+  * id — UUID
+  * projectId — UUID (FK to Project.id)
+  * name — string (nullable; optional label, e.g., "v2.1 Launch", "December Release")
+  * status — enum (`PENDING`, `READY`, `FAIL`)
+  * urls — JSON (frozen array of URLs to test)
+  * selectedTests — JSON (array of selected page-level test types)
+  * createdAt — datetime
+  * updatedAt — datetime
+
+  ReleaseRun represents a single launch candidate tested as a cohesive unit. URLs are frozen once execution begins and cannot be modified. All TestRuns within a ReleaseRun share the same URL set.
+
+  **status field**: Indicates cancellation state (`FAIL` = cancelled by user). Release readiness (PENDING/READY/FAIL) is derived at runtime from TestRun results and ManualTestStatus, not stored. See [Release Readiness](#release-readiness-1) for computation rules. 
 
 * TestRun
   * id — UUID
@@ -277,7 +379,7 @@ General rules:
   * createdAt — datetime
   * updatedAt — datetime
 
-  TestRun belongs to a ReleaseRun for page-level tests. Multiple TestRuns of the same type may exist within a ReleaseRun; only the latest per type is considered "current". Re-running a test creates a new TestRun within the same ReleaseRun.
+  TestRun belongs to a ReleaseRun for page-level tests. Only one TestRun per type exists within a ReleaseRun at any time. Re-running a test deletes the existing TestRun (cascading to UrlResults and ResultItems) and creates a new TestRun with QUEUED status.
 
   **rawPayload structure**: For multi-provider tests (e.g., PAGE_PREFLIGHT), rawPayload stores structured JSON with provider keys:
   ```json
@@ -287,34 +389,55 @@ General rules:
   }
   ```
 
+* TestRunConfig
+  * id — UUID
+  * testRunId — UUID (unique FK to TestRun.id)
+  * scope — enum (`SINGLE_URL`, `CUSTOM_URLS`, `SITEMAP`)
+  * urls — string[] (array of URLs for CUSTOM_URLS scope; empty for SITEMAP)
+  * createdAt — datetime
+  * updatedAt — datetime
+
+  TestRunConfig stores URL selection configuration for a TestRun. One-to-one relationship with TestRun.
+
 * UrlResult
   * id — UUID
   * testRunId — UUID (FK to TestRun.id)
   * url — string
-  * lcp — number (nullable)
-  * cls — number (nullable)
-  * inp — number (nullable)
-  * performanceScore — integer (nullable)
-  * additionalMetrics — JSON (nullable; for provider-specific summary metrics)
+  * lcp — float (nullable; Largest Contentful Paint in seconds)
+  * cls — float (nullable; Cumulative Layout Shift score)
+  * inp — float (nullable; Interaction to Next Paint in ms)
+  * fcp — float (nullable; First Contentful Paint in seconds)
+  * tbt — float (nullable; Total Blocking Time in ms)
+  * tti — float (nullable; Time to Interactive in seconds)
+  * preflightScore — integer (nullable; calculated score for PAGE_PREFLIGHT, 0-100)
+  * performanceScore — integer (nullable; PageSpeed performance score, 0-100)
+  * accessibilityScore — integer (nullable; Lighthouse accessibility score, 0-100)
+  * issueCount — integer (nullable; total issues for this URL)
+  * criticalIssues — integer (nullable; count of CRITICAL severity issues)
+  * viewport — string (nullable; "mobile" or "desktop" for Performance tests)
+  * additionalMetrics — JSON (nullable; provider-specific extras)
+  * error — string (nullable; if set, URL failed to process - no ResultItems created)
   * createdAt — datetime
   * updatedAt — datetime
   * → resultItems — one-to-many relation to ResultItem
 
-  UrlResult represents per-URL metrics for a given TestRun. Fields are sparsely populated depending on the test type (e.g., Performance vs Site Audit). Each UrlResult contains multiple ResultItems representing individual check results.
+  UrlResult represents per-URL metrics for a given TestRun. Fields are sparsely populated depending on the test type (e.g., Performance vs Page Preflight). Each UrlResult contains multiple ResultItems representing individual check results.
 
 * ResultItem
   * id — UUID
   * urlResultId — UUID (FK to UrlResult.id)
-  * provider — string/enum (e.g., `LIGHTHOUSE`, `LINKINATOR`, `CUSTOM_RULE`, `SE_RANKING`, `LANGUAGETOOL`, `INTERNAL`)
-  * code — string (normalized check code, e.g. `document-title`, `BROKEN_INTERNAL_LINK`, `MISSING_OG_IMAGE`, `SPELLING_ERROR`)
-  * name — string (human-readable title of the check)
+  * provider — enum (`LIGHTHOUSE`, `LINKINATOR`, `ReleasePass`, `SE_RANKING`, `LANGUAGETOOL`, `INTERNAL`)
+  * code — string (rule code, e.g. `document-title`, `BROKEN_INTERNAL_LINK`, `PREFLIGHT_H1_MISSING`)
+  * releaseRuleCode — string (nullable; FK to ReleaseRule.code, only set for rules that exist in taxonomy)
+  * name — string (human-readable title of the check; fallback if no ReleaseRule)
   * status — enum (`PASS`, `FAIL`, `SKIP`)
-  * severity — string/enum (nullable; only for FAIL status: `BLOCKER`, `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`)
+  * severity — enum (nullable; only for FAIL status: `INFO`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`, `BLOCKER`)
   * meta — JSON (nullable; additional context such as description, selectors, raw audit data)
+  * ignored — boolean (default false; user-marked as false positive)
   * createdAt — datetime
   * updatedAt — datetime
 
-  ResultItem stores all check results (both passing and failing) from test providers. Each ResultItem belongs to a UrlResult, representing a single audit/check that was run for that URL.
+  ResultItem stores all check results (both passing and failing) from test providers. Each ResultItem belongs to a UrlResult, representing a single audit/check that was run for that URL. When `releaseRuleCode` is set, the ResultItem links to a ReleaseRule for consistent metadata.
 
   **Status**: Indicates the outcome of the check:
   * **PASS** — Check passed successfully
@@ -327,10 +450,61 @@ General rules:
   * **HIGH** — -10 points (e.g., missing canonical)
   * **MEDIUM** — -5 points (e.g., external broken links)
   * **LOW** — -2 points (e.g., redirect chains)
+  * **INFO** — 0 points (informational, no score penalty)
 
-  **MVP Providers**: LIGHTHOUSE (PageSpeed SEO), LINKINATOR (link checking), CUSTOM_RULE (custom validation rules), LANGUAGETOOL (spelling/grammar).
+  **Providers**:
+  * `LIGHTHOUSE` — PageSpeed SEO audits
+  * `LINKINATOR` — Link checking
+  * `ReleasePass` — Custom validation rules defined in ReleaseRule taxonomy
+  * `LANGUAGETOOL` — Spelling/grammar checks
+  * `SE_RANKING` — Full site crawl (v1.5)
+  * `INTERNAL` — System-generated checks
 
-  **Future Providers**: SE_RANKING (full site crawl), INTERNAL (system-generated checks).
+* ReleaseRuleCategory
+  * id — UUID
+  * name — string (unique; e.g., "Heading Structure", "Canonical", "Links")
+  * description — string (nullable; optional description of the category)
+  * sortOrder — integer (default 0; display order in UI)
+  * isActive — boolean (default true; soft enable/disable)
+  * createdAt — datetime
+  * updatedAt — datetime
+
+  ReleaseRuleCategory groups related ReleaseRules for display in the UI. Categories can be reordered and disabled without deleting.
+
+* ReleaseRule
+  * code — string (primary key; e.g., `PREFLIGHT_H1_MISSING`, `document-title`)
+  * provider — enum (`LIGHTHOUSE`, `LINKINATOR`, `ReleasePass`, `SE_RANKING`, `LANGUAGETOOL`, `INTERNAL`)
+  * categoryId — UUID (FK to ReleaseRuleCategory.id)
+  * name — string (short title, e.g., "Missing H1 Heading")
+  * description — string (what the rule checks for)
+  * severity — enum (`INFO`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`, `BLOCKER`; default severity)
+  * impact — string (nullable; why this issue matters)
+  * fix — string (nullable; how to fix the issue)
+  * docUrl — string (nullable; external documentation link)
+  * isActive — boolean (default true; soft enable/disable)
+  * sortOrder — integer (default 0; display order within category)
+  * createdAt — datetime
+  * updatedAt — datetime
+
+  ReleaseRule defines the taxonomy of all check rules. Each rule has a unique code used as the primary key. ResultItems link to ReleaseRules via `releaseRuleCode` to inherit consistent metadata (name, description, severity, etc.). Rules can be customized per-deployment.
+
+* IgnoredRule
+  * id — UUID
+  * projectId — UUID (FK to Project.id)
+  * url — string (the URL this ignore applies to)
+  * code — string (the rule code to ignore, e.g., `document-title`)
+  * createdAt — datetime
+
+  IgnoredRule tracks which rules have been marked as false positives for specific URLs within a project. When a new test run processes a URL, matching IgnoredRules are auto-applied to set `ResultItem.ignored = true`.
+
+  **Unique constraint**: One ignore per (projectId, url, code) combination.
+
+Release Readiness itself is a derived object computed at runtime **per Release Run** from:
+* All TestRuns within the Release Run (score >= 50 = pass), and
+* ResultItem severity levels (BLOCKER items heavily penalize score), and
+* ManualTestStatus entries for that Release Run.
+
+No dedicated `Readiness` table is required in MVP.
 
 * ScreenshotSet
   * id — UUID
@@ -345,6 +519,13 @@ General rules:
 
   ScreenshotSet represents a group of screenshots for a single URL and viewport for a given TestRun.
 
+  Required additions:
+  * Platform
+  * Browser (e.g., Chrome, Safari)
+  * Capture metadata:
+    * Timing info
+    * Stabilization flags applied
+
 * ManualTestStatus
   * id — UUID
   * releaseRunId — UUID (FK to ReleaseRun.id)
@@ -355,16 +536,12 @@ General rules:
   * createdAt — datetime
   * updatedAt — datetime
 
-  ManualTestStatus stores user-entered status decisions for tests that do not have a numeric score (Screenshots and Spelling/Grammar). These statuses are scoped to a specific Release Run and contribute to that Release Run's readiness status.
+  ManualTestStatus stores user-entered status decisions for tests that do not have a numeric score (Screenshots). These statuses are scoped to a specific Release Run and contribute to that Release Run's readiness status.
 
-  **MVP Note**: Only the current status is stored per Release Run; updates overwrite the previous status. Change history/audit trail will be added in v1.5.
+* ManualUrlResult
+  * Stub - will replace ManualTestStatus
 
-Release Readiness itself is a derived object computed at runtime **per Release Run** from:
-* All TestRuns within the Release Run (score >= 50 = pass), and
-* ResultItem severity levels (BLOCKER items heavily penalize score), and
-* ManualTestStatus entries for that Release Run.
-
-No dedicated `Readiness` table is required in MVP.
+[Back to top](#table-of-contents)
 
 ## QA Tests
 
@@ -391,7 +568,6 @@ Tests are categorized as **page-level** (included in Release Runs) or **site-lev
 - **Scope**: Uses frozen URL list from Release Run, or sitemap-based selection
 - **Configuration Options**:
   - **Pages Mode**: Uses URLs from the Release Run's frozen URL list
-  - **Full Site Mode**: Tests URLs from sitemap with a limit of 20 URLs for MVP (to manage API quotas and execution time)
 - **Tests per URL**: Each URL is tested for both mobile and desktop viewports
 - **Field data**: Uses lab metrics only (CrUX field data may not be available for all URLs, especially staging sites)
 - **Scoring**: MVP uses **average performance score** across all tested URLs
@@ -400,21 +576,21 @@ Tests are categorized as **page-level** (included in Release Runs) or **site-lev
 - **Scope**: Uses frozen URL list from Release Run
 - **Configuration**: URLs come from the Release Run's frozen URL list
 - **Viewport matrix** (MVP fixed configuration):
-  - Desktop / Chrome (1440px width)
-  - Desktop / Safari (1440px width)
-  - Tablet / iOS Safari (768px width)
-  - Mobile / iOS Safari (375px width)
+  - Desktop / Chrome (13660px width)
+  - Desktop / Safari (1366px width)
+  - Tablet / iOS Safari (768px width) (v1.1)
+  - Mobile / iOS Safari (390px width)
 - **Capture mode**: Full-page screenshots
-- **Authentication**: Not supported in MVP
+~~- **Authentication**: Not supported in MVP~~
 
 **Spelling/Grammar**:
 - **Scope**: Uses frozen URL list from Release Run
 - **Configuration**: URLs come from the Release Run's frozen URL list
-- **Text extraction**: Uses Playwright to render page and extract visible text from final DOM
+- **Text extraction**: Uses ~~Playwright~~ Cheerio to render page and extract visible text from final DOM
 - **Content filtering**: Extracts text content only; filters out navigation, hidden elements (subject to refinement during implementation)
 - **Batching**: Large pages split into batches for LanguageTool API (max batch size TBD based on API limits)
 - **JavaScript rendering**: Supported (Playwright waits for page load)
-- **Authentication**: Not supported in MVP
+~~- **Authentication**: Not supported in MVP~~
 
 #### Site-Level Tests (NOT part of Release Runs)
 
@@ -646,9 +822,10 @@ Tests are categorized as **page-level** (included in Release Runs) or **site-lev
   * Lighthouse a11y
 
 ### Screenshots (Page-Level, Part of Release Runs)
-* Purpose: Capture high-fidelity screenshots across devices/browsers for rendering verification.
+* Purpose: Capture high-fidelity screenshots across tight browser set for rendering verification.
 * Part of Release Runs with frozen URL lists
 * Manual review required (PASS / REVIEW / FAIL)
+* Screenshots contribute to Release Readiness via manual status.
 * Solution:
   * Playwright scripted captures
 * Documentation
@@ -663,6 +840,18 @@ Tests are categorized as **page-level** (included in Release Runs) or **site-lev
 * Output:
   * Stored images in S3-compatible storage, linked in dashboard.
 
+#### Screenshot Stabilization  
+Stablization required for reliability.
+* Disable CSS animations and transitions.  
+* Hide cursor and blinking carets.
+* Wait for fonts to load (document.fonts.ready where supported).
+* Wait for DOM ready \+ network idle (with max timeout).
+* Support project-defined selectors to hide dynamic UI:
+  * Cookie banners
+  * Chat widgets
+  * Rotating promos
+  * Geo/location banners
+
 ### Spelling (Page-Level, Part of Release Runs)
 * Purpose: Detect spelling and contextual grammar issues in rendered text.
 * Part of Release Runs with frozen URL lists
@@ -676,6 +865,25 @@ Tests are categorized as **page-level** (included in Release Runs) or **site-lev
   * Extract visible page text from Release Run's frozen URL list, send in batches
   * Return flagged issues and normalized suggestions.
 
+[Back to top](#table-of-contents)
+
+## Version 1.1
+
+### Asana Integration
+* Scope:
+  * Preflight: Failure only to Asana based on ResultItem
+  * Performance: Low score (mobile or desktop) create Asana ticket
+  * Screenshot: Per screenshot (desktop 2x, tablet, mobile)
+  * Spelling: Omit?
+
+### Release Readiness Report
+* Scope: 1 Page client-facing PDF Release Readiness Report based on all tests
+
+### Screenshots
+* Scope: Add Safari Tablet (768)
+
+[Back to top](#table-of-contents)
+
 ## Version 1.2
 
 ### Visual Quality — Diffs (Visual Regression Testing)
@@ -686,6 +894,8 @@ Tests are categorized as **page-level** (included in Release Runs) or **site-lev
   * Secondary: Resemble.js (perceptual tolerance)
 * Process: Fetch baseline → capture new → compare → output diff image \+ mismatch %.
 * Noise Control: Ignore masks/dynamic regions, threshold tuning.
+
+[Back to top](#table-of-contents)
 
 ## Version 2.x / Later
 
@@ -699,3 +909,5 @@ Tests are categorized as **page-level** (included in Release Runs) or **site-lev
 * Purpose: Baseline WCAG health checks via automated testing.
 * Planned Tools: axe-core (primary), QualWeb (alternate).
 * Notes: Lighthouse a11y via PSI already runs in MVP for basic checks; SE Ranking overlaps partially (alt text, headings, lang attr, title tags).
+
+[Back to top](#table-of-contents)

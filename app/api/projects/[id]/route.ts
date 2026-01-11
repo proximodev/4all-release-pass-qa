@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { projectSchema } from '@/lib/validation/project'
+import { isValidUuid } from '@/lib/validation/common'
 import { requireAuth } from '@/lib/auth'
 
 /**
@@ -15,6 +16,10 @@ export async function GET(
     if (error) return error
 
     const { id } = await params
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid project ID format' }, { status: 400 })
+    }
 
     // TODO: Add resource-level authorization when multi-tenant is implemented
     // Verify user has access: project.companyId === user.companyId
@@ -58,6 +63,10 @@ export async function PATCH(
     if (error) return error
 
     const { id } = await params
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid project ID format' }, { status: 400 })
+    }
 
     // TODO: Add resource-level authorization when multi-tenant is implemented
     // Verify user has access: project.companyId === user.companyId
@@ -111,6 +120,10 @@ export async function DELETE(
     if (error) return error
 
     const { id } = await params
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid project ID format' }, { status: 400 })
+    }
 
     // TODO: Add resource-level authorization when multi-tenant is implemented
     // Verify user has access: project.companyId === user.companyId

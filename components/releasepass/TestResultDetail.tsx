@@ -4,10 +4,10 @@ import { useState, useEffect, useMemo, useCallback, memo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Card from '@/components/ui/card/Card'
-import { getScoreBadgeClasses, getStatusBadgeClasses } from '@/lib/scoring'
+import { getScoreBadgeClasses, getStatusBadgeClasses, SCORING_CONFIG } from '@/lib/scoring'
 import { calculateUrlResultSummary } from '@/lib/services/testResults'
 import TabPanel from "@/components/layout/TabPanel";
-import type { ResultItem, ReleaseRun } from '@/lib/types/releasepass'
+import type { ResultItem, ReleaseRun, TestRunData } from '@/lib/types/releasepass'
 import {
   PreflightResults,
   SpellingResults,
@@ -17,6 +17,41 @@ import {
   type IgnoreToggleResult
 } from './results'
 import { PREFLIGHT_TEST_TYPES } from '@/lib/constants/testTypes'
+
+/**
+ * Get pass/fail/error status label for a test type to display in the selector.
+ * Returns null if no label should be shown (QUEUED, RUNNING, SCREENSHOTS).
+ */
+function getTestTypeStatusLabel(
+  testTypeValue: string,
+  testRuns: TestRunData[]
+): string | null {
+  // Skip SCREENSHOTS - no status display until UI is built out
+  if (testTypeValue === 'SCREENSHOTS') return null
+
+  const testRun = testRuns.find(tr => tr.type === testTypeValue)
+  if (!testRun) return null
+
+  // No label for in-progress tests
+  if (testRun.status === 'QUEUED' || testRun.status === 'RUNNING') return null
+
+  // Operational failure
+  if (testRun.status === 'FAILED') return '(error)'
+
+  // For PERFORMANCE: check all urlResult scores (any viewport failing = failed)
+  if (testTypeValue === 'PERFORMANCE' && testRun.urlResults) {
+    const hasFailingScore = testRun.urlResults.some(ur => {
+      if (ur.score === null || ur.score === undefined) return true // null/undefined score = error
+      return ur.score < SCORING_CONFIG.passThreshold
+    })
+    return hasFailingScore ? '(failed)' : '(passed)'
+  }
+
+  // For other tests: check testRun.score
+  if (testRun.score === null) return '(error)'
+
+  return testRun.score < SCORING_CONFIG.passThreshold ? '(failed)' : '(passed)'
+}
 
 interface TestResultDetailProps {
   testType: 'PAGE_PREFLIGHT' | 'PERFORMANCE' | 'SPELLING' | 'SCREENSHOTS'
@@ -365,11 +400,14 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
               className="px-3 py-2 border border-dark-gray/40 rounded bg-white"
             >
               <option value="SUMMARY">Result Summary</option>
-              {availableTestTypes.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              {availableTestTypes.map((opt) => {
+                const statusLabel = getTestTypeStatusLabel(opt.value, releaseRun.testRuns)
+                return (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}{statusLabel ? ` ${statusLabel}` : ''}
+                  </option>
+                )
+              })}
             </select>
           </div>
         </div>

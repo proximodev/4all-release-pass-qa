@@ -15,6 +15,7 @@ const categories = [
   { name: 'Canonical', sortOrder: 40 },
   { name: 'Security & Protocol', sortOrder: 50 },
   { name: 'Links', sortOrder: 60 },
+  { name: 'Site Resources', sortOrder: 65 },
   { name: 'SEO Essentials', sortOrder: 70 },
   { name: 'Crawlability', sortOrder: 80 },
   { name: 'Accessibility & SEO', sortOrder: 90 },
@@ -244,6 +245,19 @@ const releaseRules = [
     impact: 'Empty alt attributes may indicate incomplete content or accessibility issues. Screen readers will skip these images entirely.',
     fix: 'Add descriptive alt text, or if the image is decorative, consider using CSS background images instead.',
     sortOrder: 60,
+  },
+
+  // Batch 7: Favicon (1 rule)
+  {
+    code: 'PREFLIGHT_FAVICON_MISSING',
+    provider: 'ReleasePass',
+    category: 'Site Resources',
+    name: 'Missing Favicon',
+    description: 'No valid favicon found. Checked for link tags and /favicon.ico fallback.',
+    severity: 'CRITICAL',
+    impact: 'Browser tabs and bookmarks show a generic icon, making your site look unprofessional or incomplete.',
+    fix: 'Add a favicon using <link rel="icon" href="/favicon.ico"> or place a favicon.ico file in your site root.',
+    sortOrder: 70,
   },
 
   // =========================================================================

@@ -1,0 +1,62 @@
+Rule: PREFLIGHT_FAVICON_MISSING
+
+Questions:
+1. Detection methods - Favicons can be specified multiple ways. Which should we check?
+- <link rel="icon"> (modern standard)
+- <link rel="shortcut icon"> (legacy)
+- /favicon.ico at root (browser default fallback)
+- Check for ANY of the above, or ALL?
+2. Validation level - Should we:
+- (A) Just check if the tag exists in HTML, or
+- (B) Also fetch the favicon URL to verify it returns 200?
+3. Apple Touch Icon - Should we also flag missing <link rel="apple-touch-icon"> as a separate rule or ignore it?
+4. Data URIs - Should inline favicons (href="data:image/...") count as valid?
+
+1 - Any of the above
+2 - B
+3 - Ignore
+4 - Recommendation?
+
+---
+#Implementation Plan
+
+Logic Flow
+
+1. Check HTML for any favicon link tag:
+ - <link rel="icon" href="...">
+ - <link rel="shortcut icon" href="...">
+
+2. If found:
+ - If href is data URI → PASS (no fetch needed)
+ - If href is URL → Fetch and verify 200 status
+   - 200 → PASS
+   - Non-200 or error → FAIL (favicon referenced but broken)
+
+3. If no tag found:
+ - Fetch /favicon.ico from site root
+   - 200 → PASS
+   - Non-200 → FAIL (no favicon detected)
+
+File: worker/providers/preflight/custom-rules.ts
+
+Add checkFaviconRules function (~40 lines):
+
+function checkFaviconRules($: CheerioAPI, page: FetchedPage, rulesMap: ReleaseRulesMap): Promise<ResultItemToCreate[]>
+
+Add to runCustomRules:
+// Batch 7: Favicon rules
+results.push(...await checkFaviconRules($, page, rulesMap));
+
+Meta Data Captured
+
+On FAIL:
+- checkedUrls: URLs attempted (tag href and/or /favicon.ico)
+- reason: "no_tag_no_fallback" | "tag_broken" | "fallback_broken"
+
+On PASS:
+- source: "link_tag" | "data_uri" | "root_fallback"
+- url: The working favicon URL
+
+Files Modified
+
+- worker/providers/preflight/custom-rules.ts (~45 lines)

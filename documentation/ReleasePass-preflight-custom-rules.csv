@@ -16,13 +16,13 @@ Meta & Title Quality,Title exceeds maximum recommended length (55 chars),PREFLIG
 Meta & Title Quality,Title below minimum recommended length (30 chars),PREFLIGHT_TITLE_TOO_SHORT,High,v1.2,Planned,Insufficient context for search engines
 Meta & Title Quality,Meta description exceeds maximum length (155 chars),PREFLIGHT_META_DESC_TOO_LONG,Medium,v1.2,Planned,Truncation risk
 Meta & Title Quality,Meta description below minimum length (70 chars),PREFLIGHT_META_DESC_TOO_SHORT,Medium,v1.2,Planned,Low SERP quality
-Social Metadata,Missing Open Graph title,PREFLIGHT_OG_TITLE_MISSING,High,v1.2,Planned,Social previews incomplete
-Social Metadata,Missing Open Graph description,PREFLIGHT_OG_DESC_MISSING,High,v1.2,Planned,Social previews incomplete
-Social Metadata,Missing Open Graph image,PREFLIGHT_OG_IMAGE_MISSING,High,v1.2,Planned,Default or broken social previews
-Language & Accessibility,HTML lang attribute missing,PREFLIGHT_LANG_MISSING,High,v1.2,Planned,Accessibility and localization issues
-Language & Accessibility,HTML lang value invalid or malformed,PREFLIGHT_LANG_INVALID,Medium,v1.2,Planned,Language detection errors
+Social Metadata,Missing Open Graph title,PREFLIGHT_OG_TITLE_MISSING,Low,v1.3,Planned,Social previews incomplete (no SEO impact)
+Social Metadata,Missing Open Graph description,PREFLIGHT_OG_DESC_MISSING,Low,v1.3,Planned,Social previews incomplete (no SEO impact)
+Social Metadata,Missing Open Graph image,PREFLIGHT_OG_IMAGE_MISSING,Low,v1.3,Planned,Default or broken social previews (no SEO impact)
+Language & Accessibility,HTML lang attribute missing,PREFLIGHT_LANG_MISSING,Low,v1.3,Planned,Accessibility and localization issues (no SEO impact)
+Language & Accessibility,HTML lang value invalid or malformed,PREFLIGHT_LANG_INVALID,Low,v1.3,Planned,Language detection errors (no SEO impact)
 Mobile & Responsiveness,Viewport meta tag missing,PREFLIGHT_VIEWPORT_MISSING,Critical,v1,Done,Page not optimized for mobile devices
-Site Resources,Favicon missing or not found,PREFLIGHT_FAVICON_MISSING,Medium,v1.2,Planned,Browser tabs show generic icon
+Site Resources,Favicon missing or not found,PREFLIGHT_FAVICON_MISSING,Critical,v1,Done,Browser tabs show generic icon
 Security & Protocol Hygiene,Page served over HTTP,PREFLIGHT_SECURITY_HTTP,Blocker,v1,Done,Insecure and often deindexed
 Security & Protocol Hygiene,Canonical or OG URLs use HTTP,PREFLIGHT_SECURITY_HTTP_URLS,Blocker,v1,Done,Mixed protocol authority signals
 Security & Protocol Hygiene,Mixed content assets detected,PREFLIGHT_SECURITY_MIXED_CONTENT,Critical,v1,Done,Browser blocking and trust issues

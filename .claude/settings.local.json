@@ -51,7 +51,8 @@
       "Bash(npm explain:*)",
       "Bash(npm info:*)",
       "Bash(npm test)",
-      "Bash(npx prisma db execute:*)"
+      "Bash(npx prisma db execute:*)",
+      "WebFetch(domain:localhost)"
     ]
   }
 }

@@ -34,6 +34,9 @@
  *
  * Batch 6: Alt tag rules (1 rule)
  * - EMPTY_ALT_TAG
+ *
+ * Batch 7: Favicon rules (1 rule)
+ * - PREFLIGHT_FAVICON_MISSING
  */
 
 import * as cheerio from 'cheerio';
@@ -115,6 +118,9 @@ export async function runCustomRules(
 
   // Batch 6: Alt tag rules
   results.push(...checkAltTagRules($, rulesMap));
+
+  // Batch 7: Favicon rules
+  results.push(...await checkFaviconRules($, page, rulesMap));
 
   return results;
 }
@@ -1129,4 +1135,173 @@ function checkAltTagRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemT
   }
 
   return results;
+}
+
+// =============================================================================
+// Favicon Rules
+// =============================================================================
+
+/**
+ * Check favicon rules:
+ * - PREFLIGHT_FAVICON_MISSING: No valid favicon found
+ *
+ * Detection order:
+ * 1. Check for <link rel="icon"> or <link rel="shortcut icon"> in HTML
+ * 2. If tag found with data URI → PASS
+ * 3. If tag found with URL → fetch and verify 200
+ * 4. If no tag → try /favicon.ico at site root
+ */
+async function checkFaviconRules(
+  $: CheerioAPI,
+  page: FetchedPage,
+  rulesMap: ReleaseRulesMap
+): Promise<ResultItemToCreate[]> {
+  const results: ResultItemToCreate[] = [];
+
+  // Find favicon link tags (rel="icon" or rel="shortcut icon")
+  const faviconTags = $('link[rel="icon"], link[rel="shortcut icon"]');
+
+  if (faviconTags.length > 0) {
+    // Found favicon tag(s) - check the first one
+    const href = faviconTags.first().attr('href') || '';
+
+    if (!href) {
+      // Empty href - treat as missing
+      results.push(
+        createFail(
+          'PREFLIGHT_FAVICON_MISSING',
+          'Favicon link tag has empty href',
+          IssueSeverity.CRITICAL,
+          rulesMap,
+          { reason: 'tag_empty_href', checkedUrls: [] }
+        )
+      );
+      return results;
+    }
+
+    // Check for data URI (always valid - no fetch needed)
+    if (href.startsWith('data:')) {
+      results.push(
+        createPass('PREFLIGHT_FAVICON_MISSING', 'Favicon found (data URI)', {
+          source: 'data_uri',
+        })
+      );
+      return results;
+    }
+
+    // Resolve relative URL against page URL
+    let faviconUrl: string;
+    try {
+      faviconUrl = new URL(href, page.finalUrl).toString();
+    } catch {
+      results.push(
+        createFail(
+          'PREFLIGHT_FAVICON_MISSING',
+          'Favicon link tag has invalid URL',
+          IssueSeverity.CRITICAL,
+          rulesMap,
+          { reason: 'tag_invalid_url', href }
+        )
+      );
+      return results;
+    }
+
+    // Fetch the favicon to verify it exists
+    const tagResult = await checkFaviconUrl(faviconUrl);
+    if (tagResult.ok) {
+      results.push(
+        createPass('PREFLIGHT_FAVICON_MISSING', 'Favicon found', {
+          source: 'link_tag',
+          url: faviconUrl,
+        })
+      );
+    } else {
+      results.push(
+        createFail(
+          'PREFLIGHT_FAVICON_MISSING',
+          'Favicon URL returns error',
+          IssueSeverity.CRITICAL,
+          rulesMap,
+          {
+            reason: 'tag_broken',
+            url: faviconUrl,
+            status: tagResult.status,
+            error: tagResult.error,
+          }
+        )
+      );
+    }
+    return results;
+  }
+
+  // No favicon tag found - try /favicon.ico fallback
+  let rootFaviconUrl: string;
+  try {
+    const pageUrl = new URL(page.finalUrl);
+    rootFaviconUrl = `${pageUrl.origin}/favicon.ico`;
+  } catch {
+    results.push(
+      createFail(
+        'PREFLIGHT_FAVICON_MISSING',
+        'No favicon found',
+        IssueSeverity.CRITICAL,
+        rulesMap,
+        { reason: 'no_tag_invalid_origin' }
+      )
+    );
+    return results;
+  }
+
+  const rootResult = await checkFaviconUrl(rootFaviconUrl);
+  if (rootResult.ok) {
+    results.push(
+      createPass('PREFLIGHT_FAVICON_MISSING', 'Favicon found at /favicon.ico', {
+        source: 'root_fallback',
+        url: rootFaviconUrl,
+      })
+    );
+  } else {
+    results.push(
+      createFail(
+        'PREFLIGHT_FAVICON_MISSING',
+        'No favicon found (no link tag, /favicon.ico not found)',
+        IssueSeverity.CRITICAL,
+        rulesMap,
+        {
+          reason: 'no_tag_no_fallback',
+          checkedUrls: [rootFaviconUrl],
+          status: rootResult.status,
+        }
+      )
+    );
+  }
+
+  return results;
+}
+
+/**
+ * Check if a favicon URL returns 200
+ */
+async function checkFaviconUrl(url: string): Promise<{
+  ok: boolean;
+  status?: number;
+  error?: string;
+}> {
+  try {
+    const response = await fetchWithTimeout(url, {
+      timeoutMs: 10000,
+      headers: {
+        'User-Agent': 'ReleasePass-Bot/1.0 (https://releasepass.app)',
+      },
+    });
+
+    if (response.ok) {
+      return { ok: true, status: response.status };
+    } else {
+      return { ok: false, status: response.status };
+    }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    return { ok: false, error };
+  }
 }

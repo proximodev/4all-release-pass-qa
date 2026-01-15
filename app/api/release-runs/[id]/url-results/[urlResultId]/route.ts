@@ -63,10 +63,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'URL result not found' }, { status: 404 })
     }
 
-    // Result data is immutable once written - cache aggressively
+    // Result data can change (ignored field) - no browser caching
     return NextResponse.json(urlResult, {
       headers: {
-        'Cache-Control': 'private, max-age=300, stale-while-revalidate=600',
+        'Cache-Control': 'no-store',
       },
     })
   } catch (error) {

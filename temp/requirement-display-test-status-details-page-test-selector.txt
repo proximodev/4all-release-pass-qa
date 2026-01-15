@@ -1,0 +1,123 @@
+Requirements:
+------------
+On test details, if you have submitted multiple URLs and you are trying to fix issues, the user cannot see what page need work without returning to the summary page.
+
+Draft a plan to add a "(passed)" or "(failed)" on the test type select for each URL.
+
+Note that performance has two scores (desktop/mobile). So, if either score is failed, the label should be failed.
+
+Provide a list of questions for me to answer before send the plan.
+
+Questions:
+---------
+
+Data & Logic:
+1. Pass/fail threshold: Is it the standard score >= 50 for pass? Or different per test type?
+2. Spelling test: Does spelling have a score, or is pass/fail based on issue count (0 = pass)?
+3. Performance data structure: Are desktop/mobile stored as separate UrlResults (different viewport values), or as fields within the same UrlResult's additionalMetrics?
+4. Error states: If a URL failed to process (has error field), should it show "(error)" instead of "(failed)"?
+
+Visual Treatment:
+5. Label format: Prefer "(passed)"/"(failed)" text, or something shorter like "✓"/"✗" icons, or colored dots?
+6. Color: Should the labels be colored (green/red) or neutral text?
+7. Position: Label after URL, or before? e.g., "https://example.com (passed)" vs "(passed) https://example.com"
+
+1 - Scoring rules are in shared/scoring-config.json
+2 - Yes, all tests have scores. Be sure to review code base before proceeding
+3 - They are separate UrlResults records. They are displayed on a single page.
+4 - Yes, error
+5 - "(passed)"/"(failed)" (see #6)
+6 - Can you make this red and green with standard select?
+7 - This needs to be displayed on the TEST select not URL
+
+Review answers and code carefully. Then ask followup questions and confirm understanding of scope. No changes yet.
+
+---
+Follow-up Questions
+
+1. Colored text in native <select>: Browser support is inconsistent. Options:
+- (A) Try colored text - may work in Chrome/Edge, less reliable in Safari/Firefox
+- (B) Text only "(passed)"/"(failed)" - works everywhere
+- (C) Custom dropdown component - full control but more effort
+2. Performance pass/fail logic: Should I check:
+- (A) TestRun.score (aggregate) against threshold, OR
+- (B) Each UrlResult by viewport, fail if ANY viewport on ANY URL fails?
+3. "Result Summary" option: Should this also show a status indicator for the overall release run?
+4. Error vs Failed distinction:
+- status === 'FAILED' (operational) → "(error)"
+- score < 70 (quality) → "(failed)"
+- Is this correct?
+
+1 - B but make red/green (if it doesn't work, no problem)
+2 - B
+3 - No
+4 - yes
+
+Ask any final questions and then provide implementation plan.
+
+-----
+
+1. QUEUED/RUNNING tests: Should these show "(pending)" or no label at all?
+2. Null scores: If a completed test has score === null, should this show "(error)" or "(failed)"?
+3. SCREENSHOTS test: This typically requires manual review. Should it show:
+- "(review)" always, OR
+- Follow same score-based logic if it has a score?
+
+1 - no label
+2 - (error)
+3 - Omit until we build out screenshots UI and logic
+
+-----
+
+ Scope
+
+Add "(passed)", "(failed)", or "(error)" labels with red/green coloring to the Test Type selector dropdown in TestResultDetail.tsx.
+
+Logic Summary
+┌─────────────────────────────────────────────┬──────────┬───────┐
+│                  Condition                  │  Label   │ Color │
+├─────────────────────────────────────────────┼──────────┼───────┤
+│ QUEUED or RUNNING                           │ -        │ -     │
+├─────────────────────────────────────────────┼──────────┼───────┤
+│ SCREENSHOTS                                 │ -        │ -     │
+├─────────────────────────────────────────────┼──────────┼───────┤
+│ status === 'FAILED'                         │ (error)  │ red   │
+├─────────────────────────────────────────────┼──────────┼───────┤
+│ score === null                              │ (error)  │ red   │
+├─────────────────────────────────────────────┼──────────┼───────┤
+│ Performance: ANY urlResult.score < 70       │ (failed) │ red   │
+├─────────────────────────────────────────────┼──────────┼───────┤
+│ Other tests: score < 70                     │ (failed) │ red   │
+├─────────────────────────────────────────────┼──────────┼───────┤
+│ score >= 70 (all viewports for Performance) │ (passed) │ green │
+└─────────────────────────────────────────────┴──────────┴───────┘
+Changes
+
+File: components/releasepass/TestResultDetail.tsx
+
+1. Add helper function (~15 lines) to determine label and color for a test type:
+function getTestTypeStatus(testType: string, testRuns: TestRunData[]): { label: string; color: string } | null
+- Find testRun matching the type
+- Return null for QUEUED/RUNNING/SCREENSHOTS
+- Check operational status for "(error)"
+- For PERFORMANCE: iterate urlResults, check all viewport scores
+- For others: check testRun.score against threshold
+2. Update select option rendering (~5 lines changed):
+- Call helper function for each test type
+- Append label to option text
+- Apply inline style={{ color }} to option element
+
+Files Modified
+
+- components/releasepass/TestResultDetail.tsx (1 file, ~20 lines added/modified)
+
+No Changes To
+
+- API responses (data already available)
+- Scoring logic (using existing threshold from config)
+- Other components
+
+---
+Ready to implement?
+
+

@@ -20,11 +20,13 @@ import { PREFLIGHT_TEST_TYPES } from '@/lib/constants/testTypes'
 
 /**
  * Get pass/fail/error status label for a test type to display in the selector.
+ * Shows status for the currently selected URL, not the aggregate test score.
  * Returns null if no label should be shown (QUEUED, RUNNING, SCREENSHOTS).
  */
 function getTestTypeStatusLabel(
   testTypeValue: string,
-  testRuns: TestRunData[]
+  testRuns: TestRunData[],
+  currentUrl: string | undefined
 ): string | null {
   // Skip SCREENSHOTS - no status display until UI is built out
   if (testTypeValue === 'SCREENSHOTS') return null
@@ -38,19 +40,28 @@ function getTestTypeStatusLabel(
   // Operational failure
   if (testRun.status === 'FAILED') return '(error)'
 
-  // For PERFORMANCE: check all urlResult scores (any viewport failing = failed)
-  if (testTypeValue === 'PERFORMANCE' && testRun.urlResults) {
-    const hasFailingScore = testRun.urlResults.some(ur => {
-      if (ur.score === null || ur.score === undefined) return true // null/undefined score = error
-      return ur.score < SCORING_CONFIG.passThreshold
-    })
-    return hasFailingScore ? '(failed)' : '(passed)'
+  // If no current URL, fall back to testRun.score
+  if (!currentUrl) {
+    if (testRun.score === null) return '(error)'
+    return testRun.score < SCORING_CONFIG.passThreshold ? '(failed)' : '(passed)'
   }
 
-  // For other tests: check testRun.score
-  if (testRun.score === null) return '(error)'
+  // Find urlResult(s) for the current URL
+  const urlResultsForUrl = testRun.urlResults?.filter(ur => ur.url === currentUrl) || []
 
-  return testRun.score < SCORING_CONFIG.passThreshold ? '(failed)' : '(passed)'
+  if (urlResultsForUrl.length === 0) {
+    // URL not found in this test type - fall back to testRun.score
+    if (testRun.score === null) return '(error)'
+    return testRun.score < SCORING_CONFIG.passThreshold ? '(failed)' : '(passed)'
+  }
+
+  // For PERFORMANCE: check all viewports for this URL (mobile + desktop)
+  // For other tests: should have one urlResult per URL
+  const hasError = urlResultsForUrl.some(ur => ur.score === null || ur.score === undefined)
+  if (hasError) return '(error)'
+
+  const hasFailingScore = urlResultsForUrl.some(ur => ur.score! < SCORING_CONFIG.passThreshold)
+  return hasFailingScore ? '(failed)' : '(passed)'
 }
 
 interface TestResultDetailProps {
@@ -106,7 +117,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/release-runs/${id}`)
+      const res = await fetch(`/api/release-runs/${id}`, { cache: 'no-store' })
       if (!res.ok) {
         throw new Error('Failed to fetch test details')
       }
@@ -122,7 +133,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
   const fetchResultItems = useCallback(async (releaseRunId: string, urlResultId: string) => {
     setLoadingItems(true)
     try {
-      const res = await fetch(`/api/release-runs/${releaseRunId}/url-results/${urlResultId}`)
+      const res = await fetch(`/api/release-runs/${releaseRunId}/url-results/${urlResultId}`, { cache: 'no-store' })
       if (!res.ok) {
         throw new Error('Failed to fetch result details')
       }
@@ -401,7 +412,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
             >
               <option value="SUMMARY">Result Summary</option>
               {availableTestTypes.map((opt) => {
-                const statusLabel = getTestTypeStatusLabel(opt.value, releaseRun.testRuns)
+                const statusLabel = getTestTypeStatusLabel(opt.value, releaseRun.testRuns, urlResult?.url)
                 return (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}{statusLabel ? ` ${statusLabel}` : ''}

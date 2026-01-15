@@ -118,6 +118,3 @@ No Changes To
 - Other components
 
 ---
-Ready to implement?
-
-

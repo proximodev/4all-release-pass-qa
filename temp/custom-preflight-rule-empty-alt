@@ -1,0 +1,117 @@
+Requirement:
+I would like you to create a new custom rule: Empty Alt Tag (code: EMPTY_ALT_TAG)
+
+Currently LIGHTHOUSE checks for alt tags but does not error if an empty one is found.
+
+I will create a releaserule record for it with a severity of HIGH.
+
+Next steps:
+1 - Ask questions
+2 - Draft plan
+3 - Execute on approval
+
+---
+
+  1. Definition of "empty": Should this flag only alt="" or also whitespace-only like alt="   "?
+  2. Decorative images: Some images intentionally use alt="" to indicate they're decorative (per WCAG). Should this rule:
+    - (A) Flag ALL empty alt tags, or
+    - (B) Try to exclude likely decorative images (e.g., images in CSS background patterns, icons with adjacent text)?
+  3. Meta data: What should be captured for each flagged image?
+    - Image src URL
+    - Anything else? (e.g., parent element context, image dimensions)
+  4. Scope: Should this check all <img> tags, or also <input type="image"> and <area> elements?
+
+
+1 - examples: alt="", alt, alt="    "
+2 - a
+3 - image src url
+4 - <img>
+
+
+ Plan: Add EMPTY_ALT_TAG Custom Rule
+
+ Summary
+
+ Add a new custom rule to detect <img> elements with empty alt attributes that Lighthouse doesn't catch.
+
+ Detection Logic
+
+ Flag images where alt attribute is:
+ - alt="" (empty string)
+ - alt (attribute present, no value)
+ - alt="   " (whitespace only)
+
+ Implementation
+
+ File: worker/providers/preflight/custom-rules.ts
+
+ 1. Add new check function (~25 lines):
+
+ function checkAltTagRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
+   const results: ResultItemToCreate[] = [];
+
+   const emptyAltImages: { src: string }[] = [];
+
+   $('img').each((_, el) => {
+     const $el = $(el);
+     const alt = $el.attr('alt');
+
+     // Check if alt exists and is empty/whitespace
+     // attr() returns undefined if attribute doesn't exist
+     // alt="" or alt (no value) returns ''
+     if (alt !== undefined && alt.trim() === '') {
+       const src = $el.attr('src') || '(no src)';
+       emptyAltImages.push({ src });
+     }
+   });
+
+   if (emptyAltImages.length > 0) {
+     results.push(
+       createFail(
+         'EMPTY_ALT_TAG',
+         `Found ${emptyAltImages.length} image(s) with empty alt attribute`,
+         IssueSeverity.HIGH,
+         rulesMap,
+         {
+           count: emptyAltImages.length,
+           images: emptyAltImages.slice(0, 10), // Limit to first 10
+         }
+       )
+     );
+   } else {
+     results.push(
+       createPass('EMPTY_ALT_TAG', 'No images with empty alt attributes', {})
+     );
+   }
+
+   return results;
+ }
+
+ 2. Add to runCustomRules function (~1 line):
+
+ Add after the existing batches (around line 145):
+ // Batch 6: Alt tag rules
+ results.push(...checkAltTagRules($, rulesMap));
+
+ Files Modified
+
+ - worker/providers/preflight/custom-rules.ts (1 file, ~30 lines)
+
+ User Action Required
+
+ Create ReleaseRule record with:
+ - code: EMPTY_ALT_TAG
+ - severity: HIGH
+ - provider: RELEASEPASS (or appropriate value)
+
+ Verification
+
+ 1. Run worker against a test page with empty alt tags
+ 2. Verify ResultItem created with:
+   - code: 'EMPTY_ALT_TAG'
+   - status: 'FAIL'
+   - severity: 'HIGH'
+   - meta.images containing src URLs
+ 3. Run against page with no empty alts - verify PASS result
+
+

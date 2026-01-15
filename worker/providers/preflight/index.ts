@@ -193,6 +193,9 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
           rawPayload.linkinator.push({ url, result: linkinatorResult });
         }
 
+        // Small delay after Linkinator to avoid connection issues
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
         // Run custom rules (H1, viewport, etc.)
         const customItems = await runCustomRulesWithErrorHandling(url, rulesMap);
         urlCheckResult.resultItems.push(...customItems);

@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- NO viewport meta tag → Tests PREFLIGHT_VIEWPORT_MISSING -->
+  <!-- NO title tag → Tests document-title -->
+  <!-- NO meta description → Tests meta-description -->
+  <!-- NO canonical tag → Tests PREFLIGHT_CANONICAL_MISSING -->
+
+  <!-- Tests PREFLIGHT_INDEX_NOFOLLOW and is-crawlable (Lighthouse) -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- Tests PREFLIGHT_SECURITY_HTTP_URLS -->
+  <meta property="og:url" content="http://example.com/preflight-tests">
+  <meta property="og:image" content="http://example.com/image.jpg">
+
+  <!-- Tests hreflang (Lighthouse) - invalid language code -->
+  <link rel="alternate" hreflang="invalid-lang" href="https://example.com/invalid">
+  <link rel="alternate" hreflang="xx-XX" href="https://example.com/fake-locale">
+
+  <!-- Tests structured-data (Lighthouse) - valid JSON but invalid Schema.org type -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "NotARealSchemaType",
+    "name": "Test structured data with invalid type"
+  }
+  </script>
+</head>
+<body>
+
+<style>
+  .test-section {
+    border: 2px solid #e5e7eb;
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 8px;
+    background: #f9fafb;
+  }
+  .test-section h2 {
+    color: #1f2937;
+    border-bottom: 1px solid #d1d5db;
+    padding-bottom: 10px;
+    margin-top: 0;
+  }
+  .test-item {
+    background: #fff;
+    padding: 15px;
+    margin: 10px 0;
+    border-left: 4px solid #ef4444;
+    border-radius: 4px;
+  }
+  .test-item.pass { border-left-color: #22c55e; background: #f0fdf4; }
+  .test-item code {
+    background: #fee2e2;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #991b1b;
+  }
+  .test-item.pass code { background: #dcfce7; color: #166534; }
+  .severity {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+    margin-left: 8px;
+  }
+  .severity.blocker { background: #fecaca; color: #991b1b; }
+  .severity.critical { background: #fed7aa; color: #9a3412; }
+  .severity.high { background: #fef08a; color: #854d0e; }
+  .severity.medium { background: #bfdbfe; color: #1e40af; }
+  .severity.low { background: #e5e7eb; color: #374151; }
+  .test-item p { margin: 5px 0 0 0; color: #6b7280; font-size: 14px; }
+  .tiny-text { font-size: 8px !important; line-height: 1; }
+  .small-tap {
+    display: inline-block;
+    padding: 2px 4px;
+    font-size: 8px;
+    background: #ddd;
+    margin: 2px;
+  }
+  .file-link { color: #2563eb; text-decoration: underline; }
+</style>
+
+<!-- ============================================== -->
+<!-- H1 TESTS -->
+<!-- ============================================== -->
+
+<h1>ReleasePass Preflight Test Page (Main)</h1>
+<h1>Second H1 Tag</h1>
+<h1>Third H1 Tag</h1>
+<h1></h1><!-- Empty H1 -->
+<h1>   </h1><!-- Whitespace-only H1 -->
+
+<div class="test-section">
+  <h2>Test Pages</h2>
+  <p>This is the <strong>main test page</strong>. Additional test pages for conflicting rules:</p>
+  <ul>
+    <li><a href="preflight-tests-h1-missing.html" class="file-link">preflight-tests-h1-missing.html</a> - Tests PREFLIGHT_H1_MISSING</li>
+    <li><a href="preflight-tests-canonical.html" class="file-link">preflight-tests-canonical.html</a> - Tests canonical errors (MULTIPLE, MISMATCH, PROTOCOL, HOSTNAME, PARAMS)</li>
+  </ul>
+</div>
+
+<div class="test-section">
+  <h2>Head/Meta Tests (Custom Rules)</h2>
+
+  <div class="test-item">
+    <code>PREFLIGHT_VIEWPORT_MISSING</code> <span class="severity critical">CRITICAL</span>
+    <p>No <code>&lt;meta name="viewport"&gt;</code> tag in head.</p>
+  </div>
+
+  <div class="test-item">
+    <code>PREFLIGHT_CANONICAL_MISSING</code> <span class="severity blocker">BLOCKER</span>
+    <p>No <code>&lt;link rel="canonical"&gt;</code> tag in head.</p>
+  </div>
+
+  <div class="test-item">
+    <code>PREFLIGHT_INDEX_NOFOLLOW</code> <span class="severity critical">CRITICAL</span>
+    <p>Meta robots set to <code>noindex, nofollow</code>.</p>
+  </div>
+
+  <div class="test-item">
+    <code>PREFLIGHT_SECURITY_HTTP_URLS</code> <span class="severity blocker">BLOCKER</span>
+    <p>HTTP URLs in og:url and og:image meta tags.</p>
+  </div>
+</div>
+
+<div class="test-section">
+  <h2>Head/Meta Tests (Lighthouse SEO)</h2>
+
+  <div class="test-item">
+    <code>document-title</code> <span class="severity critical">CRITICAL</span>
+    <p>No <code>&lt;title&gt;</code> tag in head.</p>
+  </div>
+
+  <div class="test-item">
+    <code>meta-description</code> <span class="severity critical">CRITICAL</span>
+    <p>No <code>&lt;meta name="description"&gt;</code> tag in head.</p>
+  </div>
+
+  <div class="test-item">
+    <code>is-crawlable</code> <span class="severity blocker">BLOCKER</span>
+    <p>Meta robots contains <code>noindex</code> directive.</p>
+  </div>
+
+  <div class="test-item">
+    <code>hreflang</code> <span class="severity low">LOW</span>
+    <p>Invalid hreflang values: <code>invalid-lang</code>, <code>xx-XX</code>.</p>
+  </div>
+
+  <div class="test-item">
+    <code>structured-data</code> <span class="severity low">LOW</span>
+    <p>Invalid JSON-LD with syntax error and invalid @type.</p>
+  </div>
+</div>
+
+<div class="test-section">
+  <h2>H1 Heading Tests (Custom Rules)</h2>
+
+  <div class="test-item">
+    <code>PREFLIGHT_H1_MULTIPLE</code> <span class="severity critical">CRITICAL</span>
+    <p>This page has 5 H1 tags.</p>
+  </div>
+
+  <div class="test-item">
+    <code>PREFLIGHT_H1_EMPTY</code> <span class="severity blocker">BLOCKER</span>
+    <p>Two H1 tags are empty/whitespace-only.</p>
+  </div>
+
+  <div class="test-item pass">
+    <code>PREFLIGHT_H1_MISSING</code> <span class="severity blocker">BLOCKER</span>
+    <p>Tested on separate page: <a href="preflight-tests-h1-missing.html" class="file-link">preflight-tests-h1-missing.html</a></p>
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- SECURITY TESTS -->
+<!-- ============================================== -->
+
+<div class="test-section">
+  <h2>Security Tests (Custom Rules)</h2>
+
+  <div class="test-item">
+    <code>PREFLIGHT_SECURITY_MIXED_CONTENT</code> <span class="severity critical">CRITICAL</span>
+    <p>HTTP image on HTTPS page:</p>
+    <img src="http://via.placeholder.com/200x100/ff6b6b/ffffff?text=HTTP+Image" alt="Mixed content test" width="200" height="100">
+    <p style="margin-top:10px;">HTTP script reference:</p>
+    <script src="http://example.com/fake-script.js" async defer></script>
+  </div>
+
+  <div class="test-item">
+    <code>PREFLIGHT_SECURITY_IFRAME</code> <span class="severity critical">CRITICAL</span>
+    <p>HTTP iframe embed:</p>
+    <iframe src="http://example.com" width="300" height="100" style="border:1px solid #ccc;"></iframe>
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- EMPTY LINK TESTS -->
+<!-- ============================================== -->
+
+<div class="test-section">
+  <h2>Empty Link Tests (Custom Rules)</h2>
+
+  <div class="test-item">
+    <code>PREFLIGHT_EMPTY_LINK</code> <span class="severity blocker">BLOCKER</span>
+    <p>Placeholder links with href="#":</p>
+    <ul>
+      <li><a href="#">Click here</a></li>
+      <li><a href="#">Learn more</a></li>
+      <li><a href="#">Contact us</a></li>
+      <li><a href="#">Read more</a></li>
+      <li><a href="#">Get started</a></li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- ALT TAG TESTS -->
+<!-- ============================================== -->
+
+<div class="test-section">
+  <h2>Image Alt Tag Tests</h2>
+
+  <div class="test-item">
+    <code>EMPTY_ALT_TAG</code> <span class="severity high">HIGH</span> (Custom Rule)
+    <p>Images with empty alt attribute (alt=""):</p>
+    <img src="https://via.placeholder.com/150x80/f87171/ffffff?text=alt%3D%22%22" alt="" width="150" height="80">
+    <img src="https://via.placeholder.com/150x80/fb923c/ffffff?text=alt%3D%22+++%22" alt="   " width="150" height="80">
+  </div>
+
+  <div class="test-item">
+    <code>image-alt</code> <span class="severity medium">MEDIUM</span> (Lighthouse)
+    <p>Images with NO alt attribute at all:</p>
+    <img src="https://via.placeholder.com/150x80/60a5fa/ffffff?text=NO+ALT" width="150" height="80">
+    <img src="https://via.placeholder.com/150x80/818cf8/ffffff?text=MISSING" width="150" height="80">
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- BROKEN LINK TESTS (LINKINATOR) -->
+<!-- ============================================== -->
+
+<div class="test-section">
+  <h2>Broken Link Tests (Linkinator)</h2>
+
+  <div class="test-item">
+    <code>BROKEN_INTERNAL_LINK</code> <span class="severity blocker">BLOCKER</span>
+    <p>Internal 404 link:</p>
+    <ul>
+      <li><a href="/this-page-does-not-exist-404">Non-existent page</a></li>
+    </ul>
+  </div>
+
+  <div class="test-item">
+    <code>BROKEN_EXTERNAL_LINK</code> <span class="severity medium">MEDIUM</span>
+    <p>External broken link:</p>
+    <ul>
+      <li><a href="https://httpstat.us/404" target="_blank" rel="noopener">httpstat.us/404</a></li>
+    </ul>
+  </div>
+
+  <div class="test-item">
+    <code>REDIRECT_CHAIN</code> <span class="severity low">LOW</span>
+    <p>Redirect link:</p>
+    <ul>
+      <li><a href="https://httpstat.us/301" target="_blank" rel="noopener">301 Redirect</a></li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- LIGHTHOUSE SEO TESTS (BODY) -->
+<!-- ============================================== -->
+
+<div class="test-section">
+  <h2>Link Quality Tests (Lighthouse SEO)</h2>
+
+  <div class="test-item">
+    <code>link-text</code> <span class="severity medium">MEDIUM</span>
+    <p>Non-descriptive link text:</p>
+    <ul>
+      <li><a href="/about">click here</a> for more info</li>
+      <li><a href="/services">here</a> is our services page</li>
+      <li><a href="/contact">more</a></li>
+      <li><a href="/products">read more</a></li>
+    </ul>
+  </div>
+
+  <div class="test-item">
+    <code>crawlable-anchors</code> <span class="severity low">LOW</span>
+    <p>Non-crawlable links:</p>
+    <ul>
+      <li><a href="javascript:void(0)">JavaScript void link</a></li>
+      <li><a href="javascript:alert('test')">JavaScript action link</a></li>
+      <li><a>Link with no href at all</a></li>
+    </ul>
+  </div>
+</div>
+
+<div class="test-section">
+  <h2>Mobile UX Tests (Lighthouse SEO)</h2>
+
+  <div class="test-item">
+    <code>font-size</code> <span class="severity low">LOW</span>
+    <p>Text too small to read (under 12px):</p>
+    <p class="tiny-text">This text is only 8px and is very hard to read on mobile devices. Lighthouse will flag this as a font-size issue because it's below the recommended minimum of 12px for legibility. This entire paragraph uses tiny text that fails the font-size audit.</p>
+    <p style="font-size: 6px; line-height: 1;">Even smaller 6px text here for testing.</p>
+  </div>
+
+  <div class="test-item">
+    <code>tap-targets</code> <span class="severity low">LOW</span>
+    <p>Tap targets too small (under 48x48px with insufficient spacing):</p>
+    <div style="margin: 10px 0;">
+      <a href="/1" class="small-tap">1</a>
+      <a href="/2" class="small-tap">2</a>
+      <a href="/3" class="small-tap">3</a>
+      <a href="/4" class="small-tap">4</a>
+      <a href="/5" class="small-tap">5</a>
+      <a href="/6" class="small-tap">6</a>
+      <a href="/7" class="small-tap">7</a>
+      <a href="/8" class="small-tap">8</a>
+      <a href="/9" class="small-tap">9</a>
+      <a href="/10" class="small-tap">10</a>
+    </div>
+    <button style="padding:2px 4px;font-size:8px;margin:1px;">Tiny Button</button>
+    <button style="padding:2px 4px;font-size:8px;margin:1px;">Another</button>
+    <button style="padding:2px 4px;font-size:8px;margin:1px;">Small</button>
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- CANONICAL TESTS (SEPARATE PAGE) -->
+<!-- ============================================== -->
+
+<div class="test-section">
+  <h2>Canonical Tests (Custom Rules)</h2>
+
+  <div class="test-item pass">
+    <code>PREFLIGHT_CANONICAL_MULTIPLE</code> <span class="severity blocker">BLOCKER</span>
+    <p>Tested on separate page: <a href="preflight-tests-canonical.html" class="file-link">preflight-tests-canonical.html</a></p>
+  </div>
+
+  <div class="test-item pass">
+    <code>PREFLIGHT_CANONICAL_MISMATCH</code> <span class="severity blocker">BLOCKER</span>
+    <p>Tested on separate page: <a href="preflight-tests-canonical.html" class="file-link">preflight-tests-canonical.html</a></p>
+  </div>
+
+  <div class="test-item pass">
+    <code>PREFLIGHT_CANONICAL_PROTOCOL</code> <span class="severity blocker">BLOCKER</span>
+    <p>Tested on separate page: <a href="preflight-tests-canonical.html" class="file-link">preflight-tests-canonical.html</a></p>
+  </div>
+
+  <div class="test-item pass">
+    <code>PREFLIGHT_CANONICAL_HOSTNAME</code> <span class="severity blocker">BLOCKER</span>
+    <p>Tested on separate page: <a href="preflight-tests-canonical.html" class="file-link">preflight-tests-canonical.html</a></p>
+  </div>
+
+  <div class="test-item pass">
+    <code>PREFLIGHT_CANONICAL_PARAMS</code> <span class="severity critical">CRITICAL</span>
+    <p>Tested on separate page: <a href="preflight-tests-canonical.html" class="file-link">preflight-tests-canonical.html</a></p>
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- NOT TESTED -->
+<!-- ============================================== -->
+
+<div class="test-section" style="background:#fef2f2;border-color:#fecaca;">
+  <h2 style="color:#991b1b;">Not Tested (Require Server Configuration)</h2>
+  <p style="color:#991b1b;">These rules cannot be tested via static HTML files:</p>
+
+  <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:15px;">
+    <tr style="background:#fecaca;">
+      <th style="padding:8px;text-align:left;">Rule</th>
+      <th style="padding:8px;text-align:left;">Reason</th>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #fca5a5;"><code>PREFLIGHT_INDEX_NOINDEX_HEADER</code></td>
+      <td style="padding:8px;border-top:1px solid #fca5a5;">Requires X-Robots-Tag HTTP response header</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #fca5a5;"><code>PREFLIGHT_INDEX_CONFLICT</code></td>
+      <td style="padding:8px;border-top:1px solid #fca5a5;">Requires conflicting meta robots + X-Robots-Tag header</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #fca5a5;"><code>PREFLIGHT_SECURITY_HTTP</code></td>
+      <td style="padding:8px;border-top:1px solid #fca5a5;">Requires page to be served over http:// protocol</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #fca5a5;"><code>http-status-code</code> (Lighthouse)</td>
+      <td style="padding:8px;border-top:1px solid #fca5a5;">Requires server to return non-200 status code</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #fca5a5;"><code>robots-txt</code> (Lighthouse)</td>
+      <td style="padding:8px;border-top:1px solid #fca5a5;">Requires robots.txt file on server</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ============================================== -->
+<!-- SUMMARY -->
+<!-- ============================================== -->
+
+<div style="background:#dcfce7;padding:20px;border-radius:8px;margin-top:20px;border:2px solid #22c55e;">
+  <h3 style="color:#166534;margin-top:0;">Expected Detections on This Page</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <tr style="background:#bbf7d0;">
+      <th style="padding:8px;text-align:left;">Category</th>
+      <th style="padding:8px;text-align:left;">Rules Triggered</th>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #86efac;">Head/Meta (Custom)</td>
+      <td style="padding:8px;border-top:1px solid #86efac;">PREFLIGHT_VIEWPORT_MISSING, PREFLIGHT_CANONICAL_MISSING, PREFLIGHT_INDEX_NOFOLLOW, PREFLIGHT_SECURITY_HTTP_URLS</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #86efac;">Head/Meta (Lighthouse)</td>
+      <td style="padding:8px;border-top:1px solid #86efac;">document-title, meta-description, is-crawlable, hreflang, structured-data</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #86efac;">H1 Issues</td>
+      <td style="padding:8px;border-top:1px solid #86efac;">PREFLIGHT_H1_MULTIPLE, PREFLIGHT_H1_EMPTY</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #86efac;">Security</td>
+      <td style="padding:8px;border-top:1px solid #86efac;">PREFLIGHT_SECURITY_MIXED_CONTENT, PREFLIGHT_SECURITY_IFRAME</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #86efac;">Empty Links</td>
+      <td style="padding:8px;border-top:1px solid #86efac;">PREFLIGHT_EMPTY_LINK</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #86efac;">Alt Tags</td>
+      <td style="padding:8px;border-top:1px solid #86efac;">EMPTY_ALT_TAG, image-alt</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #86efac;">Broken Links</td>
+      <td style="padding:8px;border-top:1px solid #86efac;">BROKEN_INTERNAL_LINK, BROKEN_EXTERNAL_LINK, REDIRECT_CHAIN</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #86efac;">Link Quality</td>
+      <td style="padding:8px;border-top:1px solid #86efac;">link-text, crawlable-anchors</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #86efac;">Mobile UX</td>
+      <td style="padding:8px;border-top:1px solid #86efac;">font-size, tap-targets</td>
+    </tr>
+  </table>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,161 @@
+d<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Preflight Test - Canonical Errors</title>
+  <meta name="description" content="Test page for canonical tag errors - MULTIPLE, MISMATCH, PROTOCOL, HOSTNAME, PARAMS.">
+
+  <!-- Tests PREFLIGHT_CANONICAL_MULTIPLE - Two canonical tags -->
+  <!-- Tests PREFLIGHT_CANONICAL_PROTOCOL - Uses http:// instead of https:// -->
+  <!-- Tests PREFLIGHT_CANONICAL_HOSTNAME - Points to different domain -->
+  <!-- Tests PREFLIGHT_CANONICAL_MISMATCH - Points to different URL path -->
+  <!-- Tests PREFLIGHT_CANONICAL_PARAMS - Contains UTM tracking parameters -->
+  <link rel="canonical" href="http://wrong-domain.com/wrong-page?utm_source=test&amp;utm_medium=email">
+  <link rel="canonical" href="https://another-wrong-domain.com/different-path">
+</head>
+<body>
+
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 20px;
+    color: #1f2937;
+  }
+  .test-section {
+    border: 2px solid #e5e7eb;
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 8px;
+    background: #f9fafb;
+  }
+  .test-section h2 {
+    color: #1f2937;
+    border-bottom: 1px solid #d1d5db;
+    padding-bottom: 10px;
+    margin-top: 0;
+  }
+  .test-item {
+    background: #fff;
+    padding: 15px;
+    margin: 10px 0;
+    border-left: 4px solid #ef4444;
+    border-radius: 4px;
+  }
+  .test-item code {
+    background: #fee2e2;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #991b1b;
+  }
+  .severity {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+    margin-left: 8px;
+  }
+  .severity.blocker { background: #fecaca; color: #991b1b; }
+  .severity.critical { background: #fed7aa; color: #9a3412; }
+  .test-item p { margin: 5px 0 0 0; color: #6b7280; font-size: 14px; }
+  .file-link { color: #2563eb; text-decoration: underline; }
+  .code-block {
+    background: #1f2937;
+    color: #f9fafb;
+    padding: 15px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 13px;
+    overflow-x: auto;
+    margin: 10px 0;
+  }
+  .code-block .comment { color: #9ca3af; }
+  .code-block .tag { color: #60a5fa; }
+  .code-block .attr { color: #34d399; }
+  .code-block .value { color: #fbbf24; }
+</style>
+
+<h1>Preflight Test - Canonical Errors</h1>
+
+<div class="test-section">
+  <h2>Navigation</h2>
+  <p><a href="preflight-tests.html" class="file-link">&larr; Back to main test page</a></p>
+</div>
+
+<div class="test-section">
+  <h2>Canonical Tags in Head</h2>
+  <p>This page has the following canonical tags that trigger multiple errors:</p>
+
+  <div class="code-block">
+    <span class="comment">&lt;!-- First canonical - has ALL the errors --&gt;</span><br>
+    <span class="tag">&lt;link</span> <span class="attr">rel</span>=<span class="value">"canonical"</span> <span class="attr">href</span>=<span class="value">"http://wrong-domain.com/wrong-page?utm_source=test&amp;utm_medium=email"</span><span class="tag">&gt;</span><br><br>
+    <span class="comment">&lt;!-- Second canonical - triggers MULTIPLE error --&gt;</span><br>
+    <span class="tag">&lt;link</span> <span class="attr">rel</span>=<span class="value">"canonical"</span> <span class="attr">href</span>=<span class="value">"https://another-wrong-domain.com/different-path"</span><span class="tag">&gt;</span>
+  </div>
+</div>
+
+<div class="test-section">
+  <h2>Tests: Canonical Errors (Custom Rules)</h2>
+
+  <div class="test-item">
+    <code>PREFLIGHT_CANONICAL_MULTIPLE</code> <span class="severity blocker">BLOCKER</span>
+    <p>Page has <strong>2 canonical tags</strong>. Only one canonical should exist per page.</p>
+  </div>
+
+  <div class="test-item">
+    <code>PREFLIGHT_CANONICAL_MISMATCH</code> <span class="severity blocker">BLOCKER</span>
+    <p>Canonical URL <code>/wrong-page</code> does not match this page's URL.</p>
+  </div>
+
+  <div class="test-item">
+    <code>PREFLIGHT_CANONICAL_PROTOCOL</code> <span class="severity blocker">BLOCKER</span>
+    <p>Canonical uses <code>http://</code> protocol. Should match page protocol (https://).</p>
+  </div>
+
+  <div class="test-item">
+    <code>PREFLIGHT_CANONICAL_HOSTNAME</code> <span class="severity blocker">BLOCKER</span>
+    <p>Canonical points to <code>wrong-domain.com</code> instead of actual hostname.</p>
+  </div>
+
+  <div class="test-item">
+    <code>PREFLIGHT_CANONICAL_PARAMS</code> <span class="severity critical">CRITICAL</span>
+    <p>Canonical contains tracking parameters: <code>utm_source</code>, <code>utm_medium</code>.</p>
+  </div>
+</div>
+
+<div class="test-section">
+  <h2>Why These Matter</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <tr style="background:#f3f4f6;">
+      <th style="padding:10px;text-align:left;border-bottom:1px solid #d1d5db;">Error</th>
+      <th style="padding:10px;text-align:left;border-bottom:1px solid #d1d5db;">Impact</th>
+    </tr>
+    <tr>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;"><strong>Multiple canonicals</strong></td>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;">Search engines may ignore all canonicals or pick wrong one</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;"><strong>URL mismatch</strong></td>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;">Page may be treated as duplicate; wrong page gets indexed</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;"><strong>Wrong protocol</strong></td>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;">HTTP canonical on HTTPS page creates indexing confusion</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;"><strong>Wrong hostname</strong></td>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;">Signals to search engines that another domain owns this content</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;"><strong>Tracking params</strong></td>
+      <td style="padding:10px;">Creates duplicate content issues; canonical should be clean URL</td>
+    </tr>
+  </table>
+</div>
+
+</body>
+</html>

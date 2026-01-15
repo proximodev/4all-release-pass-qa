@@ -1206,26 +1206,29 @@ async function checkFaviconRules(
       return results;
     }
 
-    // Fetch the favicon to verify it exists
+    // Fetch the favicon to verify it exists and has content
     const tagResult = await checkFaviconUrl(faviconUrl);
     if (tagResult.ok) {
       results.push(
         createPass('PREFLIGHT_FAVICON_MISSING', 'Favicon found', {
           source: 'link_tag',
           url: faviconUrl,
+          contentLength: tagResult.contentLength,
         })
       );
     } else {
+      const errorReason = tagResult.contentLength === 0 ? 'tag_empty_file' : 'tag_broken';
       results.push(
         createFail(
           'PREFLIGHT_FAVICON_MISSING',
-          'Favicon URL returns error',
+          tagResult.contentLength === 0 ? 'Favicon file is empty' : 'Favicon URL returns error',
           IssueSeverity.CRITICAL,
           rulesMap,
           {
-            reason: 'tag_broken',
+            reason: errorReason,
             url: faviconUrl,
             status: tagResult.status,
+            contentLength: tagResult.contentLength,
             error: tagResult.error,
           }
         )
@@ -1258,19 +1261,26 @@ async function checkFaviconRules(
       createPass('PREFLIGHT_FAVICON_MISSING', 'Favicon found at /favicon.ico', {
         source: 'root_fallback',
         url: rootFaviconUrl,
+        contentLength: rootResult.contentLength,
       })
     );
   } else {
+    const errorReason = rootResult.contentLength === 0 ? 'no_tag_fallback_empty' : 'no_tag_no_fallback';
+    const message = rootResult.contentLength === 0
+      ? 'No favicon found (no link tag, /favicon.ico is empty)'
+      : 'No favicon found (no link tag, /favicon.ico not found)';
     results.push(
       createFail(
         'PREFLIGHT_FAVICON_MISSING',
-        'No favicon found (no link tag, /favicon.ico not found)',
+        message,
         IssueSeverity.CRITICAL,
         rulesMap,
         {
-          reason: 'no_tag_no_fallback',
+          reason: errorReason,
           checkedUrls: [rootFaviconUrl],
           status: rootResult.status,
+          contentLength: rootResult.contentLength,
+          error: rootResult.error,
         }
       )
     );
@@ -1280,11 +1290,12 @@ async function checkFaviconRules(
 }
 
 /**
- * Check if a favicon URL returns 200
+ * Check if a favicon URL returns 200 with actual content
  */
 async function checkFaviconUrl(url: string): Promise<{
   ok: boolean;
   status?: number;
+  contentLength?: number;
   error?: string;
 }> {
   try {
@@ -1295,11 +1306,27 @@ async function checkFaviconUrl(url: string): Promise<{
       },
     });
 
-    if (response.ok) {
-      return { ok: true, status: response.status };
-    } else {
+    if (!response.ok) {
       return { ok: false, status: response.status };
     }
+
+    // Check Content-Length header first (avoids downloading body)
+    const contentLengthHeader = response.headers.get('content-length');
+    if (contentLengthHeader !== null) {
+      const contentLength = parseInt(contentLengthHeader, 10);
+      if (contentLength === 0) {
+        return { ok: false, status: response.status, contentLength: 0, error: 'Empty file (Content-Length: 0)' };
+      }
+      return { ok: true, status: response.status, contentLength };
+    }
+
+    // No Content-Length header - read body to check size
+    const body = await response.arrayBuffer();
+    if (body.byteLength === 0) {
+      return { ok: false, status: response.status, contentLength: 0, error: 'Empty file (0 bytes)' };
+    }
+
+    return { ok: true, status: response.status, contentLength: body.byteLength };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     return { ok: false, error };

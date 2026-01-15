@@ -233,6 +233,19 @@ const releaseRules = [
     sortOrder: 50,
   },
 
+  // Batch 6: Alt Tag (1 rule)
+  {
+    code: 'EMPTY_ALT_TAG',
+    provider: 'ReleasePass',
+    category: 'Accessibility & SEO',
+    name: 'Empty Alt Attribute',
+    description: 'Image has an alt attribute that is empty or contains only whitespace.',
+    severity: 'HIGH',
+    impact: 'Empty alt attributes may indicate incomplete content or accessibility issues. Screen readers will skip these images entirely.',
+    fix: 'Add descriptive alt text, or if the image is decorative, consider using CSS background images instead.',
+    sortOrder: 60,
+  },
+
   // =========================================================================
   // LIGHTHOUSE SEO AUDITS (13 rules)
   // =========================================================================

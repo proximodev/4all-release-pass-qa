@@ -31,6 +31,9 @@
  *
  * Batch 5: Link rules (1 rule)
  * - PREFLIGHT_EMPTY_LINK
+ *
+ * Batch 6: Alt tag rules (1 rule)
+ * - EMPTY_ALT_TAG
  */
 
 import * as cheerio from 'cheerio';
@@ -109,6 +112,9 @@ export async function runCustomRules(
 
   // Batch 5: Link rules
   results.push(...checkLinkRules($, rulesMap));
+
+  // Batch 6: Alt tag rules
+  results.push(...checkAltTagRules($, rulesMap));
 
   return results;
 }
@@ -1051,6 +1057,57 @@ function checkLinkRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToC
       createPass('PREFLIGHT_EMPTY_LINK', 'No placeholder links detected', {
         excludedNavDropdowns: excludedNavDropdowns.length,
       })
+    );
+  }
+
+  return results;
+}
+
+// =============================================================================
+// Alt Tag Rules
+// =============================================================================
+
+/**
+ * Check alt tag rules:
+ * - EMPTY_ALT_TAG: Images with empty alt attribute (alt="", alt, or whitespace-only)
+ *
+ * Note: Lighthouse checks for missing alt tags but not empty ones.
+ * Empty alt tags may indicate incomplete content or accessibility issues.
+ */
+function checkAltTagRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
+  const results: ResultItemToCreate[] = [];
+
+  const emptyAltImages: { src: string }[] = [];
+
+  $('img').each((_, el) => {
+    const $el = $(el);
+    const alt = $el.attr('alt');
+
+    // Check if alt attribute exists and is empty/whitespace
+    // attr() returns undefined if attribute doesn't exist
+    // alt="" or alt (no value) returns ''
+    if (alt !== undefined && alt.trim() === '') {
+      const src = $el.attr('src') || '(no src)';
+      emptyAltImages.push({ src });
+    }
+  });
+
+  if (emptyAltImages.length > 0) {
+    results.push(
+      createFail(
+        'EMPTY_ALT_TAG',
+        `Found ${emptyAltImages.length} image(s) with empty alt attribute`,
+        IssueSeverity.HIGH,
+        rulesMap,
+        {
+          count: emptyAltImages.length,
+          images: emptyAltImages.slice(0, 10), // Limit to first 10
+        }
+      )
+    );
+  } else {
+    results.push(
+      createPass('EMPTY_ALT_TAG', 'No images with empty alt attributes', {})
     );
   }
 

@@ -179,7 +179,11 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
           rawPayload.lighthouse.push({ url, result: lighthouseResult });
         }
 
-        // Run Linkinator checks
+        // Run custom rules (H1, viewport, etc.) - runs before Linkinator to avoid rate limiting
+        const customItems = await runCustomRulesWithErrorHandling(url, rulesMap);
+        urlCheckResult.resultItems.push(...customItems);
+
+        // Run Linkinator checks (last - makes many requests which can trigger rate limiting)
         const { resultItems: linkItems, result: linkinatorResult } = await runLinkinator(url, rulesMap);
         urlCheckResult.resultItems.push(...linkItems);
 
@@ -192,13 +196,6 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
           urlCheckResult.linkinatorRaw = linkinatorResult;
           rawPayload.linkinator.push({ url, result: linkinatorResult });
         }
-
-        // Small delay after Linkinator to avoid connection issues
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Run custom rules (H1, viewport, etc.)
-        const customItems = await runCustomRulesWithErrorHandling(url, rulesMap);
-        urlCheckResult.resultItems.push(...customItems);
 
         // Apply ignored rules to result items
         const resultItems = applyIgnoredRules(urlCheckResult.resultItems, ignoredCodes);

@@ -123,14 +123,31 @@ export async function runCustomRules(
  * Fetch page HTML and headers with retry for transient failures
  */
 async function fetchPage(url: string): Promise<FetchedPage> {
+  console.log(`[CUSTOM_RULES] Fetching page: ${url}`);
   const response = await retryWithBackoff(
-    () => fetchWithTimeout(url, {
-      timeoutMs: 30000,
-      headers: {
-        'User-Agent': 'ReleasePass-Bot/1.0 (https://releasepass.app)',
-        'Accept': 'text/html,application/xhtml+xml',
-      },
-    }),
+    async () => {
+      try {
+        return await fetchWithTimeout(url, {
+          timeoutMs: 30000,
+          headers: {
+            'User-Agent': 'ReleasePass-Bot/1.0 (https://releasepass.app)',
+            'Accept': 'text/html,application/xhtml+xml',
+          },
+        });
+      } catch (err) {
+        const error = err as Error & { cause?: Error; code?: string };
+        console.error(`[CUSTOM_RULES] Fetch error for ${url}:`, error.message);
+        console.error(`[CUSTOM_RULES] Error name:`, error.name);
+        console.error(`[CUSTOM_RULES] Error code:`, error.code || '(none)');
+        if (error.cause) {
+          const cause = error.cause as Error & { code?: string };
+          console.error(`[CUSTOM_RULES] Cause:`, cause.message || cause);
+          console.error(`[CUSTOM_RULES] Cause code:`, cause.code || '(none)');
+        }
+        console.error(`[CUSTOM_RULES] Stack:`, error.stack?.split('\n').slice(0, 5).join('\n'));
+        throw err;
+      }
+    },
     { maxRetries: 2, initialDelayMs: 1000 }
   );
 

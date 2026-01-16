@@ -4,7 +4,7 @@
 
 Implement custom preflight rules that validate launch-critical page elements using HTML parsing. Rules requiring Playwright for rendered DOM analysis are deferred to v1.1.
 
-## V1 Scope (20 Rules - HTML Parsing Only) ✓ COMPLETE
+## V1 Scope (24 Rules - HTML Parsing Only) ✓ COMPLETE
 
 ### Indexing & Crawl Control (3 rules)
 
@@ -66,6 +66,15 @@ Implement custom preflight rules that validate launch-critical page elements usi
 |--------------------------|----------|----------------------------|
 | PREFLIGHT_FAVICON_MISSING| Critical | Favicon missing or not found |
 
+### Meta & Title Quality (4 rules)
+
+| Code                        | Severity | Description                            |
+|-----------------------------|----------|----------------------------------------|
+| PREFLIGHT_TITLE_TOO_LONG    | High     | Title exceeds 55 characters            |
+| PREFLIGHT_TITLE_TOO_SHORT   | High     | Title below 30 characters              |
+| PREFLIGHT_META_DESC_TOO_LONG| Medium   | Meta description exceeds 155 characters|
+| PREFLIGHT_META_DESC_TOO_SHORT| Medium  | Meta description below 70 characters   |
+
 ## V1.1 Scope (4 Rules - Require Playwright) - DEFERRED
 
 These rules require rendered DOM analysis via Playwright:
@@ -77,18 +86,7 @@ These rules require rendered DOM analysis via Playwright:
 | PREFLIGHT_RENDER_JS_ONLY  | Critical | Primary content requires JavaScript        |
 | PREFLIGHT_RENDER_POSTLOAD | Critical | Critical SEO elements injected post-load   |
 
-## V1.2 Scope (4 Rules) - PLANNED
-
-### Meta & Title Quality (4 rules)
-
-| Code                        | Severity | Description                            |
-|-----------------------------|----------|----------------------------------------|
-| PREFLIGHT_TITLE_TOO_LONG    | High     | Title exceeds 55 characters            |
-| PREFLIGHT_TITLE_TOO_SHORT   | High     | Title below 30 characters              |
-| PREFLIGHT_META_DESC_TOO_LONG| Medium   | Meta description exceeds 155 characters|
-| PREFLIGHT_META_DESC_TOO_SHORT| Medium  | Meta description below 70 characters   |
-
-## V1.3 Scope (5 Rules) - PLANNED
+## V1.2 Scope (5 Rules) - PLANNED
 
 ### Social Metadata (3 rules)
 
@@ -143,6 +141,10 @@ export async function runCustomRules(url: string, rulesMap: ReleaseRulesMap): Pr
   // Batch 7: Favicon rules
   results.push(...await checkFaviconRules($, page, rulesMap))
 
+  // Batch 8: Meta & Title rules
+  results.push(...checkMetaTitleRules($, rulesMap))
+  results.push(...checkMetaDescriptionRules($, rulesMap))
+
   return results
 }
 ```
@@ -159,6 +161,8 @@ Each category function returns an array of ResultItems (both PASS and FAIL):
 - `checkLinkRules($, rulesMap)` - Empty href detection
 - `checkAltTagRules($, rulesMap)` - Empty alt attribute detection
 - `checkFaviconRules($, page, rulesMap)` - Favicon presence validation
+- `checkMetaTitleRules($, rulesMap)` - Title length validation
+- `checkMetaDescriptionRules($, rulesMap)` - Meta description length validation
 
 ### Helper Functions
 

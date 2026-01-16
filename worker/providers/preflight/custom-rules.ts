@@ -1158,12 +1158,27 @@ async function checkFaviconRules(
 ): Promise<ResultItemToCreate[]> {
   const results: ResultItemToCreate[] = [];
 
+  console.log(`[FAVICON] Starting favicon check for: ${page.finalUrl}`);
+
   // Find favicon link tags (rel="icon" or rel="shortcut icon")
+  // Note: Cheerio attribute selectors are case-sensitive, so we check common variations
   const faviconTags = $('link[rel="icon"], link[rel="shortcut icon"]');
+
+  console.log(`[FAVICON] Found ${faviconTags.length} favicon link tag(s) with standard selectors`);
+
+  // Debug: Log ALL link tags to see what's in the document
+  const allLinkTags = $('link');
+  console.log(`[FAVICON] Total <link> tags in document: ${allLinkTags.length}`);
+  allLinkTags.each((i, el) => {
+    const rel = $(el).attr('rel') || '(no rel)';
+    const href = $(el).attr('href') || '(no href)';
+    console.log(`[FAVICON]   Link[${i}]: rel="${rel}" href="${href.substring(0, 80)}"`);
+  });
 
   if (faviconTags.length > 0) {
     // Found favicon tag(s) - check the first one
     const href = faviconTags.first().attr('href') || '';
+    console.log(`[FAVICON] Found favicon tag with href: "${href}"`);
 
     if (!href) {
       // Empty href - treat as missing
@@ -1207,8 +1222,11 @@ async function checkFaviconRules(
     }
 
     // Fetch the favicon to verify it exists and has content
+    console.log(`[FAVICON] Checking favicon from link tag: ${faviconUrl}`);
     const tagResult = await checkFaviconUrl(faviconUrl);
+    console.log(`[FAVICON] Link tag result: ok=${tagResult.ok}, status=${tagResult.status}, contentLength=${tagResult.contentLength}, error=${tagResult.error || '(none)'}`);
     if (tagResult.ok) {
+      console.log(`[FAVICON] SUCCESS: Favicon found via link tag`);
       results.push(
         createPass('PREFLIGHT_FAVICON_MISSING', 'Favicon found', {
           source: 'link_tag',
@@ -1217,6 +1235,8 @@ async function checkFaviconRules(
         })
       );
     } else {
+      console.log(`[FAVICON] FAIL: Link tag favicon not accessible`);
+
       const errorReason = tagResult.contentLength === 0 ? 'tag_empty_file' : 'tag_broken';
       results.push(
         createFail(
@@ -1238,10 +1258,12 @@ async function checkFaviconRules(
   }
 
   // No favicon tag found - try /favicon.ico fallback
+  console.log(`[FAVICON] No favicon link tag found, trying /favicon.ico fallback`);
   let rootFaviconUrl: string;
   try {
     const pageUrl = new URL(page.finalUrl);
     rootFaviconUrl = `${pageUrl.origin}/favicon.ico`;
+    console.log(`[FAVICON] Will check fallback URL: ${rootFaviconUrl}`);
   } catch {
     results.push(
       createFail(
@@ -1256,7 +1278,9 @@ async function checkFaviconRules(
   }
 
   const rootResult = await checkFaviconUrl(rootFaviconUrl);
+  console.log(`[FAVICON] Fallback result: ok=${rootResult.ok}, status=${rootResult.status}, contentLength=${rootResult.contentLength}, error=${rootResult.error || '(none)'}`);
   if (rootResult.ok) {
+    console.log(`[FAVICON] SUCCESS: Favicon found at /favicon.ico`);
     results.push(
       createPass('PREFLIGHT_FAVICON_MISSING', 'Favicon found at /favicon.ico', {
         source: 'root_fallback',
@@ -1265,6 +1289,8 @@ async function checkFaviconRules(
       })
     );
   } else {
+    console.log(`[FAVICON] FAIL: No favicon found anywhere`);
+
     const errorReason = rootResult.contentLength === 0 ? 'no_tag_fallback_empty' : 'no_tag_no_fallback';
     const message = rootResult.contentLength === 0
       ? 'No favicon found (/favicon.ico is empty)'
@@ -1298,6 +1324,7 @@ async function checkFaviconUrl(url: string): Promise<{
   contentLength?: number;
   error?: string;
 }> {
+  console.log(`[FAVICON] Fetching favicon URL: ${url}`);
   try {
     const response = await fetchWithTimeout(url, {
       timeoutMs: 10000,
@@ -1306,7 +1333,11 @@ async function checkFaviconUrl(url: string): Promise<{
       },
     });
 
+    console.log(`[FAVICON] Response status: ${response.status} ${response.statusText}`);
+    console.log(`[FAVICON] Response headers: content-type=${response.headers.get('content-type')}, content-length=${response.headers.get('content-length')}`);
+
     if (!response.ok) {
+      console.log(`[FAVICON] Response not OK (status ${response.status}), returning failure`);
       return { ok: false, status: response.status };
     }
 
@@ -1314,6 +1345,7 @@ async function checkFaviconUrl(url: string): Promise<{
     const contentLengthHeader = response.headers.get('content-length');
     if (contentLengthHeader !== null) {
       const contentLength = parseInt(contentLengthHeader, 10);
+      console.log(`[FAVICON] Content-Length header present: ${contentLength}`);
       if (contentLength === 0) {
         return { ok: false, status: response.status, contentLength: 0, error: 'Empty file (Content-Length: 0)' };
       }
@@ -1321,7 +1353,9 @@ async function checkFaviconUrl(url: string): Promise<{
     }
 
     // No Content-Length header - read body to check size
+    console.log(`[FAVICON] No Content-Length header, reading body...`);
     const body = await response.arrayBuffer();
+    console.log(`[FAVICON] Body size: ${body.byteLength} bytes`);
     if (body.byteLength === 0) {
       return { ok: false, status: response.status, contentLength: 0, error: 'Empty file (0 bytes)' };
     }
@@ -1329,6 +1363,7 @@ async function checkFaviconUrl(url: string): Promise<{
     return { ok: true, status: response.status, contentLength: body.byteLength };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
+    console.error(`[FAVICON] Fetch error: ${error}`);
     return { ok: false, error };
   }
 }

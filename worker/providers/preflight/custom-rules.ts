@@ -1267,8 +1267,8 @@ async function checkFaviconRules(
   } else {
     const errorReason = rootResult.contentLength === 0 ? 'no_tag_fallback_empty' : 'no_tag_no_fallback';
     const message = rootResult.contentLength === 0
-      ? 'No favicon found (no link tag, /favicon.ico is empty)'
-      : 'No favicon found (no link tag, /favicon.ico not found)';
+      ? 'No favicon found (/favicon.ico is empty)'
+      : 'No favicon found';
     results.push(
       createFail(
         'PREFLIGHT_FAVICON_MISSING',

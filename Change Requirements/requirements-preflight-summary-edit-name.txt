@@ -1,0 +1,74 @@
+Requirement:
+On the test summary, add the ability to edit ReleaseRun name.
+
+Design references:
+- Temp/preflight-summary-testrun-edit-link.png
+- Temp/preflight-summary-testrun-edit-ui.png
+
+UX:
+- Clicking "edit" next to ReleaseRun name allows for inline name editing. Font size and style should be the same as rendered name.
+- Esc key should cancel edit
+- Enter should save
+- On Enter, if name has not changed, save should not be triggered
+
+Next Steps:
+1 - Ask questions
+2 - Propose plan
+3 - Execute on approval
+
+--
+
+Questions:
+  1. Click outside behavior: When the user clicks outside the input field while editing, should it:                  - Cancel the edit (discard changes)?
+    - Save the changes (like pressing Enter)?
+  2. Name validation:
+    - Is there a maximum length for the name?
+    - Should empty names be allowed (clear to blank), or require at least 1 character?
+  3. Loading/error handling: Should there be visual feedback during save (spinner/disabled state) and error messages if the API call fails?
+  4. Empty state: The design shows existing names, but if a ReleaseRun has no name (shows "Untitled Test"), should clicking Edit allow naming it for the first time?
+
+
+
+1 - Cancel
+2.1 - 50
+2.2 - No. Change input box outline color from default light gray to red
+3 - For saving, disable field and display error message in red text to the right of the field
+4 - There shouldn't be an empty name.
+
+--
+
+
+Implementation Plan: Inline ReleaseRun Name Editing
+1. Create API Endpoint
+
+File: app/api/release-runs/[id]/route.ts
+- Add PATCH handler to update ReleaseRun name
+- Validate: name is string, max 50 characters
+- Return updated ReleaseRun
+
+2. Update TestResultsSummary Component
+
+File: components/releasepass/TestResultsSummary.tsx
+
+Changes:
+- Add state: isEditing, editedName
+- Replace static name display with conditional rendering:
+- View mode: Results: {name} (Edit) - "(Edit)" is a clickable link
+- Edit mode: Text input with same styling as the title
+- Event handlers:
+- Click "Edit" → Enter edit mode, focus input
+- Esc key → Cancel edit, revert to original name
+- Enter key → Save if name changed, else just exit edit mode
+- Click outside → Cancel edit (blur handler)
+- Input change → Update local state
+- Save function: PATCH /api/release-runs/{id} with new name
+- Disable input briefly during save (minimal feedback)
+
+3. Files to Create/Modify
+┌───────────────────────────────────────────────┬────────────────────┐
+│                     File                      │       Action       │
+├───────────────────────────────────────────────┼────────────────────┤
+│ app/api/release-runs/[id]/route.ts            │ Add PATCH handler  │
+├───────────────────────────────────────────────┼────────────────────┤
+│ components/releasepass/TestResultsSummary.tsx │ Add inline edit UI │
+└───────────────────────────────────────────────┴────────────────────┘

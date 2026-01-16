@@ -2,14 +2,14 @@ Classification/Grouping,Test,Rule Code,Severity,Release,Status,Notes
 Indexing & Crawl Control,Page marked noindex via HTTP headers,PREFLIGHT_INDEX_NOINDEX_HEADER,Blocker,v1,Done,Blocks indexing even if meta tags allow indexing
 Indexing & Crawl Control,Page marked nofollow via meta or HTTP headers,PREFLIGHT_INDEX_NOFOLLOW,Critical,v1,Done,Prevents link equity flow and crawling intent
 Indexing & Crawl Control,Conflicting index directives detected (meta vs headers),PREFLIGHT_INDEX_CONFLICT,Blocker,v1,Done,Creates undefined indexing behavior
-Canonical Intent & Consistency,Canonical tag missing,PREFLIGHT_CANONICAL_MISSING,Blocker,v1,Done,Page may be treated as duplicate or ignored
+Canonical Intent & Consistency,Canonical tag missing,PREFLIGHT_CANONICAL_MISSING,Critical,v1,Done,Page may be treated as duplicate or ignored; not always needed
 Canonical Intent & Consistency,Multiple canonical tags detected,PREFLIGHT_CANONICAL_MULTIPLE,Blocker,v1,Done,Search engines may ignore canonical entirely
-Canonical Intent & Consistency,Canonical points to a different URL than the page,PREFLIGHT_CANONICAL_MISMATCH,Blocker,v1,Done,Page effectively deindexed in favor of canonical target
-Canonical Intent & Consistency,Canonical uses incorrect protocol (HTTP vs HTTPS),PREFLIGHT_CANONICAL_PROTOCOL,Blocker,v1,Done,Introduces duplicate and security issues
-Canonical Intent & Consistency,Canonical points to non-primary hostname,PREFLIGHT_CANONICAL_HOSTNAME,Blocker,v1,Done,Signals wrong authority source
+Canonical Intent & Consistency,Canonical points to a different URL than the page,PREFLIGHT_CANONICAL_MISMATCH,Critical,v1,Done,Often intentional (www normalization, trailing slash, query params)
+Canonical Intent & Consistency,Canonical uses incorrect protocol (HTTP vs HTTPS),PREFLIGHT_CANONICAL_PROTOCOL,Blocker,v1,Done,HTTP canonical on HTTPS page is always wrong
+Canonical Intent & Consistency,Canonical points to non-primary hostname,PREFLIGHT_CANONICAL_HOSTNAME,Critical,v1,Done,Could be intentional (syndication, multi-brand consolidation)
 Canonical Intent & Consistency,Canonical target contains tracking or session parameters,PREFLIGHT_CANONICAL_PARAMS,Critical,v1,Done,Creates unstable canonical signals
 Heading Structure,No H1 present on page,PREFLIGHT_H1_MISSING,Blocker,v1,Done,Page lacks primary content heading
-Heading Structure,More than one H1 present,PREFLIGHT_H1_MULTIPLE,Critical,v1,Done,Common CMS/template error affecting content hierarchy
+Heading Structure,More than one H1 present,PREFLIGHT_H1_MULTIPLE,High,v1,Done,Common CMS/template error; HTML5 allows multiple H1s in sections
 Heading Structure,H1 exists but is empty or whitespace-only,PREFLIGHT_H1_EMPTY,Blocker,v1,Done,Invisible primary heading
 Heading Structure,H1 is hidden or visually suppressed,PREFLIGHT_H1_HIDDEN,Critical,v1.1,Deferred,Requires Playwright for rendered DOM analysis
 Meta & Title Quality,Title exceeds maximum recommended length (55 chars),PREFLIGHT_TITLE_TOO_LONG,High,v1,Done,May truncate in SERPs

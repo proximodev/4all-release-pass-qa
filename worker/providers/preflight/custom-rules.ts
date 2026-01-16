@@ -219,6 +219,184 @@ function createFail(
 }
 
 // =============================================================================
+// Shared Helpers
+// =============================================================================
+
+/**
+ * Configuration for length bounds checking
+ */
+interface LengthBoundsConfig {
+  tooLongCode: string;
+  tooShortCode: string;
+  min: number;
+  max: number;
+  minSeverity: IssueSeverity;
+  maxSeverity: IssueSeverity;
+  fieldName: string; // e.g., "Title" or "Meta description"
+}
+
+/**
+ * Check if content length is within min/max bounds
+ * Returns PASS/FAIL results for both too-long and too-short rules
+ */
+function checkLengthBounds(
+  content: string,
+  config: LengthBoundsConfig,
+  rulesMap: ReleaseRulesMap
+): ResultItemToCreate[] {
+  const results: ResultItemToCreate[] = [];
+  const length = content.length;
+  const preview = content.substring(0, 80);
+
+  // Check too long
+  if (length > config.max) {
+    results.push(
+      createFail(
+        config.tooLongCode,
+        `${config.fieldName} exceeds ${config.max} characters (${length} chars)`,
+        config.maxSeverity,
+        rulesMap,
+        { length, maxLength: config.max, [config.fieldName.toLowerCase()]: preview }
+      )
+    );
+  } else {
+    results.push(
+      createPass(config.tooLongCode, `${config.fieldName} length within limit`, {
+        length,
+        maxLength: config.max,
+      })
+    );
+  }
+
+  // Check too short
+  if (length < config.min) {
+    results.push(
+      createFail(
+        config.tooShortCode,
+        `${config.fieldName} below ${config.min} characters (${length} chars)`,
+        config.minSeverity,
+        rulesMap,
+        { length, minLength: config.min, [config.fieldName.toLowerCase()]: preview }
+      )
+    );
+  } else {
+    results.push(
+      createPass(config.tooShortCode, `${config.fieldName} length sufficient`, {
+        length,
+        minLength: config.min,
+      })
+    );
+  }
+
+  return results;
+}
+
+/**
+ * Configuration for HTTP URL scanning
+ */
+interface HttpUrlScanConfig {
+  selector: string;
+  attr: string;
+}
+
+/**
+ * Scan document for HTTP URLs in specified elements
+ * Returns array of found HTTP URLs with element context
+ */
+function findHttpUrls(
+  $: CheerioAPI,
+  checks: HttpUrlScanConfig[]
+): Array<{ tag: string; attr: string; url: string }> {
+  const found: Array<{ tag: string; attr: string; url: string }> = [];
+
+  for (const check of checks) {
+    $(check.selector).each((_, el) => {
+      const $el = $(el);
+      const url = $el.attr(check.attr) || '';
+      if (url && isHttpUrl(url)) {
+        const tagName = $el.prop('tagName');
+        found.push({
+          tag: typeof tagName === 'string' ? tagName.toLowerCase() : 'unknown',
+          attr: check.attr,
+          url,
+        });
+      }
+    });
+  }
+
+  return found;
+}
+
+/**
+ * Parsed URL details for canonical/security checks
+ */
+interface ParsedUrlDetails {
+  original: string;
+  hostname: string;
+  protocol: string;
+  normalized: string;
+  trackingParams: string[];
+}
+
+/** Common tracking/session parameters that should not appear in canonical URLs */
+const TRACKING_PARAMS = new Set([
+  // Analytics
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+  'gclid', 'fbclid', 'msclkid', 'dclid',
+  // Session
+  'sessionid', 'session_id', 'sid', 'phpsessid', 'jsessionid',
+  // Misc tracking
+  'ref', 'affiliate', 'source', 'mc_cid', 'mc_eid',
+]);
+
+/**
+ * Parse URL and extract all commonly needed details in one pass
+ * Returns null if URL is invalid
+ */
+function parseUrlDetails(urlString: string): ParsedUrlDetails | null {
+  try {
+    const url = new URL(urlString);
+
+    // Find tracking params
+    const trackingParams: string[] = [];
+    for (const [key] of url.searchParams) {
+      if (TRACKING_PARAMS.has(key.toLowerCase())) {
+        trackingParams.push(key);
+      }
+    }
+
+    // Normalize for comparison
+    const normalizedUrl = new URL(urlString);
+    normalizedUrl.hostname = normalizedUrl.hostname.toLowerCase();
+    if (normalizedUrl.pathname.length > 1 && normalizedUrl.pathname.endsWith('/')) {
+      normalizedUrl.pathname = normalizedUrl.pathname.slice(0, -1);
+    }
+    normalizedUrl.searchParams.sort();
+
+    return {
+      original: urlString,
+      hostname: url.hostname.toLowerCase(),
+      protocol: url.protocol,
+      normalized: normalizedUrl.toString(),
+      trackingParams,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a URL uses HTTP (insecure)
+ */
+function isHttpUrl(urlString: string): boolean {
+  try {
+    return new URL(urlString).protocol === 'http:';
+  } catch {
+    return urlString.toLowerCase().startsWith('http:');
+  }
+}
+
+// =============================================================================
 // H1 Rules
 // =============================================================================
 
@@ -504,77 +682,6 @@ function detectIndexingConflict(
 // Canonical Rules
 // =============================================================================
 
-/** Common tracking/session parameters that should not appear in canonical URLs */
-const TRACKING_PARAMS = new Set([
-  // Analytics
-  'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
-  'gclid', 'fbclid', 'msclkid', 'dclid',
-  // Session
-  'sessionid', 'session_id', 'sid', 'phpsessid', 'jsessionid',
-  // Misc tracking
-  'ref', 'affiliate', 'source', 'mc_cid', 'mc_eid',
-]);
-
-/**
- * Normalize a URL for comparison (handles trailing slashes, lowercase hostname)
- */
-function normalizeUrlForComparison(urlString: string): string {
-  try {
-    const url = new URL(urlString);
-    // Lowercase hostname
-    url.hostname = url.hostname.toLowerCase();
-    // Remove trailing slash from pathname (unless it's just "/")
-    if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
-      url.pathname = url.pathname.slice(0, -1);
-    }
-    // Sort query params for consistent comparison
-    url.searchParams.sort();
-    return url.toString();
-  } catch {
-    return urlString.toLowerCase();
-  }
-}
-
-/**
- * Extract hostname from URL, handling errors gracefully
- */
-function getHostname(urlString: string): string | null {
-  try {
-    return new URL(urlString).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Extract protocol from URL
- */
-function getProtocol(urlString: string): string | null {
-  try {
-    return new URL(urlString).protocol;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if URL contains tracking or session parameters
- */
-function hasTrackingParams(urlString: string): { has: boolean; params: string[] } {
-  try {
-    const url = new URL(urlString);
-    const found: string[] = [];
-    for (const [key] of url.searchParams) {
-      if (TRACKING_PARAMS.has(key.toLowerCase())) {
-        found.push(key);
-      }
-    }
-    return { has: found.length > 0, params: found };
-  } catch {
-    return { has: false, params: [] };
-  }
-}
-
 /**
  * Check canonical tag rules:
  * - PREFLIGHT_CANONICAL_MISSING: No canonical tag
@@ -662,20 +769,35 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage, rulesMap: Release
     return results;
   }
 
-  // --- PREFLIGHT_CANONICAL_PROTOCOL ---
-  const pageProtocol = getProtocol(page.finalUrl);
-  const canonicalProtocol = getProtocol(canonicalUrl);
+  // Parse both URLs once for all checks
+  const pageDetails = parseUrlDetails(page.finalUrl);
+  const canonicalDetails = parseUrlDetails(canonicalUrl);
 
-  if (pageProtocol && canonicalProtocol && pageProtocol !== canonicalProtocol) {
+  if (!pageDetails || !canonicalDetails) {
+    // Should not happen since we already validated canonicalUrl above
+    results.push(
+      createFail(
+        'PREFLIGHT_CANONICAL_MISMATCH',
+        'Failed to parse URLs for comparison',
+        IssueSeverity.BLOCKER,
+        rulesMap,
+        { canonical: canonicalUrl, pageUrl: page.finalUrl }
+      )
+    );
+    return results;
+  }
+
+  // --- PREFLIGHT_CANONICAL_PROTOCOL ---
+  if (pageDetails.protocol !== canonicalDetails.protocol) {
     results.push(
       createFail(
         'PREFLIGHT_CANONICAL_PROTOCOL',
-        `Canonical uses ${canonicalProtocol} but page is ${pageProtocol}`,
+        `Canonical uses ${canonicalDetails.protocol} but page is ${pageDetails.protocol}`,
         IssueSeverity.BLOCKER,
         rulesMap,
         {
-          canonicalProtocol,
-          pageProtocol,
+          canonicalProtocol: canonicalDetails.protocol,
+          pageProtocol: pageDetails.protocol,
           canonical: canonicalUrl,
         }
       )
@@ -683,25 +805,22 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage, rulesMap: Release
   } else {
     results.push(
       createPass('PREFLIGHT_CANONICAL_PROTOCOL', 'Canonical protocol matches page', {
-        protocol: canonicalProtocol,
+        protocol: canonicalDetails.protocol,
       })
     );
   }
 
   // --- PREFLIGHT_CANONICAL_HOSTNAME ---
-  const pageHostname = getHostname(page.finalUrl);
-  const canonicalHostname = getHostname(canonicalUrl);
-
-  if (pageHostname && canonicalHostname && pageHostname !== canonicalHostname) {
+  if (pageDetails.hostname !== canonicalDetails.hostname) {
     results.push(
       createFail(
         'PREFLIGHT_CANONICAL_HOSTNAME',
-        `Canonical points to different hostname: ${canonicalHostname}`,
+        `Canonical points to different hostname: ${canonicalDetails.hostname}`,
         IssueSeverity.BLOCKER,
         rulesMap,
         {
-          canonicalHostname,
-          pageHostname,
+          canonicalHostname: canonicalDetails.hostname,
+          pageHostname: pageDetails.hostname,
           canonical: canonicalUrl,
         }
       )
@@ -709,17 +828,14 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage, rulesMap: Release
   } else {
     results.push(
       createPass('PREFLIGHT_CANONICAL_HOSTNAME', 'Canonical hostname matches page', {
-        hostname: canonicalHostname,
+        hostname: canonicalDetails.hostname,
       })
     );
   }
 
   // --- PREFLIGHT_CANONICAL_MISMATCH ---
   // Compare normalized URLs (ignoring trailing slashes, case differences)
-  const normalizedPage = normalizeUrlForComparison(page.finalUrl);
-  const normalizedCanonical = normalizeUrlForComparison(canonicalUrl);
-
-  if (normalizedPage !== normalizedCanonical) {
+  if (pageDetails.normalized !== canonicalDetails.normalized) {
     results.push(
       createFail(
         'PREFLIGHT_CANONICAL_MISMATCH',
@@ -729,8 +845,8 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage, rulesMap: Release
         {
           canonical: canonicalUrl,
           pageUrl: page.finalUrl,
-          normalizedCanonical,
-          normalizedPage,
+          normalizedCanonical: canonicalDetails.normalized,
+          normalizedPage: pageDetails.normalized,
         }
       )
     );
@@ -743,18 +859,16 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage, rulesMap: Release
   }
 
   // --- PREFLIGHT_CANONICAL_PARAMS ---
-  const trackingCheck = hasTrackingParams(canonicalUrl);
-
-  if (trackingCheck.has) {
+  if (canonicalDetails.trackingParams.length > 0) {
     results.push(
       createFail(
         'PREFLIGHT_CANONICAL_PARAMS',
-        `Canonical contains tracking parameters: ${trackingCheck.params.join(', ')}`,
+        `Canonical contains tracking parameters: ${canonicalDetails.trackingParams.join(', ')}`,
         IssueSeverity.CRITICAL,
         rulesMap,
         {
           canonical: canonicalUrl,
-          trackingParams: trackingCheck.params,
+          trackingParams: canonicalDetails.trackingParams,
         }
       )
     );
@@ -772,17 +886,6 @@ function checkCanonicalRules($: CheerioAPI, page: FetchedPage, rulesMap: Release
 // =============================================================================
 // Security Rules
 // =============================================================================
-
-/**
- * Check if a URL uses HTTP (insecure)
- */
-function isHttpUrl(urlString: string): boolean {
-  try {
-    return new URL(urlString).protocol === 'http:';
-  } catch {
-    return urlString.toLowerCase().startsWith('http:');
-  }
-}
 
 /**
  * Check security and protocol hygiene rules:
@@ -862,45 +965,29 @@ function checkSecurityRules($: CheerioAPI, page: FetchedPage, rulesMap: ReleaseR
 
   // --- PREFLIGHT_SECURITY_MIXED_CONTENT ---
   // Check for HTTP resources on HTTPS pages (mixed content)
-  const mixedContent: { tag: string; attr: string; url: string }[] = [];
+  let mixedContent: { tag: string; attr: string; url: string }[] = [];
 
   // Only check for mixed content if page is HTTPS
   if (!pageIsHttp) {
-    // Check script src
-    $('script[src]').each((_, el) => {
-      const src = $(el).attr('src') || '';
-      if (src && isHttpUrl(src)) {
-        mixedContent.push({ tag: 'script', attr: 'src', url: src });
-      }
-    });
+    // Use findHttpUrls for simple src attribute checks
+    mixedContent = findHttpUrls($, [
+      { selector: 'script[src]', attr: 'src' },
+      { selector: 'img[src]', attr: 'src' },
+      { selector: 'video[src]', attr: 'src' },
+      { selector: 'audio[src]', attr: 'src' },
+      { selector: 'source[src]', attr: 'src' },
+    ]);
 
-    // Check link href (stylesheets, etc.)
+    // Check link href (stylesheets, etc.) - special case: exclude canonical
     $('link[href]').each((_, el) => {
       const href = $(el).attr('href') || '';
       const rel = $(el).attr('rel') || '';
-      // Only check stylesheets and preloads, not canonical
       if (href && isHttpUrl(href) && rel !== 'canonical') {
         mixedContent.push({ tag: 'link', attr: 'href', url: href });
       }
     });
 
-    // Check img src
-    $('img[src]').each((_, el) => {
-      const src = $(el).attr('src') || '';
-      if (src && isHttpUrl(src)) {
-        mixedContent.push({ tag: 'img', attr: 'src', url: src });
-      }
-    });
-
-    // Check video/audio src
-    $('video[src], audio[src], source[src]').each((_, el) => {
-      const src = $(el).attr('src') || '';
-      if (src && isHttpUrl(src)) {
-        mixedContent.push({ tag: el.tagName.toLowerCase(), attr: 'src', url: src });
-      }
-    });
-
-    // Check object/embed
+    // Check object/embed - special case: dual attribute check
     $('object[data], embed[src]').each((_, el) => {
       const url = $(el).attr('data') || $(el).attr('src') || '';
       if (url && isHttpUrl(url)) {
@@ -932,14 +1019,7 @@ function checkSecurityRules($: CheerioAPI, page: FetchedPage, rulesMap: ReleaseR
 
   // --- PREFLIGHT_SECURITY_IFRAME ---
   // Check for iframes with HTTP src
-  const insecureIframes: string[] = [];
-
-  $('iframe[src]').each((_, el) => {
-    const src = $(el).attr('src') || '';
-    if (src && isHttpUrl(src)) {
-      insecureIframes.push(src);
-    }
-  });
+  const insecureIframes = findHttpUrls($, [{ selector: 'iframe[src]', attr: 'src' }]);
 
   if (insecureIframes.length > 0) {
     results.push(
@@ -950,7 +1030,7 @@ function checkSecurityRules($: CheerioAPI, page: FetchedPage, rulesMap: ReleaseR
         rulesMap,
         {
           count: insecureIframes.length,
-          iframes: insecureIframes.slice(0, 5), // Limit to 5
+          iframes: insecureIframes.slice(0, 5).map(i => i.url),
         }
       )
     );
@@ -1347,13 +1427,27 @@ async function checkFaviconUrl(url: string): Promise<{
 // Meta & Title Rules
 // =============================================================================
 
-/** Title length thresholds */
-const TITLE_MIN_LENGTH = 30;
-const TITLE_MAX_LENGTH = 55;
+/** Length bounds configuration for title */
+const TITLE_LENGTH_CONFIG: LengthBoundsConfig = {
+  tooLongCode: 'PREFLIGHT_TITLE_TOO_LONG',
+  tooShortCode: 'PREFLIGHT_TITLE_TOO_SHORT',
+  min: 30,
+  max: 55,
+  minSeverity: IssueSeverity.HIGH,
+  maxSeverity: IssueSeverity.HIGH,
+  fieldName: 'Title',
+};
 
-/** Meta description length thresholds */
-const META_DESC_MIN_LENGTH = 70;
-const META_DESC_MAX_LENGTH = 155;
+/** Length bounds configuration for meta description */
+const META_DESC_LENGTH_CONFIG: LengthBoundsConfig = {
+  tooLongCode: 'PREFLIGHT_META_DESC_TOO_LONG',
+  tooShortCode: 'PREFLIGHT_META_DESC_TOO_SHORT',
+  min: 70,
+  max: 155,
+  minSeverity: IssueSeverity.MEDIUM,
+  maxSeverity: IssueSeverity.MEDIUM,
+  fieldName: 'Meta description',
+};
 
 /**
  * Check title tag length rules:
@@ -1363,60 +1457,14 @@ const META_DESC_MAX_LENGTH = 155;
  * Skips if title is missing or whitespace-only (Lighthouse handles missing titles)
  */
 function checkMetaTitleRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
-  const results: ResultItemToCreate[] = [];
-
-  // Get title text, use first if multiple exist
   const titleText = $('title').first().text().trim();
 
   // Skip if missing or whitespace-only - Lighthouse handles this
   if (!titleText) {
-    return results;
+    return [];
   }
 
-  const length = titleText.length;
-  const titlePreview = titleText.substring(0, 60);
-
-  // Check too long
-  if (length > TITLE_MAX_LENGTH) {
-    results.push(
-      createFail(
-        'PREFLIGHT_TITLE_TOO_LONG',
-        `Title exceeds ${TITLE_MAX_LENGTH} characters (${length} chars)`,
-        IssueSeverity.HIGH,
-        rulesMap,
-        { length, maxLength: TITLE_MAX_LENGTH, title: titlePreview }
-      )
-    );
-  } else {
-    results.push(
-      createPass('PREFLIGHT_TITLE_TOO_LONG', 'Title length within limit', {
-        length,
-        maxLength: TITLE_MAX_LENGTH,
-      })
-    );
-  }
-
-  // Check too short
-  if (length < TITLE_MIN_LENGTH) {
-    results.push(
-      createFail(
-        'PREFLIGHT_TITLE_TOO_SHORT',
-        `Title below ${TITLE_MIN_LENGTH} characters (${length} chars)`,
-        IssueSeverity.HIGH,
-        rulesMap,
-        { length, minLength: TITLE_MIN_LENGTH, title: titlePreview }
-      )
-    );
-  } else {
-    results.push(
-      createPass('PREFLIGHT_TITLE_TOO_SHORT', 'Title length sufficient', {
-        length,
-        minLength: TITLE_MIN_LENGTH,
-      })
-    );
-  }
-
-  return results;
+  return checkLengthBounds(titleText, TITLE_LENGTH_CONFIG, rulesMap);
 }
 
 /**
@@ -1427,58 +1475,12 @@ function checkMetaTitleRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultIt
  * Skips if description is missing or whitespace-only (Lighthouse handles missing descriptions)
  */
 function checkMetaDescriptionRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
-  const results: ResultItemToCreate[] = [];
-
-  // Get meta description content, use first if multiple exist
   const descContent = $('meta[name="description"]').first().attr('content')?.trim() || '';
 
   // Skip if missing or whitespace-only - Lighthouse handles this
   if (!descContent) {
-    return results;
+    return [];
   }
 
-  const length = descContent.length;
-  const descPreview = descContent.substring(0, 80);
-
-  // Check too long
-  if (length > META_DESC_MAX_LENGTH) {
-    results.push(
-      createFail(
-        'PREFLIGHT_META_DESC_TOO_LONG',
-        `Meta description exceeds ${META_DESC_MAX_LENGTH} characters (${length} chars)`,
-        IssueSeverity.MEDIUM,
-        rulesMap,
-        { length, maxLength: META_DESC_MAX_LENGTH, description: descPreview }
-      )
-    );
-  } else {
-    results.push(
-      createPass('PREFLIGHT_META_DESC_TOO_LONG', 'Meta description length within limit', {
-        length,
-        maxLength: META_DESC_MAX_LENGTH,
-      })
-    );
-  }
-
-  // Check too short
-  if (length < META_DESC_MIN_LENGTH) {
-    results.push(
-      createFail(
-        'PREFLIGHT_META_DESC_TOO_SHORT',
-        `Meta description below ${META_DESC_MIN_LENGTH} characters (${length} chars)`,
-        IssueSeverity.MEDIUM,
-        rulesMap,
-        { length, minLength: META_DESC_MIN_LENGTH, description: descPreview }
-      )
-    );
-  } else {
-    results.push(
-      createPass('PREFLIGHT_META_DESC_TOO_SHORT', 'Meta description length sufficient', {
-        length,
-        minLength: META_DESC_MIN_LENGTH,
-      })
-    );
-  }
-
-  return results;
+  return checkLengthBounds(descContent, META_DESC_LENGTH_CONFIG, rulesMap);
 }

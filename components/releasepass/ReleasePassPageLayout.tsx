@@ -37,6 +37,7 @@ export default function ReleasePassPageLayout({
   const searchParams = useSearchParams()
   const [projectId, setProjectId] = useState<string | null>(null)
   const [testId, setTestId] = useState<string | null>(null)
+  const [selectorRefetch, setSelectorRefetch] = useState(0)
 
   useEffect(() => {
     const project = searchParams.get('project')
@@ -63,12 +64,17 @@ export default function ReleasePassPageLayout({
             newTestPath={newTestPath}
             mode={mode}
             testType={testType}
+            refetchTrigger={selectorRefetch}
           />
         </div>
       </Card>
       <Card title={rightCardTitle}>
         {testId ? (
-          <TestResultsSummary testId={testId} mode={mode} />
+          <TestResultsSummary
+            testId={testId}
+            mode={mode}
+            onNameUpdate={() => setSelectorRefetch(n => n + 1)}
+          />
         ) : (
           <p>{getEmptyMessage()}</p>
         )}

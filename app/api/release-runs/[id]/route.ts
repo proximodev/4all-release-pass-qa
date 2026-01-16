@@ -130,3 +130,61 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     )
   }
 }
+
+/**
+ * PATCH /api/release-runs/[id] - Update release run name
+ */
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { error } = await requireAuth()
+    if (error) return error
+
+    const { id } = await params
+
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid release run ID format' }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const { name } = body
+
+    // Validate name: must be string, max 50 characters
+    if (typeof name !== 'string') {
+      return NextResponse.json({ error: 'Name must be a string' }, { status: 400 })
+    }
+
+    if (name.length > 50) {
+      return NextResponse.json({ error: 'Name must be 50 characters or less' }, { status: 400 })
+    }
+
+    // Check if release run exists
+    const existing = await prisma.releaseRun.findUnique({
+      where: { id },
+    })
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Release run not found' }, { status: 404 })
+    }
+
+    // Update the name (empty string is allowed)
+    const updated = await prisma.releaseRun.update({
+      where: { id },
+      data: { name: name || null },
+      include: {
+        project: {
+          select: { id: true, name: true, siteUrl: true, sitemapUrl: true },
+        },
+      },
+    })
+
+    return NextResponse.json(updated)
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Update release run error:', error)
+    }
+    return NextResponse.json(
+      { error: 'Failed to update release run' },
+      { status: 500 }
+    )
+  }
+}

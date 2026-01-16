@@ -14,6 +14,8 @@ interface TestSelectorProps {
   mode?: 'releaseRun' | 'testRun'
   /** Required when mode is 'testRun' - filters by test type */
   testType?: string
+  /** Increment to trigger a refetch of items */
+  refetchTrigger?: number
 }
 
 export default function TestSelector({
@@ -22,6 +24,7 @@ export default function TestSelector({
   newTestPath,
   mode = 'releaseRun',
   testType,
+  refetchTrigger,
 }: TestSelectorProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -37,7 +40,7 @@ export default function TestSelector({
       setItems([])
       setSelectedTest('')
     }
-  }, [projectId, mode, testType])
+  }, [projectId, mode, testType, refetchTrigger])
 
   useEffect(() => {
     const testId = searchParams.get('test')

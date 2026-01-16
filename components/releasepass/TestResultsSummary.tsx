@@ -11,6 +11,8 @@ interface TestResultsSummaryProps {
   testId: string
   /** 'releaseRun' for Preflight, 'testRun' for Site Audit */
   mode?: 'releaseRun' | 'testRun'
+  /** Called after release run name is successfully updated */
+  onNameUpdate?: () => void
 }
 
 const TEST_STATUS_STYLES: Record<string, { bg: string; text: string; border?: string }> = {
@@ -23,7 +25,7 @@ const TEST_STATUS_STYLES: Record<string, { bg: string; text: string; border?: st
 
 const POLL_INTERVAL_MS = 5000
 
-function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryProps) {
+function TestResultsSummary({ testId, mode = 'releaseRun', onNameUpdate }: TestResultsSummaryProps) {
   const router = useRouter()
   const [releaseRun, setReleaseRun] = useState<ReleaseRun | null>(null)
   const [testRun, setTestRun] = useState<TestRunData | null>(null)
@@ -32,6 +34,9 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
   const [cancelling, setCancelling] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [expandedUrls, setExpandedUrls] = useState<Set<string>>(new Set())
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [editedName, setEditedName] = useState('')
+  const [isSavingName, setIsSavingName] = useState(false)
 
   // Check if any tests are still in progress (for polling)
   const hasInProgressTests = (runs: TestRunData[]) => {
@@ -173,6 +178,60 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
       return next
     })
   }, [])
+
+  const handleStartEditName = useCallback(() => {
+    if (!releaseRun) return
+    setEditedName(releaseRun.name || '')
+    setIsEditingName(true)
+  }, [releaseRun])
+
+  const handleCancelEditName = useCallback(() => {
+    setIsEditingName(false)
+    setEditedName('')
+  }, [])
+
+  const handleSaveName = useCallback(async () => {
+    if (!releaseRun) return
+
+    const trimmedName = editedName.trim()
+    const originalName = releaseRun.name || ''
+
+    // Only save if name actually changed
+    if (trimmedName === originalName) {
+      setIsEditingName(false)
+      return
+    }
+
+    setIsSavingName(true)
+    try {
+      const res = await fetch(`/api/release-runs/${releaseRun.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmedName }),
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to update name')
+      }
+
+      const updated = await res.json()
+      setReleaseRun(prev => prev ? { ...prev, name: updated.name } : prev)
+      setIsEditingName(false)
+      onNameUpdate?.()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setIsSavingName(false)
+    }
+  }, [releaseRun, editedName, onNameUpdate])
+
+  const handleNameKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      handleCancelEditName()
+    } else if (e.key === 'Enter') {
+      handleSaveName()
+    }
+  }, [handleCancelEditName, handleSaveName])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -391,8 +450,32 @@ function TestResultsSummary({ testId, mode = 'releaseRun' }: TestResultsSummaryP
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2>
-          Results: {releaseRun.name || 'Untitled Test'}
+        <h2 className="flex items-center gap-3">
+          Results:{' '}
+          {isEditingName ? (
+            <input
+              type="text"
+              value={editedName}
+              onChange={(e) => setEditedName(e.target.value)}
+              onKeyDown={handleNameKeyDown}
+              onBlur={handleCancelEditName}
+              disabled={isSavingName}
+              maxLength={50}
+              autoFocus
+              className="text-[1.5rem]/1 font-bold border-b border-dark-gray bg-transparent outline-none px-0 py-0"
+              style={{ width: `${Math.max(editedName.length, 10)}ch` }}
+            />
+          ) : (
+            <>
+              <span>{releaseRun.name || 'Untitled Test'}</span>
+              <button
+                onClick={handleStartEditName}
+                className="relative text-sm font-normal text-black/60 hover:text-black underline border-0 bg-transparent top-1 p-0"
+              >
+                (Edit)
+              </button>
+            </>
+          )}
         </h2>
       </div>
 

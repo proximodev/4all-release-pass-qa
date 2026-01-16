@@ -1,0 +1,88 @@
+---
+  Questions
+
+  1. Missing title/description handling: If <title> or <meta name="description"> is completely missing, should these rules:
+    - Skip (don't report - Lighthouse already catches missing title/description)
+    - Fail as "too short" (0 chars < 30)
+    - Report a separate error (but that would be new rules)
+  2. Character counting: Should we count:
+    - Raw characters (simple .length)
+    - Visible characters (strip extra whitespace, normalize)
+    - Pixel width estimation (Google actually truncates by pixel, not character)
+  3. Thresholds: The current thresholds are:
+    - Title: 30-55 characters
+    - Description: 70-155 characters
+
+  These are conservative. Google typically shows ~50-60 chars for titles and ~150-160 for descriptions. Are you happy with these thresholds, or adjust?
+  4. Edge cases: Should we handle:
+    - Multiple <title> tags (use first? report error?)
+    - Multiple meta descriptions (use first? report error?)
+    - Title/description with only whitespace (treat as empty?)
+
+1 - Lighthouse will detect both cases
+2 - Raw characters
+3 - Correct
+4.1 - Recommend
+4.2 - Recommend
+4.3 - Yes
+
+--
+
+4.1 Multiple <title> tags: Use the first one for length checks. Multiple titles are rare and invalid HTML - not worth a separate rule now. Can add later if needed.
+  4.2 Multiple meta descriptions: Same - use the first one.
+                                               yw
+  ---
+  Implementation Plan
+
+  1. Add new function checkMetaTitleRules() in custom-rules.ts
+
+  function checkMetaTitleRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[]
+
+  Logic:
+  - Extract <title> text, trim whitespace
+  - If missing or whitespace-only → skip (Lighthouse handles)
+  - If length > 55 → FAIL PREFLIGHT_TITLE_TOO_LONG
+  - If length < 30 → FAIL PREFLIGHT_TITLE_TOO_SHORT
+  - Otherwise → PASS both rules
+  - Include length and truncated title in meta
+
+  2. Add new function checkMetaDescriptionRules() in custom-rules.ts
+
+  function checkMetaDescriptionRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[]
+
+  Logic:
+  - Extract <meta name="description" content="...">, trim
+  - If missing or whitespace-only → skip (Lighthouse handles)
+  - If length > 155 → FAIL PREFLIGHT_META_DESC_TOO_LONG
+  - If length < 70 → FAIL PREFLIGHT_META_DESC_TOO_SHORT
+  - Otherwise → PASS both rules
+  - Include length and truncated description in meta
+
+  3. Wire into runCustomRules()
+
+  Add as Batch 8:
+  // Batch 8: Meta & Title rules
+  results.push(...checkMetaTitleRules($, rulesMap));
+  results.push(...checkMetaDescriptionRules($, rulesMap));
+
+  4. Add rules to seed script
+
+  Add 4 new entries to prisma/seed-release-rules.ts
+
+  5. Update documentation
+
+  - Update header comment in custom-rules.ts
+  - Update preflight-custom-rules-implementation-plan.md (move to v1, mark Done)
+
+  ---
+  Files to modify:
+  ┌─────────────────────────────────────────────────────────────┬───────────────────────────┐
+  │                            File                             │          Change           │
+  ├─────────────────────────────────────────────────────────────┼───────────────────────────┤
+  │ worker/providers/preflight/custom-rules.ts                  │ Add 2 functions + wire up │
+  ├─────────────────────────────────────────────────────────────┼───────────────────────────┤
+  │ prisma/seed-release-rules.ts                                │ Add 4 rule definitions    │
+  ├─────────────────────────────────────────────────────────────┼───────────────────────────┤
+  │ Documentation/preflight-custom-rules-implementation-plan.md │ Update status             │
+  └─────────────────────────────────────────────────────────────┴───────────────────────────┘
+  ---

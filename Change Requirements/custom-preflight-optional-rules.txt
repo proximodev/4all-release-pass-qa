@@ -61,69 +61,69 @@ Worker:
 
 ----
 
-  7. Storage: Where should the project's optional rule settings be stored?
-    - New JSON column on Project table (e.g., optionalRulesConfig: Json)?
-    - New junction table (e.g., ProjectOptionalRules with projectId, ruleCode, enabled)?
-  8. Rule definition: How should optional rules be identified in the ReleaseRule table?
-    - New boolean column isOptional on ReleaseRule?
-    - New category/classification field?
+7. Storage: Where should the project's optional rule settings be stored?
+- New JSON column on Project table (e.g., optionalRulesConfig: Json)?
+- New junction table (e.g., ProjectOptionalRules with projectId, ruleCode, enabled)?
+8. Rule definition: How should optional rules be identified in the ReleaseRule table?
+- New boolean column isOptional on ReleaseRule?
+- New category/classification field?
 
-  Behavior:
+Behavior:
 
-  9. Existing projects: When you add a new optional rule, should it automatically be ON for all existing projects (matching "on by default"), or only for newly created
-  projects?
-  10. Rule changes: If an optional rule is later changed to non-optional (or vice versa), how should existing project settings behave?
+9. Existing projects: When you add a new optional rule, should it automatically be ON for all existing projects (matching "on by default"), or only for newly created
+projects?
+10. Rule changes: If an optional rule is later changed to non-optional (or vice versa), how should existing project settings behave?
 
-  Worker:
+Worker:
 
-  11. When to check settings: Should the worker fetch project settings once at the start of a test run, or should this be baked into the ReleaseRun snapshot (like URLs are)?
+11. When to check settings: Should the worker fetch project settings once at the start of a test run, or should this be baked into the ReleaseRun snapshot (like URLs are)?
 
 ❯ 7 - Make a recommendation                                                                                                                                                     8 - boolean. This option should be available in the preflight rules screen
-  9 - great question. let's actually make all optional rules OFF by default
-  10 - should be removed from the project settings page
-  11 - sounds like "baked into the ReleaseRun snapshot" is the easy/best option. review and recommend
+9 - great question. let's actually make all optional rules OFF by default
+10 - should be removed from the project settings page
+11 - sounds like "baked into the ReleaseRun snapshot" is the easy/best option. review and recommend
 
 ● Recommendations:
 
-  7. Storage
-  Recommend: JSON column on Project table
+7. Storage
+Recommend: JSON column on Project table
 
-  model Project {
-    // ... existing fields
-    disabledOptionalRules  Json?  // Array of rule codes: ["EXTERNAL_LINK_TARGET", "INLINE_CSS"]
-  }
+model Project {
+// ... existing fields
+disabledOptionalRules  Json?  // Array of rule codes: ["EXTERNAL_LINK_TARGET", "INLINE_CSS"]
+}
 
-  Rationale:
-  - Simple schema, minimal migration
-  - Matches existing patterns (urls, selectedTests on ReleaseRun are JSON)
-  - Store as array of disabled codes (since default is OFF, storing disabled list is more efficient when most are disabled)
-  - Easy to check: if (!disabledOptionalRules.includes(ruleCode))
+Rationale:
+- Simple schema, minimal migration
+- Matches existing patterns (urls, selectedTests on ReleaseRun are JSON)
+- Store as array of disabled codes (since default is OFF, storing disabled list is more efficient when most are disabled)
+- Easy to check: if (!disabledOptionalRules.includes(ruleCode))
 
-  Wait - you said OFF by default now. So we should store enabled codes instead:
+Wait - you said OFF by default now. So we should store enabled codes instead:
 
-  enabledOptionalRules  Json?  // Array of enabled rule codes: ["EXTERNAL_LINK_TARGET"]
+enabledOptionalRules  Json?  // Array of enabled rule codes: ["EXTERNAL_LINK_TARGET"]
 
-  11. Snapshot in ReleaseRun
+11. Snapshot in ReleaseRun
 
-  Recommend: Yes, snapshot
+Recommend: Yes, snapshot
 
-  Add to ReleaseRun:
-  model ReleaseRun {
-    // ... existing fields
-    enabledOptionalRules  Json?  // Snapshot of enabled optional rules at run creation
-  }
+Add to ReleaseRun:
+model ReleaseRun {
+// ... existing fields
+enabledOptionalRules  Json?  // Snapshot of enabled optional rules at run creation
+}
 
-  Rationale:
-  - Matches existing immutability pattern (URLs are frozen at run creation)
-  - Audit trail: know exactly which rules were active for that run
-  - No mid-test race conditions
-  - Worker reads from ReleaseRun, no extra Project fetch needed
+Rationale:
+- Matches existing immutability pattern (URLs are frozen at run creation)
+- Audit trail: know exactly which rules were active for that run
+- No mid-test race conditions
+- Worker reads from ReleaseRun, no extra Project fetch needed
 
-  Flow:
-  1. User creates ReleaseRun → API reads project.enabledOptionalRules → copies to releaseRun.enabledOptionalRules
-  2. Worker processes run → checks releaseRun.enabledOptionalRules to decide which optional rules to execute
+Flow:
+1. User creates ReleaseRun → API reads project.enabledOptionalRules → copies to releaseRun.enabledOptionalRules
+2. Worker processes run → checks releaseRun.enabledOptionalRules to decide which optional rules to execute
 
-  Does this align with your thinking?
+Does this align with your thinking?
 
 --
 
@@ -132,7 +132,7 @@ Worker:
 --
 
 Optional Rules - Final Design
-Schema changes:
+Schema changes:i
 
 1. ReleaseRule - Add isOptional Boolean @default(false)
 2. ProjectOptionalRule (new junction table)
@@ -150,3 +150,149 @@ Behavior:
 UI touchpoints:
 - Project Settings: checkboxes to enable/disable optional rules
 - Preflight Rules admin screen: toggle to mark rule as optional
+
+---
+
+Detailed Implementation Plan: Optional Preflight Rules
+
+Phase 1: Schema Changes
+
+1.1 Update Prisma schema
+
+// Add to ReleaseRule model
+model ReleaseRule {
+// ... existing fields
+isOptional  Boolean  @default(false)
+}
+
+// New junction table
+model ProjectOptionalRule {
+id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+projectId String   @db.Uuid
+ruleCode  String
+enabled   Boolean  @default(true)
+
+project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@unique([projectId, ruleCode])
+@@index([projectId])
+}
+
+// Add relation to Project
+model Project {
+// ... existing fields
+optionalRules  ProjectOptionalRule[]
+}
+
+// Add snapshot to ReleaseRun
+model ReleaseRun {
+// ... existing fields
+enabledOptionalRules  Json?  // string[] of rule codes
+}
+
+1.2 Create migration
+npx prisma migrate dev --name add_optional_rules
+
+---
+Phase 2: API Endpoints
+
+2.1 Update ReleaseRule API (app/api/settings/preflight-rules/[id]/route.ts)
+
+- PATCH: Allow updating isOptional field
+- When isOptional changes to false: Delete related ProjectOptionalRule records
+
+2.2 New Project Optional Rules API (app/api/projects/[id]/optional-rules/route.ts)
+
+- GET: Return list of optional rules with enabled status for project
+[
+{ "code": "EXTERNAL_LINK_TARGET", "name": "External links open in new window", "enabled": false },
+{ "code": "INLINE_CSS_FLAG", "name": "Flag inline CSS", "enabled": true }
+]
+- PATCH: Update enabled status for a rule
+{ "ruleCode": "EXTERNAL_LINK_TARGET", "enabled": true }
+
+2.3 Update ReleaseRun creation (app/api/release-runs/route.ts)
+
+- On POST, query enabled optional rules for project
+- Snapshot into enabledOptionalRules JSON field
+
+---
+Phase 3: Worker Changes
+
+3.1 Update custom rules processor (worker/providers/preflight/custom-rules.ts)
+
+- Receive enabledOptionalRules from ReleaseRun
+- Load all rules from DB, filter:
+- Non-optional rules: always run
+- Optional rules: only run if code is in enabledOptionalRules
+
+3.2 Update worker job handler
+
+- Pass releaseRun.enabledOptionalRules to preflight processor
+
+---
+Phase 4: Admin UI - Preflight Rules
+
+Location: app/(dashboard)/settings/preflight-rules
+
+4.1 Add "Optional" column to rules table
+- Checkbox or toggle per rule
+- On change, PATCH to API
+
+4.2 Visual indicator
+- Badge or icon showing rule is optional
+
+---
+Phase 5: Project Settings UI
+
+Location: app/(dashboard)/projects/[id] or similar
+
+5.1 New section: "Optional Preflight Rules"
+- List all optional rules (from ReleaseRule where isOptional=true)
+- Checkbox per rule showing enabled/disabled
+- On change, PATCH to project optional rules API
+
+5.2 Empty state
+- "No optional rules configured" if none exist
+
+---
+Phase 6: Seed Script Updates
+
+6.1 Update prisma/seed-release-rules.ts
+- Add isOptional: true to any initial optional rules
+- Or leave empty if optional rules will be added later via admin UI
+
+---
+File Summary
+┌───────────────────────────────────────────────────┬───────────────────────────────────────────────────────────┐
+│                       File                        │                          Action                           │
+├───────────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ prisma/schema.prisma                              │ Add isOptional, ProjectOptionalRule, enabledOptionalRules │
+├───────────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ app/api/settings/preflight-rules/[id]/route.ts    │ Update PATCH for isOptional, cleanup on change            │
+├───────────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ app/api/projects/[id]/optional-rules/route.ts     │ New: GET, PATCH                                           │
+├───────────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ app/api/release-runs/route.ts                     │ Snapshot enabledOptionalRules on creation                 │
+├───────────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ worker/providers/preflight/custom-rules.ts        │ Filter rules based on snapshot                            │
+├───────────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ app/(dashboard)/settings/preflight-rules/page.tsx │ Add Optional column/toggle                                │
+├───────────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ app/(dashboard)/projects/[id]/page.tsx            │ Add Optional Rules section                                │
+├───────────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ prisma/seed-release-rules.ts                      │ Add isOptional field to rule definitions                  │
+└───────────────────────────────────────────────────┴───────────────────────────────────────────────────────────┘
+---
+Execution Order
+
+1. Phase 1 (Schema) - foundation
+2. Phase 2.1-2.2 (APIs) - backend support
+3. Phase 4 (Admin UI) - ability to mark rules optional
+4. Phase 5 (Project UI) - ability to enable/disable per project
+5. Phase 2.3 + Phase 3 (ReleaseRun snapshot + Worker) - execution support
+6. Phase 6 (Seed) - optional, if adding default optional rules
+

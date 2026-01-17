@@ -29,6 +29,7 @@ interface ReleaseRuleCache {
   impact: string | null;
   fix: string | null;
   docUrl: string | null;
+  isOptional: boolean;
 }
 
 type ReleaseRulesMap = Map<string, ReleaseRuleCache>;
@@ -48,6 +49,7 @@ async function loadReleaseRules(): Promise<ReleaseRulesMap> {
       impact: true,
       fix: true,
       docUrl: true,
+      isOptional: true,
     },
   });
 
@@ -60,6 +62,7 @@ async function loadReleaseRules(): Promise<ReleaseRulesMap> {
       impact: rule.impact,
       fix: rule.fix,
       docUrl: rule.docUrl,
+      isOptional: rule.isOptional,
     });
   }
 
@@ -72,7 +75,7 @@ interface TestRunWithRelations {
   projectId: string;
   project: { id: string; name: string; siteUrl: string };
   config: { scope: string; urls: string[] } | null;
-  releaseRun: { id: string; urls: unknown; selectedTests: unknown } | null;
+  releaseRun: { id: string; urls: unknown; selectedTests: unknown; enabledOptionalRules: unknown } | null;
 }
 
 interface ResultItemToCreate {
@@ -127,6 +130,15 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
   // Load ReleaseRules for severity lookup (batch load once)
   const rulesMap = await loadReleaseRules();
 
+  // Extract enabled optional rules from ReleaseRun snapshot (or empty array if none)
+  const enabledOptionalRules: string[] = Array.isArray(testRun.releaseRun?.enabledOptionalRules)
+    ? (testRun.releaseRun.enabledOptionalRules as string[])
+    : [];
+
+  if (enabledOptionalRules.length > 0) {
+    console.log(`[PAGE_PREFLIGHT] Enabled optional rules: ${enabledOptionalRules.join(', ')}`);
+  }
+
   // Get URLs to test
   const urls = getUrlsToTest(testRun);
 
@@ -180,7 +192,7 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
         }
 
         // Run custom rules (H1, viewport, etc.) - runs before Linkinator to avoid rate limiting
-        const customItems = await runCustomRulesWithErrorHandling(url, rulesMap);
+        const customItems = await runCustomRulesWithErrorHandling(url, rulesMap, enabledOptionalRules);
         urlCheckResult.resultItems.push(...customItems);
 
         // Run Linkinator checks (last - makes many requests which can trigger rate limiting)
@@ -645,20 +657,42 @@ function calculateScore(failedItems: ResultItemToCreate[]): number {
 /**
  * Run custom rules
  * Throws on operational errors
+ *
+ * @param enabledOptionalRules - Array of optional rule codes that are enabled for this run.
+ *                               Optional rules not in this array will be filtered out.
  */
 async function runCustomRulesWithErrorHandling(
   url: string,
-  rulesMap: ReleaseRulesMap
+  rulesMap: ReleaseRulesMap,
+  enabledOptionalRules: string[]
 ): Promise<ResultItemToCreate[]> {
   try {
     console.log(`[PAGE_PREFLIGHT] Running custom rules for ${url}...`);
     const items = await runCustomRules(url, rulesMap);
 
-    const passCount = items.filter(i => i.status === ResultStatus.PASS).length;
-    const failCount = items.filter(i => i.status === ResultStatus.FAIL).length;
+    // Filter out optional rules that are not enabled
+    const enabledOptionalSet = new Set(enabledOptionalRules);
+    const filteredItems = items.filter(item => {
+      const rule = rulesMap.get(item.code);
+      // Keep the item if:
+      // - Rule not in rulesMap (unknown rules are kept)
+      // - Rule is not optional
+      // - Rule is optional AND is in the enabled list
+      if (!rule) return true;
+      if (!rule.isOptional) return true;
+      return enabledOptionalSet.has(item.code);
+    });
+
+    const skippedCount = items.length - filteredItems.length;
+    if (skippedCount > 0) {
+      console.log(`[PAGE_PREFLIGHT] Skipped ${skippedCount} optional rule(s) not enabled for this project`);
+    }
+
+    const passCount = filteredItems.filter(i => i.status === ResultStatus.PASS).length;
+    const failCount = filteredItems.filter(i => i.status === ResultStatus.FAIL).length;
     console.log(`[PAGE_PREFLIGHT] Custom rules: ${passCount} passed, ${failCount} failed for ${url}`);
 
-    return items;
+    return filteredItems;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[PAGE_PREFLIGHT] Custom rules failed for ${url}:`, errorMsg);

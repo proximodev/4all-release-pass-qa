@@ -10,7 +10,7 @@ import { processSpelling, type SpellingProviderResult } from '../providers/spell
 type TestRunWithRelations = TestRun & {
   project: { id: string; name: string; siteUrl: string };
   config: { scope: string; urls: string[] } | null;
-  releaseRun: { id: string; urls: unknown; selectedTests: unknown } | null;
+  releaseRun: { id: string; urls: unknown; selectedTests: unknown; enabledOptionalRules: unknown } | null;
 };
 
 // Common result type for providers that support operational error tracking

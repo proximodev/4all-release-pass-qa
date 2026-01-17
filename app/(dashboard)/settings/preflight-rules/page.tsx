@@ -16,6 +16,7 @@ interface Rule {
   name: string
   severity: string
   isActive: boolean
+  isOptional: boolean
   category: {
     id: string
     name: string
@@ -88,6 +89,7 @@ export default function PreflightRulesPage() {
                     <th className="pb-3">Name</th>
                     <th className="pb-3">Severity</th>
                     <th className="pb-3">Status</th>
+                    <th className="pb-3">Optional</th>
                     <th className="pb-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -103,6 +105,13 @@ export default function PreflightRulesPage() {
                         <span className={`px-2 py-1 rounded text-sm ${rule.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                           {rule.isActive ? 'Active' : 'Inactive'}
                         </span>
+                      </td>
+                      <td className="py-4">
+                        {rule.isOptional && (
+                          <span className="px-2 py-1 rounded text-sm bg-blue-100 text-blue-800">
+                            Optional
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 text-right">
                         <Link href={`/settings/preflight-rules/${rule.code}/edit`}>

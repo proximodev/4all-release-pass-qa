@@ -31,6 +31,7 @@ interface Rule {
   docUrl: string | null
   sortOrder: number
   isActive: boolean
+  isOptional: boolean
   category: {
     id: string
     name: string
@@ -60,6 +61,7 @@ export default function RuleEditPage({ params }: RuleEditPageProps) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isActive, setIsActive] = useState(true)
+  const [isOptional, setIsOptional] = useState(false)
 
   useEffect(() => {
     params.then(({ code }) => {
@@ -81,6 +83,7 @@ export default function RuleEditPage({ params }: RuleEditPageProps) {
       const data = await res.json()
       setRule(data)
       setIsActive(data.isActive)
+      setIsOptional(data.isOptional)
     } catch (error) {
       setErrors({ general: 'An unexpected error occurred' })
     } finally {
@@ -123,6 +126,7 @@ export default function RuleEditPage({ params }: RuleEditPageProps) {
       docUrl: (formData.get('docUrl') as string) || null,
       sortOrder: parseInt(formData.get('sortOrder') as string) || 0,
       isActive,
+      isOptional,
     }
 
     try {
@@ -330,7 +334,7 @@ export default function RuleEditPage({ params }: RuleEditPageProps) {
                   error={errors.sortOrder}
                 />
 
-                <div>
+                <div className="space-y-2">
                   <label className="flex items-center space-x-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -339,6 +343,17 @@ export default function RuleEditPage({ params }: RuleEditPageProps) {
                       className="w-4 h-4"
                     />
                     <span className="text-sm font-medium">Active</span>
+                  </label>
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isOptional}
+                      onChange={(e) => setIsOptional(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm font-medium">Optional</span>
+                    <span className="text-sm text-gray-500">(off by default per project)</span>
                   </label>
                 </div>
 

@@ -121,12 +121,13 @@ model Project {
   sitemapUrl String?
   notes      String?
 
-  company        Company?           @relation(fields: [companyId], references: [id])
+  company        Company?              @relation(fields: [companyId], references: [id])
   releaseRuns    ReleaseRun[]
   testRuns       TestRun[]
   screenshotSets ScreenshotSet[]
   manualStatuses ManualTestStatus[]
   ignoredRules   IgnoredRule[]
+  optionalRules  ProjectOptionalRule[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -155,12 +156,13 @@ model User {
 
 /// A frozen snapshot representing a single launch candidate
 model ReleaseRun {
-  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  projectId     String           @db.Uuid
-  name          String?          // Optional label (e.g., "v2.1 Launch", "December Release")
-  status        ReleaseRunStatus @default(PENDING)
-  urls          Json             // Frozen string array: ["https://example.com/page1", "https://example.com/page2"]
-  selectedTests Json             // TestType array: ["PAGE_PREFLIGHT", "PERFORMANCE", "SCREENSHOTS", "SPELLING"]
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId            String           @db.Uuid
+  name                 String?          // Optional label (e.g., "v2.1 Launch", "December Release")
+  status               ReleaseRunStatus @default(PENDING)
+  urls                 Json             // Frozen string array: ["https://example.com/page1", "https://example.com/page2"]
+  selectedTests        Json             // TestType array: ["PAGE_PREFLIGHT", "PERFORMANCE", "SCREENSHOTS", "SPELLING"]
+  enabledOptionalRules Json?            // Frozen snapshot of enabled optional rule codes: ["EXTERNAL_LINK_TARGET", ...]
 
   project        Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   testRuns       TestRun[]
@@ -353,6 +355,7 @@ model ReleaseRule {
   fix         String?                         // How to fix it
   docUrl      String?                         // External docs link
   isActive    Boolean             @default(true)   // Soft enable/disable
+  isOptional  Boolean             @default(false)  // Optional rules are OFF by default per project
   sortOrder   Int                 @default(0)      // Display order within category
 
   category    ReleaseRuleCategory @relation(fields: [categoryId], references: [id])
@@ -364,6 +367,7 @@ model ReleaseRule {
   @@index([provider])
   @@index([categoryId])
   @@index([isActive])
+  @@index([isOptional])
 }
 
 /// Tracks which rules have been ignored by users for specific URLs
@@ -380,4 +384,21 @@ model IgnoredRule {
 
   @@unique([projectId, url, code]) // One ignore per project/url/code combo
   @@index([projectId, url])
+}
+
+/// Tracks which optional rules are enabled for each project
+/// Optional rules are OFF by default; this table stores enabled ones
+model ProjectOptionalRule {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String  @db.Uuid
+  ruleCode  String  // References ReleaseRule.code (e.g., "EXTERNAL_LINK_TARGET")
+  enabled   Boolean @default(true)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, ruleCode])
+  @@index([projectId])
 }

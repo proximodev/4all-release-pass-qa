@@ -19,6 +19,27 @@ export async function POST(request: NextRequest) {
     const now = new Date()
     const defaultName = `${now.getMonth() + 1}/${now.getDate()}/${String(now.getFullYear()).slice(-2)} Preflight Test`
 
+    // Get enabled optional rules for the project (to snapshot)
+    const enabledOptionalRules = await prisma.projectOptionalRule.findMany({
+      where: {
+        projectId: validatedData.projectId,
+        enabled: true,
+      },
+      select: { ruleCode: true },
+    })
+
+    // Filter to only include rules that are still marked as optional
+    const optionalRuleCodes = await prisma.releaseRule.findMany({
+      where: {
+        code: { in: enabledOptionalRules.map(r => r.ruleCode) },
+        isOptional: true,
+        isActive: true,
+      },
+      select: { code: true },
+    })
+
+    const enabledOptionalRulesCodes = optionalRuleCodes.map(r => r.code)
+
     // Use transaction to avoid connection pool exhaustion
     const releaseRun = await prisma.$transaction(async (tx) => {
       const run = await tx.releaseRun.create({
@@ -27,6 +48,7 @@ export async function POST(request: NextRequest) {
           name: validatedData.name || defaultName,
           urls: validatedData.urls,
           selectedTests: validatedData.selectedTests,
+          enabledOptionalRules: enabledOptionalRulesCodes,
           status: 'PENDING',
         },
         include: {

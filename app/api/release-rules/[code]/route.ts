@@ -19,6 +19,7 @@ const updateRuleSchema = z.object({
   docUrl: z.string().url().optional().nullable().or(z.literal('')),
   sortOrder: z.number().int().optional(),
   isActive: z.boolean().optional(),
+  isOptional: z.boolean().optional(),
 })
 
 /**
@@ -94,7 +95,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
     }
 
-    const { categoryId, name, description, severity, impact, fix, docUrl, sortOrder, isActive } = validation.data
+    const { categoryId, name, description, severity, impact, fix, docUrl, sortOrder, isActive, isOptional } = validation.data
 
     // If categoryId is changing, verify it exists
     if (categoryId && categoryId !== existing.categoryId) {
@@ -110,6 +111,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // If rule is being changed from optional to non-optional, clean up ProjectOptionalRule records
+    if (isOptional === false && existing.isOptional === true) {
+      await prisma.projectOptionalRule.deleteMany({
+        where: { ruleCode: code },
+      })
+    }
+
     const rule = await prisma.releaseRule.update({
       where: { code },
       data: {
@@ -122,6 +130,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(docUrl !== undefined && { docUrl: docUrl || null }),
         ...(sortOrder !== undefined && { sortOrder }),
         ...(isActive !== undefined && { isActive }),
+        ...(isOptional !== undefined && { isOptional }),
       },
       include: {
         category: {

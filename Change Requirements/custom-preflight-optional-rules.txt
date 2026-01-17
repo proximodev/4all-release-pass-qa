@@ -1,0 +1,152 @@
+Request:
+
+I would like to create a new class of preflight rule: optional rules
+
+These will be custom rules but they will be ... optional.
+Two possible approaches:
+1 - runtime (with a releaserun)
+2 - a project level setting
+
+I am leaning to 2 as some may not agree with all usecases. For example: "open external links in new window" or "flag inline css" (sometimes it can be OK)
+
+No coding, no changes. Review the idea and ask questions.
+
+Questions:
+1. Default state: Should optional rules be OFF by default (opt-in) or ON by default (opt-out)?
+2. Scope of "optional":
+- Are these entirely new rules that don't exist today?
+- Or would some existing rules become "optional" (e.g., demote current rules)?
+3. Scoring impact: When an optional rule is enabled and fails, should it:
+- Contribute to score like normal rules (with its severity)?
+- Have a fixed lower severity (e.g., always LOW)?
+- Be informational only (no score impact, just flagged)?
+4. UI location: Where would you configure this?
+- Project Settings page (alongside name, siteUrl, sitemapUrl)?
+- A dedicated "Rules Configuration" section?
+5. Granularity: One toggle per optional rule, or grouped toggles (e.g., "Enable all accessibility optional rules")?
+6. Inheritance/defaults: Should there be a global default that projects inherit, or purely per-project?
+
+1 - Project level, on by default, but can be changed at anytime
+2 - New rules
+3 - Contribute to score like normal rules
+4 - Project Settings page
+5 - One toggle per (checkboxes)
+6 - All optional rules will be available on all projects
+
+
+Data model:
+7. Storage: Where should the project's optional rule settings be stored?
+- New JSON column on Project table (e.g., optionalRulesConfig: Json)?
+- New junction table (e.g., ProjectOptionalRules with projectId, ruleCode, enabled)?
+8. Rule definition: How should optional rules be identified in the ReleaseRule table?
+- New boolean column isOptional on ReleaseRule?
+- New category/classification field?
+
+Behavior:
+
+9. Existing projects: When you add a new optional rule, should it automatically be ON for all existing projects (matching "on by default"), or only for newly created
+projects?
+10. Rule changes: If an optional rule is later changed to non-optional (or vice versa), how should existing project settings behave?
+
+Worker:
+
+11. When to check settings: Should the worker fetch project settings once at the start of a test run, or should this be baked into the ReleaseRun snapshot (like URLs are)?
+
+
+7 - Make a recommendation
+8 - boolean. This option should be available in the preflight rules screen
+9 - great question. let's actually make all optional rules OFF by default
+10 - should be removed from the project settings page
+11 - sounds like "baked into the ReleaseRun snapshot" is the easy/best option. review and recommend
+
+----
+
+  7. Storage: Where should the project's optional rule settings be stored?
+    - New JSON column on Project table (e.g., optionalRulesConfig: Json)?
+    - New junction table (e.g., ProjectOptionalRules with projectId, ruleCode, enabled)?
+  8. Rule definition: How should optional rules be identified in the ReleaseRule table?
+    - New boolean column isOptional on ReleaseRule?
+    - New category/classification field?
+
+  Behavior:
+
+  9. Existing projects: When you add a new optional rule, should it automatically be ON for all existing projects (matching "on by default"), or only for newly created
+  projects?
+  10. Rule changes: If an optional rule is later changed to non-optional (or vice versa), how should existing project settings behave?
+
+  Worker:
+
+  11. When to check settings: Should the worker fetch project settings once at the start of a test run, or should this be baked into the ReleaseRun snapshot (like URLs are)?
+
+❯ 7 - Make a recommendation                                                                                                                                                     8 - boolean. This option should be available in the preflight rules screen
+  9 - great question. let's actually make all optional rules OFF by default
+  10 - should be removed from the project settings page
+  11 - sounds like "baked into the ReleaseRun snapshot" is the easy/best option. review and recommend
+
+● Recommendations:
+
+  7. Storage
+  Recommend: JSON column on Project table
+
+  model Project {
+    // ... existing fields
+    disabledOptionalRules  Json?  // Array of rule codes: ["EXTERNAL_LINK_TARGET", "INLINE_CSS"]
+  }
+
+  Rationale:
+  - Simple schema, minimal migration
+  - Matches existing patterns (urls, selectedTests on ReleaseRun are JSON)
+  - Store as array of disabled codes (since default is OFF, storing disabled list is more efficient when most are disabled)
+  - Easy to check: if (!disabledOptionalRules.includes(ruleCode))
+
+  Wait - you said OFF by default now. So we should store enabled codes instead:
+
+  enabledOptionalRules  Json?  // Array of enabled rule codes: ["EXTERNAL_LINK_TARGET"]
+
+  11. Snapshot in ReleaseRun
+
+  Recommend: Yes, snapshot
+
+  Add to ReleaseRun:
+  model ReleaseRun {
+    // ... existing fields
+    enabledOptionalRules  Json?  // Snapshot of enabled optional rules at run creation
+  }
+
+  Rationale:
+  - Matches existing immutability pattern (URLs are frozen at run creation)
+  - Audit trail: know exactly which rules were active for that run
+  - No mid-test race conditions
+  - Worker reads from ReleaseRun, no extra Project fetch needed
+
+  Flow:
+  1. User creates ReleaseRun → API reads project.enabledOptionalRules → copies to releaseRun.enabledOptionalRules
+  2. Worker processes run → checks releaseRun.enabledOptionalRules to decide which optional rules to execute
+
+  Does this align with your thinking?
+
+--
+
+7 - what happens if an enabled optional rule becomes a non-optional rule? would a table be a better solution (would be filtered out automatically)
+
+--
+
+Optional Rules - Final Design
+Schema changes:
+
+1. ReleaseRule - Add isOptional Boolean @default(false)
+2. ProjectOptionalRule (new junction table)
+- projectId, ruleCode, enabled
+- Records cleaned up when rule becomes non-optional
+3. ReleaseRun - Add enabledOptionalRules Json? (snapshot at creation)
+
+Behavior:
+- Optional rules are OFF by default for all projects
+- Project Settings page shows checkboxes for each optional rule
+- When ReleaseRun is created, enabled optional rules are snapshotted
+- Worker checks snapshot to decide which optional rules to run
+- When isOptional flips to false, delete related ProjectOptionalRule records
+
+UI touchpoints:
+- Project Settings: checkboxes to enable/disable optional rules
+- Preflight Rules admin screen: toggle to mark rule as optional

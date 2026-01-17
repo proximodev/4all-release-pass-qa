@@ -13,7 +13,7 @@ export default function NewPreflightTestPage() {
     >
       {(project) => (
         <TabPanel>
-          <Card title={`New Test for ${project.name}`}>
+          <Card title={`New Test Run for ${project.name}`}>
             <NewPreflightTestForm projectId={project.id} projectName={project.name} />
           </Card>
         </TabPanel>

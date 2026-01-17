@@ -13,6 +13,14 @@ interface NewPreflightTestFormProps {
   projectName?: string
 }
 
+// Normalize URL for duplicate comparison: lowercase, strip protocol and trailing slash
+const normalizeUrlForComparison = (url: string): string => {
+  return url
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/$/, '')
+}
+
 export default function NewPreflightTestForm({ projectId, projectName }: NewPreflightTestFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -41,10 +49,20 @@ export default function NewPreflightTestForm({ projectId, projectName }: NewPref
     setError(null)
 
     // Parse URLs from textarea (one per line)
-    const urlList = urls
+    const rawUrls = urls
       .split('\n')
       .map((url) => url.trim())
       .filter((url) => url.length > 0)
+
+    // Dedupe: keep first occurrence of each normalized URL
+    const seen = new Map<string, string>()
+    for (const url of rawUrls) {
+      const normalized = normalizeUrlForComparison(url)
+      if (!seen.has(normalized)) {
+        seen.set(normalized, url)
+      }
+    }
+    const urlList = Array.from(seen.values())
 
     if (urlList.length === 0) {
       setError('Please enter at least one URL to test')
@@ -113,15 +131,15 @@ export default function NewPreflightTestForm({ projectId, projectName }: NewPref
             </div>
         )}
 
+        <label className="block mb-1">Test Run Name</label>
         <Input
-            label="Test Name"
             value={testName}
             onChange={(e) => setTestName(e.target.value)}
             placeholder="Enter test name"
         />
 
         <div>
-          <label className="block font-medium mb-3">Test Types</label>
+          <label className="block mb-2">Test Types</label>
           <div className="flex flex-wrap gap-4">
             {PREFLIGHT_TEST_TYPES.map((testType) => (
                 <Checkbox
@@ -134,7 +152,7 @@ export default function NewPreflightTestForm({ projectId, projectName }: NewPref
           </div>
         </div>
 
-        <label className="font-medium mb-3">Pages to test</label>
+        <label className="block mb-1">Pages to Test</label>
         <Textarea
             value={urls}
             onChange={(e) => setUrls(e.target.value)}

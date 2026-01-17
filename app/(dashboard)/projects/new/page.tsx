@@ -77,6 +77,8 @@ export default function NewProjectPage() {
                 </div>
               )}
 
+              <h3>Project Information</h3>
+
               <Input
                 label="Project Name"
                 name="name"
@@ -110,6 +112,8 @@ export default function NewProjectPage() {
                 rows={4}
               />
 
+              <OptionalRulesSection onEnabledRulesChange={setEnabledRules} />
+
               <div className="flex items-center space-x-4">
                 <Button type="submit" disabled={loading}>
                   {loading ? 'Saving...' : 'Save Project'}
@@ -124,8 +128,6 @@ export default function NewProjectPage() {
               </div>
             </form>
           </Card>
-
-          <OptionalRulesSection onEnabledRulesChange={setEnabledRules} />
         </FormContainer>
       </TwoColumnGrid>
     </PageContainer>

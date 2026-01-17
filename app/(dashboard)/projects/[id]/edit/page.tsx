@@ -177,6 +177,8 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                 </div>
               )}
 
+              <h3>Project Information</h3>
+
               <Input
                 label="Project Name"
                 name="name"
@@ -214,6 +216,13 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                 defaultValue={project.notes || ''}
               />
 
+              {projectId && (
+                  <OptionalRulesSection
+                      projectId={projectId}
+                      onEnabledRulesChange={setEnabledRules}
+                  />
+              )}
+
               <div className="flex items-center justify-between pt-4 border-t border-medium-gray">
                 <div className="flex items-center space-x-4">
                   <Button type="submit" disabled={saving}>
@@ -239,13 +248,6 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
               </div>
             </form>
           </Card>
-
-          {projectId && (
-            <OptionalRulesSection
-              projectId={projectId}
-              onEnabledRulesChange={setEnabledRules}
-            />
-          )}
 
           {/* Delete Confirmation Modal */}
           {showDeleteConfirm && (

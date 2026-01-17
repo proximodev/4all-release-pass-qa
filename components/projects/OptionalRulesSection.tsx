@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Card from '@/components/ui/card/Card'
+import Section from '@/components/ui/section/Section'
 
 interface OptionalRule {
   code: string
@@ -74,8 +74,8 @@ export default function OptionalRulesSection({
   }
 
   return (
-    <Card title="Optional Preflight Rules">
-      <p className="text-sm text-gray-600 mb-4">
+    <Section title="Optional Preflight Rules">
+      <p className="text-gray-600 mb-4">
         Enable optional rules for this project. These rules are off by default and can be enabled per project.
       </p>
       {loading ? (
@@ -114,6 +114,6 @@ export default function OptionalRulesSection({
           ))}
         </div>
       )}
-    </Card>
+    </Section>
   )
 }

@@ -43,6 +43,9 @@
  * - PREFLIGHT_TITLE_TOO_SHORT
  * - PREFLIGHT_META_DESC_TOO_LONG
  * - PREFLIGHT_META_DESC_TOO_SHORT
+ *
+ * Batch 9: External Link rules (1 rule) - OPTIONAL
+ * - PREFLIGHT_EXTERNAL_LINK_TARGET
  */
 
 import * as cheerio from 'cheerio';
@@ -131,6 +134,9 @@ export async function runCustomRules(
   // Batch 8: Meta & Title rules
   results.push(...checkMetaTitleRules($, rulesMap));
   results.push(...checkMetaDescriptionRules($, rulesMap));
+
+  // Batch 9: External Link rules (optional)
+  results.push(...checkExternalLinkTargetRules($, page, rulesMap));
 
   return results;
 }
@@ -1483,4 +1489,178 @@ function checkMetaDescriptionRules($: CheerioAPI, rulesMap: ReleaseRulesMap): Re
   }
 
   return checkLengthBounds(descContent, META_DESC_LENGTH_CONFIG, rulesMap);
+}
+
+// =============================================================================
+// External Link Target Rules (Optional)
+// =============================================================================
+
+/**
+ * Extract root domain from hostname
+ * Handles multi-part TLDs like .co.uk, .com.au
+ *
+ * Examples:
+ * - "www.example.com" → "example.com"
+ * - "sub.domain.example.co.uk" → "example.co.uk"
+ * - "example.com" → "example.com"
+ */
+function getRootDomain(hostname: string): string {
+  const parts = hostname.toLowerCase().split('.');
+
+  if (parts.length <= 2) {
+    return hostname.toLowerCase();
+  }
+
+  // Check for multi-part TLDs (e.g., .co.uk, .com.au, .org.uk)
+  const secondLast = parts[parts.length - 2];
+  const multiPartTlds = ['co', 'com', 'org', 'net', 'gov', 'edu', 'ac'];
+
+  if (multiPartTlds.includes(secondLast) && parts.length >= 3) {
+    // Return last 3 parts (e.g., example.co.uk)
+    return parts.slice(-3).join('.');
+  }
+
+  // Return last 2 parts (e.g., example.com)
+  return parts.slice(-2).join('.');
+}
+
+/**
+ * Check if a link should be excluded from external link checks
+ */
+function isExcludedLink(href: string | undefined): boolean {
+  if (!href || href.trim() === '') return true;
+
+  const lowerHref = href.toLowerCase().trim();
+
+  // Exclude non-navigation protocols
+  if (lowerHref.startsWith('javascript:')) return true;
+  if (lowerHref.startsWith('mailto:')) return true;
+  if (lowerHref.startsWith('tel:')) return true;
+  if (lowerHref.startsWith('data:')) return true;
+  if (lowerHref === '#') return true;
+
+  return false;
+}
+
+/**
+ * Check if target attribute opens in new window
+ * Valid: _blank, _new, or any custom target name (not _self/_parent/_top)
+ */
+function opensInNewWindow(target: string | undefined): boolean {
+  if (!target) return false;
+
+  const lowerTarget = target.toLowerCase().trim();
+
+  // These targets do NOT open in new window
+  const sameWindowTargets = ['_self', '_parent', '_top'];
+
+  return !sameWindowTargets.includes(lowerTarget);
+}
+
+interface ExternalLinkIssue {
+  href: string;
+  text: string;
+  target: string | null;
+}
+
+/**
+ * Check external link target rules:
+ * - PREFLIGHT_EXTERNAL_LINK_TARGET: External links should open in new window
+ *
+ * External = different root domain than the page
+ * Subdomains of the same root domain are NOT considered external
+ *
+ * This is an OPTIONAL rule (off by default per project)
+ */
+function checkExternalLinkTargetRules(
+  $: CheerioAPI,
+  page: FetchedPage,
+  rulesMap: ReleaseRulesMap
+): ResultItemToCreate[] {
+  const results: ResultItemToCreate[] = [];
+
+  // Get the page's root domain
+  let pageRootDomain: string;
+  try {
+    const pageUrl = new URL(page.finalUrl);
+    pageRootDomain = getRootDomain(pageUrl.hostname);
+  } catch {
+    // If we can't parse the page URL, skip this check
+    return results;
+  }
+
+  const issues: ExternalLinkIssue[] = [];
+  let externalLinkCount = 0;
+
+  $('a[href]').each((_, el) => {
+    const $el = $(el);
+    const href = $el.attr('href');
+    const target = $el.attr('target');
+    const hasDownload = $el.attr('download') !== undefined;
+
+    // Skip excluded links
+    if (isExcludedLink(href)) return;
+    if (hasDownload) return;
+
+    // Resolve the href to absolute URL
+    let linkUrl: URL;
+    try {
+      linkUrl = new URL(href!, page.finalUrl);
+    } catch {
+      // Invalid URL, skip
+      return;
+    }
+
+    // Skip non-http(s) protocols
+    if (!linkUrl.protocol.startsWith('http')) return;
+
+    // Check if external (different root domain)
+    const linkRootDomain = getRootDomain(linkUrl.hostname);
+    if (linkRootDomain === pageRootDomain) {
+      // Internal link (same root domain), skip
+      return;
+    }
+
+    // This is an external link
+    externalLinkCount++;
+
+    // Check if it opens in new window
+    if (!opensInNewWindow(target)) {
+      const linkText = $el.text().trim().substring(0, 100) || '(no text)';
+      issues.push({
+        href: linkUrl.toString(),
+        text: linkText,
+        target: target || null,
+      });
+    }
+  });
+
+  // Generate result
+  if (issues.length > 0) {
+    results.push(
+      createFail(
+        'PREFLIGHT_EXTERNAL_LINK_TARGET',
+        `Found ${issues.length} external link(s) not opening in new window`,
+        IssueSeverity.HIGH,
+        rulesMap,
+        {
+          count: issues.length,
+          externalLinkCount,
+          links: issues,
+        }
+      )
+    );
+  } else {
+    results.push(
+      createPass(
+        'PREFLIGHT_EXTERNAL_LINK_TARGET',
+        externalLinkCount > 0
+          ? `All ${externalLinkCount} external link(s) open in new window`
+          : 'No external links found',
+        { externalLinkCount }
+      )
+    );
+  }
+
+  return results;
 }

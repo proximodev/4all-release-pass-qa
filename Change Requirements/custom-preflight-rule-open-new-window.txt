@@ -1,0 +1,95 @@
+
+1. Detection criteria: Should the rule check for target="_blank" attribute specifically, or also accept target="_new" or any target that's not _self/_parent/_top?
+2. Security best practice: When target="_blank" is present, should we also verify rel="noopener" or rel="noreferrer" is set? (Prevents the new page from accessing
+window.opener - a security concern)
+3. Severity: What severity level for this rule?
+- HIGH (recommended for launch-blocking preference)
+- MEDIUM (informational/best practice)
+4. Reporting granularity: Should the rule:
+- Report each individual external link missing target="_blank" (could be many)?
+- Report a summary count with examples (e.g., "Found 15 external links without target='_blank'")?
+5. Exclusions: Should any links be excluded?
+- Links with download attribute?
+- Links with javascript: href?
+- Links inside <nav> elements (unlikely to be external)?
+
+1 - Any target that is not _self/_parent/_top
+2 - No, that seems to be mixing test cases
+3 - HIGH
+4 - Summary count and include details for each instance (URL and link text)
+5 - Recommend
+
+Recommended Exclusions:
+                                                                                                                                                                                - download attribute present (file downloads, not navigation)                                                                                                                 - javascript: href (JS triggers, not navigation)
+  - mailto: href (opens email client)
+  - tel: href (opens phone dialer)
+  - Empty or missing href
+
+  ---
+  Implementation Plan
+
+  1. Rule Definition
+
+  Code: PREFLIGHT_EXTERNAL_LINK_TARGET
+  Name: External links should open in new window
+  Severity: HIGH
+  Provider: ReleasePass
+  isOptional: true
+
+  2. Detection Logic
+
+  For each <a> element:
+    1. Skip if excluded (download, javascript:, mailto:, tel:, empty href)
+    2. Extract href and resolve to absolute URL
+    3. Compare link hostname to page hostname:
+       - Extract root domain from both (e.g., "sub.example.com" → "example.com")
+       - If root domains match → internal, skip
+       - If root domains differ → external, check target
+    4. Check target attribute:
+       - If target is "_blank", "_new", or any custom value (not _self/_parent/_top) → PASS
+       - If target missing or is _self/_parent/_top → FAIL, add to list
+
+  3. Root Domain Extraction
+
+  // "sub.example.com" → "example.com"
+  // "www.example.co.uk" → "example.co.uk" (handle multi-part TLDs)
+  function getRootDomain(hostname: string): string
+
+  Will use a simple approach: take last 2 parts, or last 3 if second-to-last is short (co, com, org, etc. for .co.uk style TLDs).
+
+  4. Files to Modify
+  ┌──────────────────────────────────────────────────────┬─────────────────────────────────────────────┐
+  │                         File                         │                   Change                    │
+  ├──────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ worker/providers/preflight/custom-rules.ts           │ Add checkExternalLinkTargetRules() function │
+  ├──────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ prisma/seed-release-rules.ts                         │ Add rule definition with isOptional: true   │
+  ├──────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ Documentation/ReleasePass-preflight-custom-rules.csv │ Add rule documentation                      │
+  └──────────────────────────────────────────────────────┴─────────────────────────────────────────────┘
+  5. Result Output
+
+  PASS:
+  {
+    "code": "PREFLIGHT_EXTERNAL_LINK_TARGET",
+    "status": "PASS",
+    "name": "All external links open in new window",
+    "meta": { "externalLinkCount": 12 }
+  }
+
+  FAIL:
+  {
+    "code": "PREFLIGHT_EXTERNAL_LINK_TARGET",
+    "status": "FAIL",
+    "severity": "HIGH",
+    "name": "Found 5 external link(s) not opening in new window",
+    "meta": {
+      "count": 5,
+      "links": [
+        { "href": "https://partner.com/page", "text": "Visit Partner", "target": null },
+        { "href": "https://example.org", "text": "Example", "target": "_self" }
+      ]
+    }
+  }
+
+  ---

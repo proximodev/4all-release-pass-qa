@@ -10,19 +10,15 @@ const prisma = new PrismaClient();
 // Define categories with sort order
 const categories = [
   { name: 'Heading Structure', sortOrder: 10 },
-  { name: 'Mobile & Responsiveness', sortOrder: 20 },
   { name: 'Indexing & Crawl Control', sortOrder: 30 },
   { name: 'Canonical', sortOrder: 40 },
   { name: 'Security & Protocol', sortOrder: 50 },
   { name: 'Links', sortOrder: 60 },
   { name: 'Site Resources', sortOrder: 65 },
-  { name: 'Meta & Title', sortOrder: 68 },
   { name: 'SEO Essentials', sortOrder: 70 },
   { name: 'Crawlability', sortOrder: 80 },
-  { name: 'Accessibility & SEO', sortOrder: 90 },
   { name: 'Internationalization', sortOrder: 100 },
   { name: 'Mobile Usability', sortOrder: 110 },
-  { name: 'Structured Data', sortOrder: 120 },
   { name: 'System', sortOrder: 900 },
 ];
 
@@ -64,7 +60,7 @@ const releaseRules = [
   {
     code: 'PREFLIGHT_VIEWPORT_MISSING',
     provider: 'ReleasePass',
-    category: 'Mobile & Responsiveness',
+    category: 'Mobile Usability',
     name: 'Missing Viewport Meta Tag',
     description: 'No viewport meta tag found in the page head.',
     severity: 'CRITICAL',
@@ -239,7 +235,7 @@ const releaseRules = [
   {
     code: 'EMPTY_ALT_TAG',
     provider: 'ReleasePass',
-    category: 'Accessibility & SEO',
+    category: 'SEO Essentials',
     name: 'Empty Alt Attribute',
     description: 'Image has an alt attribute that is empty or contains only whitespace.',
     severity: 'HIGH',
@@ -261,11 +257,11 @@ const releaseRules = [
     sortOrder: 70,
   },
 
-  // Batch 8: Meta & Title (4 rules)
+  // Batch 8: Meta & Title (4 rules) - stored in Site Resources category
   {
     code: 'PREFLIGHT_TITLE_TOO_LONG',
     provider: 'ReleasePass',
-    category: 'Meta & Title',
+    category: 'Site Resources',
     name: 'Title Too Long',
     description: 'Page title exceeds the recommended maximum length of 55 characters.',
     severity: 'HIGH',
@@ -276,7 +272,7 @@ const releaseRules = [
   {
     code: 'PREFLIGHT_TITLE_TOO_SHORT',
     provider: 'ReleasePass',
-    category: 'Meta & Title',
+    category: 'Site Resources',
     name: 'Title Too Short',
     description: 'Page title is below the recommended minimum length of 30 characters.',
     severity: 'HIGH',
@@ -287,7 +283,7 @@ const releaseRules = [
   {
     code: 'PREFLIGHT_META_DESC_TOO_LONG',
     provider: 'ReleasePass',
-    category: 'Meta & Title',
+    category: 'Site Resources',
     name: 'Meta Description Too Long',
     description: 'Meta description exceeds the recommended maximum length of 155 characters.',
     severity: 'MEDIUM',
@@ -298,7 +294,7 @@ const releaseRules = [
   {
     code: 'PREFLIGHT_META_DESC_TOO_SHORT',
     provider: 'ReleasePass',
-    category: 'Meta & Title',
+    category: 'Site Resources',
     name: 'Meta Description Too Short',
     description: 'Meta description is below the recommended minimum length of 70 characters.',
     severity: 'MEDIUM',
@@ -397,7 +393,7 @@ const releaseRules = [
   {
     code: 'image-alt',
     provider: 'LIGHTHOUSE',
-    category: 'Accessibility & SEO',
+    category: 'SEO Essentials',
     name: 'Image Alt Text',
     description: 'Image elements have [alt] attributes.',
     severity: 'HIGH',
@@ -457,7 +453,7 @@ const releaseRules = [
   {
     code: 'structured-data',
     provider: 'LIGHTHOUSE',
-    category: 'Structured Data',
+    category: 'SEO Essentials',
     name: 'Valid Structured Data',
     description: 'Structured data is valid.',
     severity: 'MEDIUM',
@@ -513,6 +509,18 @@ const releaseRules = [
     impact: 'Redirect chains slow page load and dilute link equity.',
     fix: 'Update the link to point directly to the final destination URL.',
     sortOrder: 203,
+  },
+  {
+    code: 'PREFLIGHT_EXTERNAL_LINK_TARGET',
+    provider: 'ReleasePass',
+    category: 'Links',
+    name: 'External Links Open in New Window',
+    description: 'External links should open in a new window/tab to keep users on your site.',
+    severity: 'HIGH',
+    impact: 'External links without target="_blank" navigate users away from your site.',
+    fix: 'Add target="_blank" to external links. Consider also adding rel="noopener" for security.',
+    sortOrder: 204,
+    isOptional: true,
   },
 
   // =========================================================================

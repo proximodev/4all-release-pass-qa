@@ -12,10 +12,10 @@ Heading Structure,No H1 present on page,PREFLIGHT_H1_MISSING,Blocker,v1,Done,Pag
 Heading Structure,More than one H1 present,PREFLIGHT_H1_MULTIPLE,High,v1,Done,Common CMS/template error; HTML5 allows multiple H1s in sections
 Heading Structure,H1 exists but is empty or whitespace-only,PREFLIGHT_H1_EMPTY,Blocker,v1,Done,Invisible primary heading
 Heading Structure,H1 is hidden or visually suppressed,PREFLIGHT_H1_HIDDEN,Critical,v1.1,Deferred,Requires Playwright for rendered DOM analysis
-Meta & Title Quality,Title exceeds maximum recommended length (55 chars),PREFLIGHT_TITLE_TOO_LONG,High,v1,Done,May truncate in SERPs
-Meta & Title Quality,Title below minimum recommended length (30 chars),PREFLIGHT_TITLE_TOO_SHORT,High,v1,Done,Insufficient context for search engines
-Meta & Title Quality,Meta description exceeds maximum length (155 chars),PREFLIGHT_META_DESC_TOO_LONG,Medium,v1,Done,Truncation risk
-Meta & Title Quality,Meta description below minimum length (70 chars),PREFLIGHT_META_DESC_TOO_SHORT,Medium,v1,Done,Low SERP quality
+Site Resources,Title exceeds maximum recommended length (55 chars),PREFLIGHT_TITLE_TOO_LONG,High,v1,Done,May truncate in SERPs
+Site Resources,Title below minimum recommended length (30 chars),PREFLIGHT_TITLE_TOO_SHORT,High,v1,Done,Insufficient context for search engines
+Site Resources,Meta description exceeds maximum length (155 chars),PREFLIGHT_META_DESC_TOO_LONG,Medium,v1,Done,Truncation risk
+Site Resources,Meta description below minimum length (70 chars),PREFLIGHT_META_DESC_TOO_SHORT,Medium,v1,Done,Low SERP quality
 Social Metadata,Missing Open Graph title,PREFLIGHT_OG_TITLE_MISSING,Low,v1.2,Planned,Social previews incomplete (no SEO impact)
 Social Metadata,Missing Open Graph description,PREFLIGHT_OG_DESC_MISSING,Low,v1.2,Planned,Social previews incomplete (no SEO impact)
 Social Metadata,Missing Open Graph image,PREFLIGHT_OG_IMAGE_MISSING,Low,v1.2,Planned,Default or broken social previews (no SEO impact)
@@ -31,4 +31,5 @@ Rendering & Content Presence,No meaningful content present in initial HTML,PREFL
 Rendering & Content Presence,Primary content requires JavaScript to appear,PREFLIGHT_RENDER_JS_ONLY,Critical,v1.1,Deferred,Requires Playwright for rendered DOM analysis
 Rendering & Content Presence,Critical SEO elements injected post-load,PREFLIGHT_RENDER_POSTLOAD,Critical,v1.1,Deferred,Requires Playwright for rendered DOM analysis
 Links,Check for links with # only,PREFLIGHT_EMPTY_LINK,Blocker,v1,Done,href tags are empty (have # only)
+Links,External links should open in new window,PREFLIGHT_EXTERNAL_LINK_TARGET,High,v1,Done,OPTIONAL - Off by default per project
 Accessibility & SEO,Image has empty alt attribute,EMPTY_ALT_TAG,High,v1,Done,Empty alt indicates incomplete content or accessibility issue

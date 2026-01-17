@@ -13,14 +13,31 @@ export async function POST(request: NextRequest) {
 
     // Parse and validate request body
     const body = await request.json()
-    const validatedData = projectSchema.parse(body)
+    const { enabledOptionalRules, ...projectData } = body
+    const validatedData = projectSchema.parse(projectData)
 
-    // Create project (companyId null for MVP)
-    const project = await prisma.project.create({
-      data: {
-        ...validatedData,
-        companyId: null,
-      },
+    // Create project with optional rules in a transaction
+    const project = await prisma.$transaction(async (tx) => {
+      // Create project (companyId null for MVP)
+      const newProject = await tx.project.create({
+        data: {
+          ...validatedData,
+          companyId: null,
+        },
+      })
+
+      // Create ProjectOptionalRule records for enabled optional rules
+      if (enabledOptionalRules && Array.isArray(enabledOptionalRules) && enabledOptionalRules.length > 0) {
+        await tx.projectOptionalRule.createMany({
+          data: enabledOptionalRules.map((ruleCode: string) => ({
+            projectId: newProject.id,
+            ruleCode,
+            enabled: true,
+          })),
+        })
+      }
+
+      return newProject
     })
 
     return NextResponse.json(project, { status: 201 })

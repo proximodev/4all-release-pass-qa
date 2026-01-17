@@ -11,6 +11,7 @@ import Tabs from '@/components/ui/tabs/Tabs'
 import { projectTabs } from '@/lib/constants/navigation'
 import TwoColumnGrid from '@/components/layout/TwoColumnGrid'
 import PageContainer from '@/components/layout/PageContainer'
+import OptionalRulesSection from '@/components/projects/OptionalRulesSection'
 
 interface Project {
   id: string
@@ -20,18 +21,6 @@ interface Project {
   notes: string | null
   createdAt: string
   updatedAt: string
-}
-
-interface OptionalRule {
-  code: string
-  name: string
-  description: string
-  severity: string
-  enabled: boolean
-  category: {
-    id: string
-    name: string
-  }
 }
 
 interface ProjectEditPageProps {
@@ -47,15 +36,12 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   const [deleting, setDeleting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [optionalRules, setOptionalRules] = useState<OptionalRule[]>([])
-  const [optionalRulesLoading, setOptionalRulesLoading] = useState(true)
-  const [togglingRule, setTogglingRule] = useState<string | null>(null)
+  const [enabledRules, setEnabledRules] = useState<string[]>([])
 
   useEffect(() => {
     params.then(({ id }) => {
       setProjectId(id)
       fetchProject(id)
-      fetchOptionalRules(id)
     })
   }, [params])
 
@@ -77,47 +63,6 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
     }
   }
 
-  const fetchOptionalRules = async (id: string) => {
-    try {
-      const res = await fetch(`/api/projects/${id}/optional-rules`)
-      if (res.ok) {
-        const data = await res.json()
-        setOptionalRules(data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch optional rules:', error)
-    } finally {
-      setOptionalRulesLoading(false)
-    }
-  }
-
-  const toggleOptionalRule = async (ruleCode: string, enabled: boolean) => {
-    if (!projectId) return
-
-    setTogglingRule(ruleCode)
-
-    try {
-      const res = await fetch(`/api/projects/${projectId}/optional-rules`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ruleCode, enabled }),
-      })
-
-      if (res.ok) {
-        // Update local state
-        setOptionalRules(prev =>
-          prev.map(rule =>
-            rule.code === ruleCode ? { ...rule, enabled } : rule
-          )
-        )
-      }
-    } catch (error) {
-      console.error('Failed to toggle optional rule:', error)
-    } finally {
-      setTogglingRule(null)
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!projectId) return
@@ -131,6 +76,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       siteUrl: formData.get('siteUrl') as string,
       sitemapUrl: formData.get('sitemapUrl') as string,
       notes: formData.get('notes') as string,
+      enabledOptionalRules: enabledRules,
     }
 
     try {
@@ -294,49 +240,12 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
             </form>
           </Card>
 
-          {/* Optional Preflight Rules Section */}
-          <Card title="Optional Preflight Rules">
-            <p className="text-sm text-gray-600 mb-4">
-              Enable optional rules for this project. These rules are off by default and can be enabled per project.
-            </p>
-            {optionalRulesLoading ? (
-              <p className="text-gray-500">Loading optional rules...</p>
-            ) : optionalRules.length === 0 ? (
-              <p className="text-gray-500">No optional rules configured. Optional rules can be created in Settings &gt; Preflight Rules.</p>
-            ) : (
-              <div className="space-y-3">
-                {optionalRules.map((rule) => (
-                  <label
-                    key={rule.code}
-                    className="flex items-start space-x-3 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={rule.enabled}
-                      onChange={(e) => toggleOptionalRule(rule.code, e.target.checked)}
-                      disabled={togglingRule === rule.code}
-                      className="w-4 h-4 mt-1"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{rule.name}</span>
-                        <span className={`px-2 py-0.5 rounded text-xs ${
-                          rule.severity === 'BLOCKER' ? 'bg-red-100 text-red-800' :
-                          rule.severity === 'CRITICAL' ? 'bg-orange-100 text-orange-800' :
-                          rule.severity === 'HIGH' ? 'bg-yellow-100 text-yellow-800' :
-                          rule.severity === 'MEDIUM' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {rule.severity}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-500">{rule.description}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-          </Card>
+          {projectId && (
+            <OptionalRulesSection
+              projectId={projectId}
+              onEnabledRulesChange={setEnabledRules}
+            />
+          )}
 
           {/* Delete Confirmation Modal */}
           {showDeleteConfirm && (

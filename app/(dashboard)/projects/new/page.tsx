@@ -11,11 +11,13 @@ import Tabs from "@/components/ui/tabs/Tabs"
 import { projectTabs } from "@/lib/constants/navigation"
 import TwoColumnGrid from "@/components/layout/TwoColumnGrid"
 import PageContainer from "@/components/layout/PageContainer"
+import OptionalRulesSection from "@/components/projects/OptionalRulesSection"
 
 export default function NewProjectPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [enabledRules, setEnabledRules] = useState<string[]>([])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -28,6 +30,7 @@ export default function NewProjectPage() {
       siteUrl: formData.get('siteUrl') as string,
       sitemapUrl: formData.get('sitemapUrl') as string,
       notes: formData.get('notes') as string,
+      enabledOptionalRules: enabledRules,
     }
 
     try {
@@ -121,6 +124,8 @@ export default function NewProjectPage() {
               </div>
             </form>
           </Card>
+
+          <OptionalRulesSection onEnabledRulesChange={setEnabledRules} />
         </FormContainer>
       </TwoColumnGrid>
     </PageContainer>

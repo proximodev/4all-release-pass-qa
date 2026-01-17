@@ -1,5 +1,5 @@
 Request:
-
+--------
 I would like to create a new class of preflight rule: optional rules
 
 These will be custom rules but they will be ... optional.
@@ -12,6 +12,7 @@ I am leaning to 2 as some may not agree with all usecases. For example: "open ex
 No coding, no changes. Review the idea and ask questions.
 
 Questions:
+----------
 1. Default state: Should optional rules be OFF by default (opt-in) or ON by default (opt-out)?
 2. Scope of "optional":
 - Are these entirely new rules that don't exist today?
@@ -26,6 +27,8 @@ Questions:
 5. Granularity: One toggle per optional rule, or grouped toggles (e.g., "Enable all accessibility optional rules")?
 6. Inheritance/defaults: Should there be a global default that projects inherit, or purely per-project?
 
+Answers:
+-------
 1 - Project level, on by default, but can be changed at anytime
 2 - New rules
 3 - Contribute to score like normal rules
@@ -33,6 +36,8 @@ Questions:
 5 - One toggle per (checkboxes)
 6 - All optional rules will be available on all projects
 
+Questions:
+---------
 
 Data model:
 7. Storage: Where should the project's optional rule settings be stored?
@@ -43,16 +48,15 @@ Data model:
 - New category/classification field?
 
 Behavior:
-
 9. Existing projects: When you add a new optional rule, should it automatically be ON for all existing projects (matching "on by default"), or only for newly created
 projects?
 10. Rule changes: If an optional rule is later changed to non-optional (or vice versa), how should existing project settings behave?
 
 Worker:
-
 11. When to check settings: Should the worker fetch project settings once at the start of a test run, or should this be baked into the ReleaseRun snapshot (like URLs are)?
 
-
+Answers:
+-------
 7 - Make a recommendation
 8 - boolean. This option should be available in the preflight rules screen
 9 - great question. let's actually make all optional rules OFF by default
@@ -61,6 +65,7 @@ Worker:
 
 ----
 
+Questions:
 7. Storage: Where should the project's optional rule settings be stored?
 - New JSON column on Project table (e.g., optionalRulesConfig: Json)?
 - New junction table (e.g., ProjectOptionalRules with projectId, ruleCode, enabled)?
@@ -68,21 +73,8 @@ Worker:
 - New boolean column isOptional on ReleaseRule?
 - New category/classification field?
 
-Behavior:
-
-9. Existing projects: When you add a new optional rule, should it automatically be ON for all existing projects (matching "on by default"), or only for newly created
-projects?
-10. Rule changes: If an optional rule is later changed to non-optional (or vice versa), how should existing project settings behave?
-
-Worker:
-
-11. When to check settings: Should the worker fetch project settings once at the start of a test run, or should this be baked into the ReleaseRun snapshot (like URLs are)?
-
-❯ 7 - Make a recommendation                                                                                                                                                     8 - boolean. This option should be available in the preflight rules screen
-9 - great question. let's actually make all optional rules OFF by default
-10 - should be removed from the project settings page
-11 - sounds like "baked into the ReleaseRun snapshot" is the easy/best option. review and recommend
-
+Response/Plan v1:
+----------------
 ● Recommendations:
 
 7. Storage
@@ -127,9 +119,15 @@ Does this align with your thinking?
 
 --
 
+Answers/Response:
+----------------
 7 - what happens if an enabled optional rule becomes a non-optional rule? would a table be a better solution (would be filtered out automatically)
 
+
 --
+
+Response/Plan v1.1:
+----------------
 
 Optional Rules - Final Design
 Schema changes:i
@@ -151,9 +149,9 @@ UI touchpoints:
 - Project Settings: checkboxes to enable/disable optional rules
 - Preflight Rules admin screen: toggle to mark rule as optional
 
----
 
 Detailed Implementation Plan: Optional Preflight Rules
+------------------------------------------------------
 
 Phase 1: Schema Changes
 
@@ -296,3 +294,113 @@ Execution Order
 5. Phase 2.3 + Phase 3 (ReleaseRun snapshot + Worker) - execution support
 6. Phase 6 (Seed) - optional, if adding default optional rules
 
+
+--
+
+Updates:
+- Add optional rules lookup to new project page
+- Put lookup code into a shared component
+
+Questions:
+1. Save behavior: Currently edit page saves immediately on toggle (PATCH per change). New page collects selections and sends on form submit.
+Should we:
+- Keep this difference (immediate save on edit, batch on new)?
+- Or unify to one pattern?
+2. Component scope: Should the shared component be:
+- Just the UI (list of checkboxes with severity badges)?
+- Or include the fetch logic too (with a prop to determine which endpoint)?
+3. Location: You mentioned /components/projects - should this be:
+- components/projects/OptionalRulesSection.tsx?
+- Or a different name/structure?
+4. Props pattern: I'm thinking:
+<OptionalRulesSection
+projectId={id}           // undefined for new, string for edit
+enabledRules={set}       // local state for new
+onToggle={fn}            // handler for both
+/>
+4. The component would fetch rules internally, but behavior differs based on whether projectId exists. Does this align with your thinking?
+
+1 - yes, let's unify to use "save" (batch)
+2 - UI and fetch - but make a recommendation
+3 - yes components/projects/OptionalRulesSection.tsx
+4 - explain question
+
+---
+
+Recommendation for #2:
+
+I'd recommend pure UI component with parent handling fetch. Here's why:
+Option A: Component fetches internally
+<OptionalRulesSection
+projectId={id}  // if exists, fetches /api/projects/[id]/optional-rules
+                // if undefined, fetches /api/release-rules/optional
+enabledRules={set}
+onToggle={fn}
+/>
+- Simpler parent code
+- But: component has side effects, harder to test, mixed concerns
+
+Option B: Pure UI component (recommended)
+<OptionalRulesSection
+rules={optionalRules}        // parent fetches, passes data
+enabledRules={enabledRules}  // Set<string> of enabled codes
+onToggle={handleToggle}      // (code, enabled) => void
+loading={loading}
+/>
+- Parent handles fetching (each page knows its endpoint)
+- Component is pure render - just displays rules with checkboxes
+- Easier to test, clearer separation, more reusable
+
+For #4 explanation:
+
+I was asking about the props interface - what data the component receives and how it communicates back. With Option B above:
+- rules = the list of optional rules to display
+- enabledRules = which are currently checked
+- onToggle = callback when user clicks a checkbox
+- loading = show loading state
+
+---
+
+Answers:
+-------
+I'm on fence on #2. I would prefer not to have redundant fetch code (if that is the recommendation)
+#4 - make a recommendation
+
+Option C: Self-contained component with state callback
+<OptionalRulesSection
+projectId={projectId}  // undefined for new, string for edit
+onEnabledRulesChange={(enabledCodes) => setEnabledRules(enabledCodes)}
+/>
+
+The component:
+1. Fetches rules internally (uses /api/release-rules/optional for new, /api/projects/[id]/optional-rules for edit)
+2. Manages its own checkbox state internally
+3. Calls onEnabledRulesChange whenever user toggles, so parent always has current state for save
+4. For edit: initializes checkboxes from API response
+5. For new: all unchecked initially
+
+Parent pages become simple:
+// New page
+const [enabledRules, setEnabledRules] = useState<string[]>([])
+
+<OptionalRulesSection onEnabledRulesChange={setEnabledRules} />
+
+// On submit: include enabledRules in POST
+
+// Edit page
+const [enabledRules, setEnabledRules] = useState<string[]>([])
+
+<OptionalRulesSection
+projectId={projectId}
+onEnabledRulesChange={setEnabledRules}
+/>
+
+// On submit: include enabledRules in PATCH
+
+Benefits:
+- No duplicate fetch code
+- Component is self-contained
+- Parent just receives the current state for saving
+- Clean separation
+
+----

@@ -73,15 +73,40 @@ export async function PATCH(
 
     // Parse and validate request body
     const body = await request.json()
-    const validatedData = projectSchema.partial().parse(body)
+    const { enabledOptionalRules, ...projectData } = body
+    const validatedData = projectSchema.partial().parse(projectData)
 
-    // Update project
-    const project = await prisma.project.update({
-      where: {
-        id,
-        deletedAt: null,
-      },
-      data: validatedData,
+    // Update project with optional rules in a transaction
+    const project = await prisma.$transaction(async (tx) => {
+      // Update project
+      const updatedProject = await tx.project.update({
+        where: {
+          id,
+          deletedAt: null,
+        },
+        data: validatedData,
+      })
+
+      // Update optional rules if provided
+      if (enabledOptionalRules !== undefined && Array.isArray(enabledOptionalRules)) {
+        // Delete all existing optional rules for this project
+        await tx.projectOptionalRule.deleteMany({
+          where: { projectId: id },
+        })
+
+        // Create new records for enabled rules
+        if (enabledOptionalRules.length > 0) {
+          await tx.projectOptionalRule.createMany({
+            data: enabledOptionalRules.map((ruleCode: string) => ({
+              projectId: id,
+              ruleCode,
+              enabled: true,
+            })),
+          })
+        }
+      }
+
+      return updatedProject
     })
 
     return NextResponse.json(project)

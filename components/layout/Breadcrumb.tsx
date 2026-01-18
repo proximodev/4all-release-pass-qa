@@ -74,6 +74,9 @@ export default function Breadcrumb() {
     if (pathname.startsWith('/utilities')) {
       return 'Utilities'
     }
+    if (pathname.startsWith('/about')) {
+      return 'About ReleasePass'
+    }
     return 'Dashboard'
   }
 

@@ -1,6 +1,6 @@
 export const releasePassTabs = [
   { label: 'Preflight', href: '/releasepass/preflight' },
-  { label: 'Site Audit', href: '/releasepass/site-audit' },
+  // { label: 'Site Audit', href: '/releasepass/site-audit' }, // TODO: Enable later
 ]
 
 export const projectTabs = [
@@ -9,9 +9,9 @@ export const projectTabs = [
 ]
 
 export const settingsTabs = [
-  { label: 'Users', href: '/settings/users' },
   { label: 'Preflight Rules', href: '/settings/preflight-rules' },
   { label: 'Preflight Categories', href: '/settings/preflight-categories' },
+  { label: 'Users', href: '/settings/users' },
 ]
 
 export const utilitiesTabs = [

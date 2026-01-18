@@ -156,7 +156,9 @@ Each test type has a full results page with detailed metrics, issues, screenshot
 Specifics will vary by test and will be defined and update in design and this document.
 
 ## Projects
-Allows listing and adding projects. Add form includes name, URL, sitemap, and notes.
+Allows listing and adding projects. Add/Edit form includes:
+- Name, URL, sitemap, and notes
+- **Optional Preflight Rules**: Checkbox list of optional rules that can be enabled for this project. Optional rules are OFF by default globally but can be turned ON per project. When enabled, these rules are included in Page Preflight tests for this project.
 
 [Back to top](#table-of-contents)
 
@@ -317,6 +319,7 @@ Failed ResultItems include a `severity` field that determines score penalties:
   * deletedAt — datetime (nullable; soft delete timestamp)
   * createdAt — datetime
   * updatedAt — datetime
+  * → optionalRules — one-to-many relation to ProjectOptionalRule (enabled optional rules for this project)
 
   **authConfig structure**:
   ```json
@@ -357,10 +360,11 @@ Failed ResultItems include a `severity` field that determines score penalties:
   * status — enum (`PENDING`, `READY`, `FAIL`)
   * urls — JSON (frozen array of URLs to test)
   * selectedTests — JSON (array of selected page-level test types)
+  * enabledOptionalRules — JSON (frozen array of enabled optional rule codes at time of creation)
   * createdAt — datetime
   * updatedAt — datetime
 
-  ReleaseRun represents a single launch candidate tested as a cohesive unit. URLs are frozen once execution begins and cannot be modified. All TestRuns within a ReleaseRun share the same URL set.
+  ReleaseRun represents a single launch candidate tested as a cohesive unit. URLs are frozen once execution begins and cannot be modified. All TestRuns within a ReleaseRun share the same URL set. The `enabledOptionalRules` field captures a snapshot of which optional rules were enabled for the project at the time the Release Run was created, ensuring consistent test behavior even if project settings change later.
 
   **status field**: Indicates cancellation state (`FAIL` = cancelled by user). Release readiness (PENDING/READY/FAIL) is derived at runtime from TestRun results and ManualTestStatus, not stored. See [Release Readiness](#release-readiness-1) for computation rules. 
 
@@ -492,11 +496,26 @@ Failed ResultItems include a `severity` field that determines score penalties:
   * fix — string (nullable; how to fix the issue)
   * docUrl — string (nullable; external documentation link)
   * isActive — boolean (default true; soft enable/disable)
+  * isOptional — boolean (default false; optional rules are OFF by default per project)
   * sortOrder — integer (default 0; display order within category)
   * createdAt — datetime
   * updatedAt — datetime
 
   ReleaseRule defines the taxonomy of all check rules. Each rule has a unique code used as the primary key. ResultItems link to ReleaseRules via `releaseRuleCode` to inherit consistent metadata (name, description, severity, etc.). Rules can be customized per-deployment.
+
+  **Optional Rules**: Rules with `isOptional = true` are disabled by default and must be explicitly enabled per project via the ProjectOptionalRule table. Optional rules address edge cases or project-specific requirements that don't apply universally (e.g., requiring external links to open in new tabs).
+
+* ProjectOptionalRule
+  * id — UUID
+  * projectId — UUID (FK to Project.id)
+  * ruleCode — string (FK to ReleaseRule.code)
+  * enabled — boolean (default true)
+  * createdAt — datetime
+  * updatedAt — datetime
+
+  ProjectOptionalRule tracks which optional rules are enabled for a specific project. Only rules with `ReleaseRule.isOptional = true` should have entries in this table. When a project enables an optional rule, a record is created here.
+
+  **Unique constraint**: One record per (projectId, ruleCode) combination.
 
 * IgnoredRule
   * id — UUID
@@ -661,6 +680,9 @@ Tests are categorized as **page-level** (included in Release Runs) or **site-lev
   * Meta tags validation (Open Graph, Twitter Cards)
   * Title length validation
 * Extensibility: Add new `.ts` files to `worker/rules/` directory
+* **Optional Rules**: Some custom rules are marked as optional (`isOptional = true` in ReleaseRule). These rules are disabled by default and must be enabled per project via project settings. When creating a Release Run, enabled optional rules are snapshotted to ensure consistent test behavior. Examples include:
+  * `PREFLIGHT_EXTERNAL_LINK_TARGET` - External links should open in new tab
+  * `PREFLIGHT_INLINE_CSS` - Detect inline style attributes on elements
 
 **Scoring for Page Preflight**:
 * Base score: 100 points

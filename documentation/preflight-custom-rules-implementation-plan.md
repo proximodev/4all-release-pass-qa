@@ -54,6 +54,15 @@ Implement custom preflight rules that validate launch-critical page elements usi
 |----------------------|----------|--------------------------|
 | PREFLIGHT_EMPTY_LINK | Blocker  | Links with href="#" only |
 
+### Optional Rules (2 rules)
+
+Optional rules are disabled by default and can be enabled per project via project settings. These rules address edge cases or project-specific requirements.
+
+| Code                              | Severity | Description                                        | Optional |
+|-----------------------------------|----------|----------------------------------------------------|----------|
+| PREFLIGHT_EXTERNAL_LINK_TARGET    | High     | External links should open in new tab (target="_blank") | Yes |
+| PREFLIGHT_INLINE_CSS              | High     | Inline style attributes detected on elements       | Yes |
+
 ### Accessibility & SEO (1 rule)
 
 | Code          | Severity | Description                                      |

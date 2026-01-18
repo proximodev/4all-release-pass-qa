@@ -522,6 +522,18 @@ const releaseRules = [
     sortOrder: 204,
     isOptional: true,
   },
+  {
+    code: 'PREFLIGHT_INLINE_CSS',
+    provider: 'ReleasePass',
+    category: 'Site Resources',
+    name: 'Inline Styles Detected',
+    description: 'Content elements have inline style attributes, often from copy-pasting from Google Docs or Word.',
+    severity: 'HIGH',
+    impact: 'Inline styles make content harder to maintain, override CSS rules, and can cause inconsistent styling across the site.',
+    fix: 'Remove inline style attributes and use CSS classes instead. When pasting from Google Docs or Word, use "Paste as Plain Text" or clear formatting after pasting.',
+    sortOrder: 84,
+    isOptional: true,
+  },
 
   // =========================================================================
   // INTERNAL / ERROR CODES (4 rules)
@@ -623,6 +635,7 @@ async function main() {
         fix: rule.fix,
         docUrl: 'docUrl' in rule ? rule.docUrl : null,
         sortOrder: rule.sortOrder,
+        isOptional: 'isOptional' in rule ? rule.isOptional : false,
       },
       create: {
         code: rule.code,
@@ -635,6 +648,7 @@ async function main() {
         fix: rule.fix,
         docUrl: 'docUrl' in rule ? rule.docUrl : null,
         sortOrder: rule.sortOrder,
+        isOptional: 'isOptional' in rule ? rule.isOptional : false,
       },
     });
     console.log(`  ✓ ${rule.code}`);

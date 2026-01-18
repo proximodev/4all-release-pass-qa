@@ -1,0 +1,50 @@
+Request:
+Create a custom preflight rule that detects inline styles on html elements. This can often happen when copying text from google docs to a cms editor (in particular elementor builider in wordpress)
+
+Next steps:
+1 - ask questions
+2 - proposes a plan
+3 - execute on approval
+
+----
+Implementation Plan: Inline CSS Detection Rule
+
+Overview
+Add PREFLIGHT_INLINE_CSS rule to detect inline style attributes on content elements. This commonly occurs when copying from Google Docs to CMS editors like Elementor.
+
+Files to Modify
+
+1. worker/providers/preflight/custom-rules.ts
+- Add new function checkInlineStyleRules($, rulesMap)
+- Target content elements: p, span, div, h1, h2, h3, h4, h5, h6, li, a, strong, em, b, i, blockquote, td, th, label
+- Return count + first 10 sample elements showing tag name, style preview (first 80 chars), and text content preview
+- Register in runCustomRules() as Batch 10 (optional)
+
+2. prisma/seed-release-rules.ts
+- Add rule definition:
+- Code: PREFLIGHT_INLINE_CSS
+- Provider: ReleasePass
+- Category: Site Resources
+- Severity: HIGH
+- isOptional: true
+- Description/impact/fix text
+
+Rule Logic
+
+For each content element with style attribute:
+- Extract tag name
+- Extract style value (preview first 80 chars)
+- Extract text content (preview first 50 chars)
+- Add to issues list
+
+If issues.length > 0:
+FAIL with count + first 10 samples
+Else:
+PASS
+
+Execution Steps
+
+1. Edit custom-rules.ts - add checkInlineStyleRules() function
+2. Edit custom-rules.ts - register in runCustomRules()
+3. Edit seed-release-rules.ts - add rule definition
+4. Run seed script: npx tsx prisma/seed-release-rules.ts

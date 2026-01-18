@@ -46,6 +46,9 @@
  *
  * Batch 9: External Link rules (1 rule) - OPTIONAL
  * - PREFLIGHT_EXTERNAL_LINK_TARGET
+ *
+ * Batch 10: Inline Style rules (1 rule) - OPTIONAL
+ * - PREFLIGHT_INLINE_CSS
  */
 
 import * as cheerio from 'cheerio';
@@ -137,6 +140,9 @@ export async function runCustomRules(
 
   // Batch 9: External Link rules (optional)
   results.push(...checkExternalLinkTargetRules($, page, rulesMap));
+
+  // Batch 10: Inline Style rules (optional)
+  results.push(...checkInlineStyleRules($, rulesMap));
 
   return results;
 }
@@ -1658,6 +1664,89 @@ function checkExternalLinkTargetRules(
           ? `All ${externalLinkCount} external link(s) open in new window`
           : 'No external links found',
         { externalLinkCount }
+      )
+    );
+  }
+
+  return results;
+}
+
+// =============================================================================
+// Inline Style Rules (Optional)
+// =============================================================================
+
+/**
+ * Content elements to check for inline styles
+ * These are typical content elements that shouldn't have inline styles
+ * (often caused by copy-paste from Google Docs, Word, etc.)
+ */
+const CONTENT_ELEMENTS_SELECTOR = [
+  'p', 'span', 'div',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'li', 'a', 'strong', 'em', 'b', 'i',
+  'blockquote', 'td', 'th', 'label',
+  'article', 'section', 'aside',
+].join(', ');
+
+interface InlineStyleIssue {
+  tag: string;
+  style: string;
+  text: string;
+}
+
+/**
+ * Check inline style rules:
+ * - PREFLIGHT_INLINE_CSS: Detect inline style attributes on content elements
+ *
+ * This commonly occurs when copying text from Google Docs or Word
+ * to CMS editors like Elementor, which embeds formatting as inline styles.
+ *
+ * This is an OPTIONAL rule (off by default per project)
+ */
+function checkInlineStyleRules(
+  $: CheerioAPI,
+  rulesMap: ReleaseRulesMap
+): ResultItemToCreate[] {
+  const results: ResultItemToCreate[] = [];
+  const issues: InlineStyleIssue[] = [];
+
+  $(CONTENT_ELEMENTS_SELECTOR).each((_, el) => {
+    const $el = $(el);
+    const style = $el.attr('style');
+
+    // Only flag elements that have a style attribute
+    if (style && style.trim().length > 0) {
+      const tagName = ($el.prop('tagName') as string || 'unknown').toLowerCase();
+      const text = $el.text().trim().substring(0, 50) || '(no text)';
+      const stylePreview = style.substring(0, 80) + (style.length > 80 ? '...' : '');
+
+      issues.push({
+        tag: tagName,
+        style: stylePreview,
+        text: text + (text.length >= 50 ? '...' : ''),
+      });
+    }
+  });
+
+  if (issues.length > 0) {
+    results.push(
+      createFail(
+        'PREFLIGHT_INLINE_CSS',
+        `Found ${issues.length} element(s) with inline styles`,
+        IssueSeverity.HIGH,
+        rulesMap,
+        {
+          count: issues.length,
+          elements: issues.slice(0, 10), // First 10 samples
+        }
+      )
+    );
+  } else {
+    results.push(
+      createPass(
+        'PREFLIGHT_INLINE_CSS',
+        'No inline styles found on content elements',
+        {}
       )
     );
   }

@@ -4,7 +4,7 @@
 
 Implement custom preflight rules that validate launch-critical page elements using HTML parsing. Rules requiring Playwright for rendered DOM analysis are deferred to v1.1.
 
-## V1 Scope (24 Rules - HTML Parsing Only) ✓ COMPLETE
+## V1 Scope (27 Rules - HTML Parsing Only) ✓ COMPLETE
 
 ### Indexing & Crawl Control (3 rules)
 
@@ -53,6 +53,12 @@ Implement custom preflight rules that validate launch-critical page elements usi
 | Code                 | Severity | Description              |
 |----------------------|----------|--------------------------|
 | PREFLIGHT_EMPTY_LINK | Blocker  | Links with href="#" only |
+
+### Placeholder Content (1 rule)
+
+| Code                       | Severity | Description                                              |
+|----------------------------|----------|----------------------------------------------------------|
+| PREFLIGHT_PLACEHOLDER_TEXT | Blocker  | Lorem ipsum, TBD, TODO, or other placeholder text found  |
 
 ### Optional Rules (2 rules)
 
@@ -172,6 +178,9 @@ Each category function returns an array of ResultItems (both PASS and FAIL):
 - `checkFaviconRules($, page, rulesMap)` - Favicon presence validation
 - `checkMetaTitleRules($, rulesMap)` - Title length validation
 - `checkMetaDescriptionRules($, rulesMap)` - Meta description length validation
+- `checkExternalLinkTargetRules($, page, rulesMap)` - External link target validation (optional)
+- `checkInlineStyleRules($, rulesMap)` - Inline CSS detection (optional)
+- `checkPlaceholderTextRules($, rulesMap)` - Lorem ipsum and placeholder text detection
 
 ### Helper Functions
 

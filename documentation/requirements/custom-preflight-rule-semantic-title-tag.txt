@@ -1,0 +1,2 @@
+
+Image Title Tag Cleanup: Make sure image title tags aren’t just the raw file names so that users see more meaningful info on hover.

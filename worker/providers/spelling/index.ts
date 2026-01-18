@@ -382,8 +382,9 @@ async function checkUrlSpelling(url: string): Promise<Omit<UrlSpellingResult, 's
 
   // Check spelling with LanguageTool
   // Disabled categories/rules can be configured via LANGUAGETOOL_DISABLED_CATEGORIES env var
+  // Force en-US to prevent false positives from auto-detection (e.g., lorem ipsum triggering Italian rules)
   const spellingResult = await checkSpelling(text, {
-    language: 'auto',
+    language: 'en-US',
   });
 
   // Filter out likely proper nouns before creating ResultItems

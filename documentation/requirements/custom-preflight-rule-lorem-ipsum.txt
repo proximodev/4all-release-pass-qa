@@ -1,0 +1,326 @@
+Implementation Plan: PREFLIGHT_LOREM_IPSUM Rule
+
+Overview
+Add a new preflight custom rule to detect lorem ipsum placeholder text on pages. This is a mandatory rule (not optional) with BLOCKER severity to ensure placeholder content is never shipped to production.
+
+---
+1. Rule Definition
+┌────────────┬───────────────────────────┐
+│   Field    │           Value           │
+├────────────┼───────────────────────────┤
+│ Code       │ PREFLIGHT_LOREM_IPSUM     │
+├────────────┼───────────────────────────┤
+│ Provider   │ ReleasePass               │
+├────────────┼───────────────────────────┤
+│ Category   │ Site Resources            │
+├────────────┼───────────────────────────┤
+│ Name       │ Placeholder Text Detected │
+├────────────┼───────────────────────────┤
+│ Severity   │ BLOCKER (-40 points)      │
+├────────────┼───────────────────────────┤
+│ isOptional │ false (mandatory)         │
+└────────────┴───────────────────────────┘
+
+Description: Page contains lorem ipsum or similar placeholder text that was not replaced with real content.
+Impact: Placeholder text indicates incomplete content and should never appear on production pages.
+Fix: Replace all lorem ipsum placeholder text with actual content before publishing.
+
+---
+2. Detection Logic
+
+Pattern matching approach:
+
+// Primary patterns - definitive lorem ipsum indicators
+const LOREM_IPSUM_PHRASE = /lorem\s+ipsum/i;
+const DOLOR_SIT_AMET = /dolor\s+sit\s+amet/i;
+
+// Lorem-family words for threshold detection
+const LOREM_WORDS = [
+'lorem', 'ipsum', 'dolor', 'sit', 'amet',
+'consectetur', 'adipiscing', 'elit', 'sed',
+'eiusmod', 'tempor', 'incididunt', 'labore',
+'dolore', 'magna', 'aliqua', 'enim', 'minim',
+'veniam', 'quis', 'nostrud', 'exercitation',
+'ullamco', 'laboris', 'nisi', 'aliquip'
+];
+
+// Detection triggers if:
+// 1. Contains "lorem ipsum" phrase, OR
+// 2. Contains "dolor sit amet" phrase, OR
+// 3. Contains 5+ lorem-family words
+
+Why this approach:
+- Phrase matching catches classic lorem ipsum
+- Word count threshold catches variations/fragments
+- Common Latin words like "sed", "sit" alone won't trigger (need 5+)
+
+---
+3. Files to Modify
+
+A. worker/providers/preflight/custom-rules.ts
+
+1. Update header comment - Add Batch 11 for Lorem Ipsum rules
+2. Add detection constants at top of file:
+const LOREM_IPSUM_PATTERNS = {
+phrases: [/lorem\s+ipsum/i, /dolor\s+sit\s+amet/i],
+words: ['lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', ...],
+threshold: 5,
+};
+3. Add helper function:
+function detectLoremIpsum(text: string): {
+detected: boolean;
+matchType: 'phrase' | 'word-count' | null;
+details: { phrase?: string; wordCount?: number };
+}
+4. Add rule function:
+function checkLoremIpsumRules(
+$: CheerioAPI,
+rulesMap: ReleaseRulesMap
+): ResultItemToCreate[]
+5. Register in runCustomRules() - Add as Batch 11
+
+B. prisma/seed-release-rules.ts
+
+Add rule definition:
+{
+code: 'PREFLIGHT_LOREM_IPSUM',
+provider: 'ReleasePass',
+category: 'Site Resources',
+name: 'Placeholder Text Detected',
+description: 'Page contains lorem ipsum or similar placeholder text.',
+severity: 'BLOCKER',
+impact: 'Placeholder text indicates incomplete content and should never appear on production pages.',
+fix: 'Replace all lorem ipsum placeholder text with actual content before publishing.',
+sortOrder: 85,
+isOptional: false,
+},
+
+---
+4. Result Output
+
+On FAIL:
+{
+provider: 'ReleasePass',
+code: 'PREFLIGHT_LOREM_IPSUM',
+name: 'Placeholder text detected (lorem ipsum)',
+status: 'FAIL',
+severity: 'BLOCKER',
+meta: {
+  matchType: 'phrase',           // or 'word-count'
+  matchedPhrase: 'lorem ipsum',  // if phrase match
+  loremWordCount: 15,            // count of lorem-family words found
+  textPreview: 'Lorem ipsum dolor sit amet, consectetur...',  // first 100 chars
+}
+}
+
+On PASS:
+{
+provider: 'ReleasePass',
+code: 'PREFLIGHT_LOREM_IPSUM',
+name: 'No placeholder text detected',
+status: 'PASS',
+meta: {}
+}
+
+---
+5. Text Extraction
+
+What to check:
+- Visible text content from the page body
+- Exclude: scripts, styles, nav, header, footer (similar to spelling extraction)
+
+Implementation:
+- Reuse or adapt the Cheerio text extraction pattern from spelling provider
+- Or use simpler approach: $('body').text() and check against patterns
+
+---
+6. Documentation Updates
+A. Documentation/preflight-custom-rules-implementation-plan.md
+
+Add to V1 Scope section:
+### Placeholder Content (1 rule)
+
+| Code                    | Severity | Description                           |
+|-------------------------|----------|---------------------------------------|
+| PREFLIGHT_LOREM_IPSUM   | Blocker  | Lorem ipsum placeholder text detected |
+
+B. Documentation/functional-spec.md
+
+Add to Custom Rules Plugin System section:
+- Mention lorem ipsum detection as a mandatory preflight rule
+
+---
+7. Execution Steps
+
+1. Edit custom-rules.ts - Add constants and helper function
+2. Edit custom-rules.ts - Add checkLoremIpsumRules() function
+3. Edit custom-rules.ts - Register in runCustomRules() as Batch 11
+4. Edit seed-release-rules.ts - Add rule definition
+5. Run seed script: npx tsx prisma/seed-release-rules.ts
+6. Update documentation files
+7. Test with test-content-inline-css.html (contains lorem ipsum)
+
+---
+8. Testing
+
+Test cases:
+1. Page with "lorem ipsum" phrase → FAIL (phrase match)
+2. Page with "dolor sit amet" phrase → FAIL (phrase match)
+3. Page with 5+ lorem words but no exact phrase → FAIL (word-count match)
+4. Page with 1-4 lorem words (e.g., "Lorem" as a name) → PASS
+5. Page with no lorem content → PASS
+6. Page with lorem in hidden elements → Should still detect (content issue regardless)
+
+---
+9. Open Questions
+
+1. Should hidden lorem ipsum trigger? (e.g., display: none)
+- Recommendation: Yes - placeholder text shouldn't exist anywhere
+2. Case sensitivity?
+- Recommendation: Case-insensitive (catch "Lorem Ipsum", "LOREM IPSUM", etc.)
+3. Should we detect other placeholder patterns?
+- "TBD", "TODO", "[Insert text here]", "PLACEHOLDER"
+- Recommendation: Start with lorem ipsum only, expand later if needed
+
+---
+
+Answers:
+1 - Yes
+2 - Case insensitive
+3 - yes, good idea. Let's start with those patterns.
+
+Requirement:
+Make the word list configurable in code (maybe as an array before or inside main function)
+
+---
+
+Changes Based on Your Feedback
+Detection Patterns (configurable arrays):
+
+// Configurable placeholder detection patterns
+const PLACEHOLDER_CONFIG = {
+// Lorem ipsum phrase patterns (triggers immediately)
+loremPhrases: [
+  /lorem\s+ipsum/i,
+  /dolor\s+sit\s+amet/i,
+],
+
+// Lorem-family words (triggers if count >= threshold)
+loremWords: [
+  'lorem', 'ipsum', 'dolor', 'sit', 'amet',
+  'consectetur', 'adipiscing', 'elit', 'sed',
+  'eiusmod', 'tempor', 'incididunt', 'labore',
+  'dolore', 'magna', 'aliqua', 'enim', 'minim',
+  'veniam', 'quis', 'nostrud', 'exercitation',
+  'ullamco', 'laboris', 'nisi', 'aliquip',
+],
+loremWordThreshold: 5,
+
+// Other placeholder patterns (triggers immediately)
+placeholderPatterns: [
+  /\bTBD\b/,                        // TBD (exact word)
+  /\bTODO\b/i,                      // TODO (case insensitive)
+  /\bPLACEHOLDER\b/i,               // PLACEHOLDER
+  /\[insert\s+.+?\s+here\]/i,       // [Insert X here]
+  /\[add\s+.+?\s+here\]/i,          // [Add X here]
+  /\[your\s+.+?\s+here\]/i,         // [Your X here]
+],
+};
+
+Updated Rule Definition
+┌─────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│    Field    │                                                  Value                                                   │
+├─────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Code        │ PREFLIGHT_PLACEHOLDER_TEXT                                                                               │
+├─────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Name        │ Placeholder Text Detected                                                                                │
+├─────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Description │ Page contains lorem ipsum, TBD, TODO, or other placeholder text that was not replaced with real content. │
+└─────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(Changed from PREFLIGHT_LOREM_IPSUM to PREFLIGHT_PLACEHOLDER_TEXT since we're catching more than just lorem)
+
+---
+Updated Result Output
+
+On FAIL:
+{
+code: 'PREFLIGHT_PLACEHOLDER_TEXT',
+name: 'Placeholder text detected',
+status: 'FAIL',
+severity: 'BLOCKER',
+meta: {
+  matchType: 'lorem-phrase' | 'lorem-words' | 'placeholder-pattern',
+  matches: ['lorem ipsum', 'TBD', ...],  // what was found
+  loremWordCount: 15,                     // if applicable
+  textPreview: 'Lorem ipsum dolor...',    // first 100 chars of match context
+}
+}
+
+--
+
+ Changes Made
+  1. worker/providers/preflight/custom-rules.ts
+
+  Added configurable placeholder detection (lines 64-99):
+  const PLACEHOLDER_CONFIG = {
+    loremPhrases: [/lorem\s+ipsum/i, /dolor\s+sit\s+amet/i],
+    loremWords: ['lorem', 'ipsum', 'dolor', ...], // 22 words
+    loremWordThreshold: 5,
+    placeholderPatterns: [
+      /\bTBD\b/,
+      /\bTODO\b/i,
+      /\bPLACEHOLDER\b/i,
+      /\[insert\s+.+?\s+here\]/i,
+      /\[add\s+.+?\s+here\]/i,
+      /\[your\s+.+?\s+here\]/i,
+    ],
+  };
+
+  Added detection functions (lines 1797-1953):
+  - detectPlaceholderText() - helper function
+  - checkPlaceholderTextRules() - main rule function
+
+  Registered as Batch 11 (line 188)
+
+  2. prisma/seed-release-rules.ts
+
+  Added rule definition:
+  - Code: PREFLIGHT_PLACEHOLDER_TEXT
+  - Severity: BLOCKER
+  - Category: Site Resources
+
+  3. Documentation
+
+  Updated preflight-custom-rules-implementation-plan.md:
+  - Added Placeholder Content section
+  - Updated rule count to 27
+  - Added new functions to category list
+
+  4. Database
+
+  Seed script ran successfully - 49 rules seeded including PREFLIGHT_PLACEHOLDER_TEXT
+
+  ---
+  Detection Triggers
+  ┌────────────────┬───────────────────────────────────────────────┐
+  │    Trigger     │                    Example                    │
+  ├────────────────┼───────────────────────────────────────────────┤
+  │ Lorem phrase   │ "Lorem ipsum dolor sit amet..."               │
+  ├────────────────┼───────────────────────────────────────────────┤
+  │ Dolor phrase   │ "...dolor sit amet consectetur..."            │
+  ├────────────────┼───────────────────────────────────────────────┤
+  │ 5+ lorem words │ Multiple lorem-family words scattered in text │
+  ├────────────────┼───────────────────────────────────────────────┤
+  │ TBD            │ "TBD" (case sensitive)                        │
+  ├────────────────┼───────────────────────────────────────────────┤
+  │ TODO           │ "TODO", "todo", "Todo"                        │
+  ├────────────────┼───────────────────────────────────────────────┤
+  │ PLACEHOLDER    │ "PLACEHOLDER" (any case)                      │
+  ├────────────────┼───────────────────────────────────────────────┤
+  │ Insert pattern │ "[Insert text here]", "[Insert name here]"    │
+  ├────────────────┼───────────────────────────────────────────────┤
+  │ Add pattern    │ "[Add content here]"                          │
+  ├────────────────┼───────────────────────────────────────────────┤
+  │ Your pattern   │ "[Your text here]"                            │
+  └────────────────┴───────────────────────────────────────────────┘
+  Ready for testing with your lorem ipsum test file.

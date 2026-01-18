@@ -534,6 +534,17 @@ const releaseRules = [
     sortOrder: 84,
     isOptional: true,
   },
+  {
+    code: 'PREFLIGHT_PLACEHOLDER_TEXT',
+    provider: 'ReleasePass',
+    category: 'Site Resources',
+    name: 'Placeholder Text Detected',
+    description: 'Page contains lorem ipsum, TBD, TODO, or other placeholder text that was not replaced with real content.',
+    severity: 'BLOCKER',
+    impact: 'Placeholder text indicates incomplete content and should never appear on production pages. This is a launch-blocking issue.',
+    fix: 'Replace all placeholder text (lorem ipsum, TBD, TODO, [Insert X here]) with actual content before publishing.',
+    sortOrder: 86,
+  },
 
   // =========================================================================
   // INTERNAL / ERROR CODES (4 rules)

@@ -49,6 +49,9 @@
  *
  * Batch 10: Inline Style rules (1 rule) - OPTIONAL
  * - PREFLIGHT_INLINE_CSS
+ *
+ * Batch 11: Placeholder Text rules (1 rule)
+ * - PREFLIGHT_PLACEHOLDER_TEXT
  */
 
 import * as cheerio from 'cheerio';
@@ -57,6 +60,43 @@ import type { Element } from 'domhandler';
 import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { fetchWithTimeout } from '../../lib/fetch';
 import { retryWithBackoff } from '../../lib/retry';
+
+// =============================================================================
+// Placeholder Text Detection Configuration
+// =============================================================================
+
+/**
+ * Configurable patterns for detecting placeholder/dummy text
+ * Edit these arrays to customize detection behavior
+ */
+const PLACEHOLDER_CONFIG = {
+  // Lorem ipsum phrase patterns - triggers immediately if found (case insensitive)
+  loremPhrases: [
+    /lorem\s+ipsum/i,
+    /dolor\s+sit\s+amet/i,
+  ],
+
+  // Lorem-family words - triggers if count >= threshold
+  loremWords: [
+    'lorem', 'ipsum', 'dolor', 'sit', 'amet',
+    'consectetur', 'adipiscing', 'elit', 'sed',
+    'eiusmod', 'tempor', 'incididunt', 'labore',
+    'dolore', 'magna', 'aliqua', 'enim', 'minim',
+    'veniam', 'quis', 'nostrud', 'exercitation',
+    'ullamco', 'laboris', 'nisi', 'aliquip',
+  ],
+  loremWordThreshold: 5,
+
+  // Other placeholder patterns - triggers immediately if found
+  placeholderPatterns: [
+    /\bTBD\b/,                        // TBD (exact, case sensitive - common acronym)
+    /\bTODO\b/i,                      // TODO
+    /\bPLACEHOLDER\b/i,               // PLACEHOLDER
+    /\[insert\s+.+?\s+here\]/i,       // [Insert X here]
+    /\[add\s+.+?\s+here\]/i,          // [Add X here]
+    /\[your\s+.+?\s+here\]/i,         // [Your X here]
+  ],
+};
 
 /**
  * Cached ReleaseRule data for severity lookup
@@ -143,6 +183,9 @@ export async function runCustomRules(
 
   // Batch 10: Inline Style rules (optional)
   results.push(...checkInlineStyleRules($, rulesMap));
+
+  // Batch 11: Placeholder Text rules (mandatory)
+  results.push(...checkPlaceholderTextRules($, rulesMap));
 
   return results;
 }
@@ -1747,6 +1790,164 @@ function checkInlineStyleRules(
         'PREFLIGHT_INLINE_CSS',
         'No inline styles found on content elements',
         {}
+      )
+    );
+  }
+
+  return results;
+}
+
+// =============================================================================
+// Placeholder Text Rules
+// =============================================================================
+
+interface PlaceholderDetectionResult {
+  detected: boolean;
+  matchType: 'lorem-phrase' | 'lorem-words' | 'placeholder-pattern' | null;
+  matches: string[];
+  loremWordCount: number;
+  textPreview: string;
+}
+
+/**
+ * Detect placeholder text in content
+ * Checks for lorem ipsum phrases, lorem-family word counts, and other placeholder patterns
+ */
+function detectPlaceholderText(text: string): PlaceholderDetectionResult {
+  const result: PlaceholderDetectionResult = {
+    detected: false,
+    matchType: null,
+    matches: [],
+    loremWordCount: 0,
+    textPreview: '',
+  };
+
+  // Check for lorem ipsum phrases first (highest confidence)
+  for (const pattern of PLACEHOLDER_CONFIG.loremPhrases) {
+    const match = text.match(pattern);
+    if (match) {
+      result.detected = true;
+      result.matchType = 'lorem-phrase';
+      result.matches.push(match[0]);
+      // Get context around the match
+      const matchIndex = match.index || 0;
+      result.textPreview = text.substring(matchIndex, matchIndex + 100).trim();
+      if (result.textPreview.length < text.substring(matchIndex).length) {
+        result.textPreview += '...';
+      }
+    }
+  }
+
+  // Check for other placeholder patterns
+  for (const pattern of PLACEHOLDER_CONFIG.placeholderPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      result.detected = true;
+      // Only override matchType if we haven't found lorem phrase
+      if (result.matchType !== 'lorem-phrase') {
+        result.matchType = 'placeholder-pattern';
+      }
+      if (!result.matches.includes(match[0])) {
+        result.matches.push(match[0]);
+      }
+      // Set preview if not already set
+      if (!result.textPreview) {
+        const matchIndex = match.index || 0;
+        result.textPreview = text.substring(matchIndex, matchIndex + 100).trim();
+        if (result.textPreview.length < text.substring(matchIndex).length) {
+          result.textPreview += '...';
+        }
+      }
+    }
+  }
+
+  // Count lorem-family words
+  const lowerText = text.toLowerCase();
+  for (const word of PLACEHOLDER_CONFIG.loremWords) {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    const matches = lowerText.match(regex);
+    if (matches) {
+      result.loremWordCount += matches.length;
+    }
+  }
+
+  // Check if lorem word count exceeds threshold
+  if (result.loremWordCount >= PLACEHOLDER_CONFIG.loremWordThreshold) {
+    result.detected = true;
+    // Only set matchType if not already set by phrase/pattern detection
+    if (!result.matchType) {
+      result.matchType = 'lorem-words';
+      result.matches.push(`${result.loremWordCount} lorem-family words found`);
+      // Get preview from start of text
+      result.textPreview = text.substring(0, 100).trim();
+      if (text.length > 100) {
+        result.textPreview += '...';
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Check placeholder text rules:
+ * - PREFLIGHT_PLACEHOLDER_TEXT: Detect lorem ipsum and other placeholder content
+ *
+ * Checks for:
+ * 1. Lorem ipsum phrases ("lorem ipsum", "dolor sit amet")
+ * 2. High concentration of lorem-family words (5+ words)
+ * 3. Common placeholder patterns (TBD, TODO, [Insert X here], etc.)
+ *
+ * This is a MANDATORY rule with BLOCKER severity.
+ */
+function checkPlaceholderTextRules(
+  $: CheerioAPI,
+  rulesMap: ReleaseRulesMap
+): ResultItemToCreate[] {
+  const results: ResultItemToCreate[] = [];
+
+  // Extract all visible text from body, including hidden elements
+  // (placeholder text shouldn't exist anywhere, even if hidden)
+  const bodyText = $('body').text() || '';
+
+  // Normalize whitespace for better pattern matching
+  const normalizedText = bodyText.replace(/\s+/g, ' ').trim();
+
+  if (!normalizedText) {
+    // Empty page - pass this check (other rules will catch empty content issues)
+    results.push(
+      createPass(
+        'PREFLIGHT_PLACEHOLDER_TEXT',
+        'No placeholder text detected',
+        { reason: 'empty-content' }
+      )
+    );
+    return results;
+  }
+
+  const detection = detectPlaceholderText(normalizedText);
+
+  if (detection.detected) {
+    results.push(
+      createFail(
+        'PREFLIGHT_PLACEHOLDER_TEXT',
+        `Placeholder text detected: ${detection.matches.slice(0, 3).join(', ')}`,
+        IssueSeverity.BLOCKER,
+        rulesMap,
+        {
+          matchType: detection.matchType,
+          matches: detection.matches,
+          loremWordCount: detection.loremWordCount,
+          textPreview: detection.textPreview,
+        }
+      )
+    );
+  } else {
+    results.push(
+      createPass(
+        'PREFLIGHT_PLACEHOLDER_TEXT',
+        'No placeholder text detected',
+        { loremWordCount: detection.loremWordCount }
       )
     );
   }

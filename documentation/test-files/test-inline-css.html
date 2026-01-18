@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Test page for inline CSS detection rule">
+  <title>Test Page - Inline CSS Detection</title>
+  <link rel="canonical" href="https://example.com/test-inline-css.html">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/public">Home</a>
+      <a href="/about">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Welcome to Our Company</h1>
+
+    <!-- Simulating Google Docs copy-paste mess -->
+    <p style="font-family: Arial; font-size: 11pt; color: rgb(0, 0, 0); line-height: 1.5;">
+      This paragraph was copied from Google Docs and has excessive inline styles that should be flagged.
+    </p>
+
+    <h2 style="font-weight: 700; color: #333333; margin-top: 20px;">Our Services</h2>
+
+    <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px;">
+      <p style="margin: 0; color: #666;">
+        We offer a wide range of <strong style="font-weight: bold; color: #000;">professional services</strong>
+        to help your business grow.
+      </p>
+    </div>
+
+    <span style="display: block; margin-top: 10px; font-style: italic; color: #999;">
+      Contact us today for a free consultation!
+    </span>
+
+    <!-- More Google Docs style formatting -->
+    <p style="font-family: 'Times New Roman'; font-size: 12pt; text-align: justify;">
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+      <em style="font-style: italic; color: #555;">Sed do eiusmod tempor</em> incididunt ut labore.
+    </p>
+
+    <h3 style="color: navy; text-decoration: underline;">Why Choose Us?</h3>
+
+    <ul>
+      <li style="color: #333; margin-bottom: 8px;">Experienced team of professionals</li>
+      <li style="color: #333; margin-bottom: 8px;">Competitive pricing</li>
+      <li style="color: #333; margin-bottom: 8px;">24/7 customer support</li>
+    </ul>
+
+    <blockquote style="border-left: 4px solid #ccc; padding-left: 16px; margin: 20px 0; font-style: italic; color: #666;">
+      "This company transformed our business!" - Happy Customer
+    </blockquote>
+
+    <table>
+      <tr>
+        <th style="background-color: #eee; padding: 10px; text-align: left;">Service</th>
+        <th style="background-color: #eee; padding: 10px; text-align: left;">Price</th>
+      </tr>
+      <tr>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">Basic Plan</td>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">$99/month</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">Pro Plan</td>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">$199/month</td>
+      </tr>
+    </table>
+
+    <section style="margin-top: 30px; padding: 20px; background: linear-gradient(to right, #f0f0f0, #fff);">
+      <h4>Get Started Today</h4>
+      <p>Fill out the form below:</p>
+      <label style="display: block; margin-bottom: 5px; font-weight: bold;">Email Address</label>
+      <input type="email" placeholder="you@example.com">
+    </section>
+
+    <article style="border: 1px solid #ddd; padding: 15px; margin-top: 20px;">
+      <h4>Latest News</h4>
+      <p style="color: #444; line-height: 1.6;">
+        We just launched our new <a href="/features" style="color: blue; text-decoration: underline;">features page</a>!
+      </p>
+    </article>
+
+    <aside style="float: right; width: 200px; padding: 10px; background: #fafafa;">
+      <p style="font-size: 12px; color: #888;">Advertisement placeholder</p>
+    </aside>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2024 Test Company</p>
+  </footer>
+</body>
+</html>

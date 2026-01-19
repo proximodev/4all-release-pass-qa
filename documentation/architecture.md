@@ -1,10 +1,10 @@
 # ReleasePass: Architecture & Technical Design
 
-**Last Updated**: December 20, 2024 (Release Run Model)
+**Last Updated**: January 19, 2025 (Company Model Implementation)
 
 This document describes the technical architecture, design decisions, and implementation patterns for the ReleasePass QA platform.
 
-For setup instructions, see `installation.md`. For functional requirements, see `functional-spec.md`. For implementation timeline, see `mvp-implementation-plan.md`.
+For setup instructions, see `installation.md`. For functional requirements, see `functional-spec.md`. For implementation timeline, see `requirements/mvp-implementation-plan.md`.
 
 ---
 
@@ -76,7 +76,7 @@ This ensures a single, versioned source of truth for the data model and consiste
 
 **Future Extensions**:
 - Additional roles (e.g., read-only)
-- Company → Project → User relationships for multi-tenant client access
+- Multi-tenant access control (Company → Project → User relationships exist, but access scoping not enforced in MVP - all admins see all data)
 
 The application maintains its own `User` table linked to Supabase Auth users via `supabaseUserId`, including a `role` field for future authorization logic.
 
@@ -888,15 +888,15 @@ export async function POST(
 - **Timestamps**: Every table includes `createdAt` and `updatedAt` fields
 - **Foreign keys**: Reference the `id` field of related entities with proper indexing
 - **ISO-8601 datetimes**: All date/time fields stored in this format
-- **Soft deletes where appropriate**: `Project` has `deletedAt` field for soft delete
+- **Soft deletes where appropriate**: `Project` and `Company` have `deletedAt` field for soft delete
 
 ### Core Entities
 
 See `prisma/schema.prisma` for complete schema. Key entities:
 
-- **Company** - Future multi-tenant support (placeholder only, not exposed in MVP)
-- **Project** - Sites being tested (name, siteUrl, sitemapUrl, notes)
-- **User** - Links to Supabase Auth via `supabaseUserId`, stores role metadata
+- **Company** - Organization container with soft delete support (name, url, isSystem flag for system companies like "Unassigned", deletedAt for soft delete). Settings UI available for CRUD operations. Deleting a company soft-deletes and reassigns its users/projects to the system "Unassigned" company.
+- **Project** - Sites being tested (name, siteUrl, sitemapUrl, notes, companyId). Belongs to a Company.
+- **User** - Links to Supabase Auth via `supabaseUserId`, stores role metadata and companyId. Belongs to a Company.
 - **ReleaseRun** - A frozen snapshot representing a single launch candidate; contains URL list, selected tests, and status (PENDING/READY/FAIL)
 - **TestRun** - Test execution records within a Release Run; has lifecycle states (QUEUED/RUNNING/SUCCESS/FAILED/PARTIAL), score (0-100), lastHeartbeat for stuck run detection
 - **TestRunConfig** - Stores URL selection for each test run (scope: CUSTOM_URLS, SITEMAP, or SINGLE_URL)
@@ -982,7 +982,7 @@ See `prisma/schema.prisma` for complete schema. Key entities:
 5. **Scheduled/webhook test triggers** — Manual only (v2.x)
 6. **Authentication for password-protected sites** — Public URLs only (v2.x)
 7. **JavaScript rendering for Custom Rules** — Static HTML only in MVP (v2.x)
-8. **Company entity exposure** — Placeholder only, no UI (v2.x)
+8. ~~**Company entity exposure**~~ — ✅ Implemented with full Settings UI (January 2025)
 9. **Utilities (Bulk Performance, HTML Cleaner, Bullshit Tester)** — Separate spec needed
 
 ### Future Roadmap
@@ -1001,7 +1001,7 @@ See `prisma/schema.prisma` for complete schema. Key entities:
 - Scheduled tests and webhook triggers
 - Authentication for password-protected sites
 - JavaScript rendering for Custom Rules (Playwright-based)
-- Multi-tenant company/project access control
+- Multi-tenant access control (company-scoped permissions, user can only see own company data)
 - Marketing/analytics checks
 - Accessibility scans (WCAG baseline)
 
@@ -1060,7 +1060,7 @@ All key architectural questions have been resolved:
 | 17 | Utilities | ✅ Marked as out-of-scope for MVP |
 | 18 | Email notifications | ✅ All admins, deferred preferences to v1.5 |
 | 19 | Test triggers | ✅ Manual only in MVP |
-| 20 | Company entity | ✅ Placeholder only, no UI |
+| 20 | Company entity | ✅ Full implementation with Settings UI |
 | 21 | ManualTestStatus history | ✅ Deferred to v1.5 |
 | 22 | Worker polling | ✅ 10-60s exponential backoff |
 | 23 | API rate limits | ✅ Retry strategy defined per provider |
@@ -1078,7 +1078,7 @@ All key architectural questions have been resolved:
 2. **Schema migration** (Priority 1):
    - Add LIGHTHOUSE, LINKINATOR, CUSTOM_RULE to IssueProvider enum
    - Run migration: `npx prisma migrate dev --name add_page_preflight_providers`
-3. **Begin Page Preflight implementation** following the plan in `mvp-implementation-plan.md`:
+3. **Begin Page Preflight implementation** following the plan in `requirements/mvp-implementation-plan.md`:
    - Week 1: Worker foundation (job claiming, heartbeat, retry logic)
    - Week 2: PageSpeed Lighthouse SEO integration
    - Week 3: Linkinator integration
@@ -1092,6 +1092,6 @@ All key architectural questions have been resolved:
 
 - **Setup Instructions**: See `installation.md`
 - **Functional Requirements**: See `functional-spec.md`
-- **Implementation Plan**: See `mvp-implementation-plan.md`
+- **Implementation Plan**: See `requirements/mvp-implementation-plan.md`
 - **Prisma Schema**: See `prisma/schema.prisma`
 - **Release Run Model Changes**: See `RELEASE-PASS-CHANGES.MD`

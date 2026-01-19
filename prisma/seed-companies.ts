@@ -25,9 +25,6 @@ const companies = [
 async function main() {
   console.log('Seeding Company table...\n')
 
-  // Create companies and track the default company ID
-  let defaultCompanyId: string | null = null
-
   for (const company of companies) {
     const result = await prisma.company.upsert({
       where: {
@@ -45,50 +42,10 @@ async function main() {
       },
     })
 
-    if (company.name === '4All Digital') {
-      defaultCompanyId = result.id
-    }
-
     console.log(`  ✓ Company: ${company.name} (${result.id})`)
   }
 
-  console.log(`\nSeeded ${companies.length} companies.\n`)
-
-  if (!defaultCompanyId) {
-    console.error('  ✗ Could not find default company ID')
-    return
-  }
-
-  // Update existing users without a company
-  const usersWithoutCompany = await prisma.user.count({
-    where: { companyId: null },
-  })
-
-  if (usersWithoutCompany > 0) {
-    const updateResult = await prisma.user.updateMany({
-      where: { companyId: null },
-      data: { companyId: defaultCompanyId },
-    })
-    console.log(`  ✓ Assigned ${updateResult.count} users to "4All Digital"`)
-  } else {
-    console.log('  - No users need company assignment')
-  }
-
-  // Update existing projects without a company
-  const projectsWithoutCompany = await prisma.project.count({
-    where: { companyId: null },
-  })
-
-  if (projectsWithoutCompany > 0) {
-    const updateResult = await prisma.project.updateMany({
-      where: { companyId: null },
-      data: { companyId: defaultCompanyId },
-    })
-    console.log(`  ✓ Assigned ${updateResult.count} projects to "4All Digital"`)
-  } else {
-    console.log('  - No projects need company assignment')
-  }
-
+  console.log(`\nSeeded ${companies.length} companies.`)
   console.log('\nDone!')
 }
 

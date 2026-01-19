@@ -46,7 +46,7 @@ export default function OptionalRulesSection({
 
         // For edit mode, initialize enabled state from API response
         if (projectId) {
-          const initialEnabled = new Set(
+          const initialEnabled = new Set<string>(
             data.filter((r: OptionalRule) => r.enabled).map((r: OptionalRule) => r.code)
           )
           setEnabledRules(initialEnabled)

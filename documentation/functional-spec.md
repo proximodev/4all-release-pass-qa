@@ -17,7 +17,7 @@
     - [Test Results Views](#test-results-views)
   - [Projects](#projects)
   - [Utilities](#utilities)
-  - [Settings (Users)](#settings-users)
+  - [Settings (Users & Companies)](#settings-users--companies)
   - [States & Edge Cases](#states--edge-cases)
 - [Functional Requirements](#functional-requirements)
   - [General](#general)
@@ -169,8 +169,12 @@ Bulk Performance, HTML Cleaner, and Bullshit Tester integrated into the authenti
 
 **NOTE**: Utilities are not part of MVP scope. Detailed specifications will be added in a future version.
 
-## Settings (Users)
-List, edit and add users.
+## Settings (Users & Companies)
+List, edit and add users and companies.
+
+**Users Tab**: Manage user accounts (name, email, company assignment, role).
+
+**Companies Tab**: Manage company records (name, URL). System companies (e.g., "Unassigned") cannot be deleted. Deleting a company soft-deletes it and reassigns its users and projects to the "Unassigned" company.
 
 [Back to top](#table-of-contents)
 
@@ -182,7 +186,7 @@ Empty states, no tests yet, partial failures, and manual review indicators are c
 # Functional Requirements
 ## General
 * The platform must provide a password-protected web interface using Supabase Auth with email+password login. All authenticated users are treated as admins in MVP.
-* A single shared data environment is used; Companies exist only as placeholders and are not exposed.
+* A single shared data environment is used. Companies are organizational containers but access control is not enforced in MVP (all admins see all data).
 * Project-based testing:
   * Project name
   * Primary site URL
@@ -302,15 +306,18 @@ Failed ResultItems include a `severity` field that determines score penalties:
 
 ### Tables
 
-* Company  (conceptual for future multi-tenant support; not exposed in MVP UI)
+* Company
   * id — UUID
   * name — string
+  * url — string (nullable; company website URL)
+  * isSystem — boolean (default: false; system companies like "Unassigned" cannot be deleted)
+  * deletedAt — datetime (nullable; soft delete timestamp)
   * createdAt — datetime
   * updatedAt — datetime
 
 * Project
   * id — UUID
-  * companyId — UUID (nullable in MVP; reserved for future Company linkage)
+  * companyId — UUID (FK to Company.id; required)
   * name — string
   * siteUrl — string
   * sitemapUrl — string (nullable)
@@ -343,6 +350,7 @@ Failed ResultItems include a `severity` field that determines score penalties:
 
 * Users
   * id — UUID
+  * companyId — UUID (FK to Company.id; required)
   * email — string (unique)
   * firstName — string (nullable)
   * lastName — string (nullable)

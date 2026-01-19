@@ -25,6 +25,16 @@ export async function syncUserAction() {
       return { success: true, alreadySynced: true }
     }
 
+    // Get default company for new users (MVP: single tenant)
+    const defaultCompany = await prisma.company.findFirst({
+      where: { name: '4All Digital' },
+    })
+
+    if (!defaultCompany) {
+      console.error('Default company not found - run seed-companies.ts')
+      return { success: false, error: 'System not configured' }
+    }
+
     // Upsert user in our database
     await prisma.user.upsert({
       where: { supabaseUserId: user.id },
@@ -36,6 +46,7 @@ export async function syncUserAction() {
         supabaseUserId: user.id,
         email: user.email!,
         role: 'ADMIN', // MVP: all users are admins
+        companyId: defaultCompany.id,
       },
     })
 

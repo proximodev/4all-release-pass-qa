@@ -1,0 +1,73 @@
+Requirement:
+Make updates to support company data model, which is currently in the database but not used. We will seed FK relationships on user and project.
+
+DB Updates:
+- Add column company.url
+- Add column project.companyid
+- Add column user.companyid
+
+Company Settings page:
+- Add new company setting page based on the layout of users
+- Add Company tab  Preflight Categoeies and before Users
+- Company page will default to listing view with type to filter and Add Company button (like users)
+- Listing will include company.name, company.url, company.created and action columns (with "edit" link)
+- Edit company will include company.name, company.url and Save, Cancel and Delete buttons
+- New company will include company.name, company.url and Create Company and Cancel
+
+User page:
+- Add company dropdown
+
+Projects page:
+- Add company dropdown (default to user.company)
+
+Seed first company:
+name: 4All Digital
+url: http://4all.digtal
+
+---
+
+Next steps:
+1 - Ask Questions
+2 - Finalize Requirements
+3 - Draft plan
+4 - Exec on approval
+
+----
+
+Database & Schema
+
+1. Are companyId fields required or nullable on User and Project?
+2. Should existing users/projects be assigned to the seeded "4All Digital" company, or left null?
+
+Company Settings Page:
+3. You mentioned "type to filter" - what types exist for companies, or did you mean "type to search/filter by name"?
+4. Delete behavior: hard delete or soft delete? What happens to users/projects linked to a deleted company?
+
+User & Project Pages:
+5. Is company selection required when creating/editing users and projects, or optional?
+6. For projects: if the current user has no company assigned, what should the default be?
+
+Validation:
+7. Should company URL be validated (format check)?
+8. Should company name be unique?
+
+Seed Data:
+9. I noticed http://4all.digtal - should this be https://4all.digital?
+
+Navigation:
+10. Confirm placement: Settings nav order will be Preflight Categories → Company → Users?
+
+--
+
+1 - required
+2 - "4All Digital"
+3 - "type to search/filter by name"
+4 - recommend. I am leaning soft. also, we don't want to delete the associated project data - maybe it can be reassigned some kind of permanent company
+5 - required
+6 - similar questions raised with #4. provide some options
+7 - yes - we have url validation here - app/(dashboard)/releasepass/preflight/new/page.tsx - can we use a shared validation for this? (hate to not be dry)
+8 - no
+9 - yes
+10 - yes
+
+--

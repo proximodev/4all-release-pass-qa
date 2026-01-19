@@ -14,6 +14,7 @@ const updateUserSchema = z.object({
   lastName: z.string().min(1, 'Last name is required').optional(),
   email: z.string().email('Invalid email address').optional(),
   role: z.enum(['ADMIN']).optional(),
+  companyId: z.string().uuid('Company is required').optional(),
 })
 
 /**
@@ -38,6 +39,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         firstName: true,
         lastName: true,
         role: true,
+        companyId: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         createdAt: true,
         updatedAt: true,
       },
@@ -92,7 +100,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const { firstName, lastName, email, role } = validation.data
+    const { firstName, lastName, email, role, companyId } = validation.data
 
     // If email is changing, check it's not already taken
     if (email && email !== existingUser.email) {
@@ -133,6 +141,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(lastName !== undefined && { lastName }),
         ...(email !== undefined && { email }),
         ...(role !== undefined && { role }),
+        ...(companyId !== undefined && { companyId }),
       },
       select: {
         id: true,
@@ -140,6 +149,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         firstName: true,
         lastName: true,
         role: true,
+        companyId: true,
         createdAt: true,
         updatedAt: true,
       },

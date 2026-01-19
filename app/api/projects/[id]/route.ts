@@ -29,6 +29,14 @@ export async function GET(
         id,
         deletedAt: null,
       },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
     })
 
     if (!project) {

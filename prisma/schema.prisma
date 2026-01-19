@@ -104,24 +104,31 @@ enum ResultStatus {
 /// ---- CORE ENTITIES ----
 
 model Company {
-  id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name String
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name     String
+  url      String?
+  isSystem Boolean @default(false) // System companies (e.g., "Unassigned") cannot be deleted
 
   projects Project[]
+  users    User[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft delete
+
+  @@index([deletedAt])
+  @@index([isSystem])
 }
 
 model Project {
-  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId  String? @db.Uuid
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId  String @db.Uuid
   name       String
   siteUrl    String
   sitemapUrl String?
   notes      String?
 
-  company        Company?              @relation(fields: [companyId], references: [id])
+  company        Company               @relation(fields: [companyId], references: [id])
   releaseRuns    ReleaseRun[]
   testRuns       TestRun[]
   screenshotSets ScreenshotSet[]
@@ -145,13 +152,16 @@ model User {
   lastName       String?
   role           UserRole @default(ADMIN)
   supabaseUserId String   @unique @db.Uuid
+  companyId      String   @db.Uuid
 
+  company            Company            @relation(fields: [companyId], references: [id])
   manualTestStatuses ManualTestStatus[] @relation("ManualStatusUpdatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([supabaseUserId])
+  @@index([companyId])
 }
 
 /// A frozen snapshot representing a single launch candidate

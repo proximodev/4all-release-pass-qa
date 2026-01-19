@@ -100,3 +100,29 @@ export const safeUrlSchema = z
 export const safeUrlArraySchema = z
   .array(safeUrlSchema)
   .min(1, 'At least one URL is required')
+
+/**
+ * Validate that a URL uses HTTP or HTTPS protocol
+ * Simpler than safeUrlSchema - for display URLs like company websites
+ */
+export function isValidHttpUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString)
+    return ['http:', 'https:'].includes(url.protocol)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Zod schema for company URL (optional, display-only)
+ * Less strict than safeUrlSchema - just validates HTTP/HTTPS format
+ */
+export const companyUrlSchema = z
+  .string()
+  .transform((val) => val.trim())
+  .refine((val) => val === '' || isValidHttpUrl(val), {
+    message: 'URL must be a valid HTTP or HTTPS address',
+  })
+  .optional()
+  .or(z.literal(''))

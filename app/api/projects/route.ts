@@ -18,12 +18,9 @@ export async function POST(request: NextRequest) {
 
     // Create project with optional rules in a transaction
     const project = await prisma.$transaction(async (tx) => {
-      // Create project (companyId null for MVP)
+      // Create project
       const newProject = await tx.project.create({
-        data: {
-          ...validatedData,
-          companyId: null,
-        },
+        data: validatedData,
       })
 
       // Create ProjectOptionalRule records for enabled optional rules
@@ -72,6 +69,14 @@ export async function GET(request: NextRequest) {
     const projects = await prisma.project.findMany({
       where: {
         deletedAt: null,
+      },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',

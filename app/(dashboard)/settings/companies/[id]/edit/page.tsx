@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import Card from '@/components/ui/card/Card'
 import Button from '@/components/ui/button/Button'
 import Input from '@/components/ui/input/Input'
-import Select from '@/components/ui/select/Select'
 import PageContainer from '@/components/layout/PageContainer'
 import TabPanel from '@/components/layout/TabPanel'
 import Tabs from '@/components/ui/tabs/Tabs'
@@ -16,35 +15,24 @@ import { settingsTabs } from '@/lib/constants/navigation'
 interface Company {
   id: string
   name: string
-  isSystem: boolean
-}
-
-interface User {
-  id: string
-  email: string
-  firstName: string | null
-  lastName: string | null
-  role: string
-  companyId: string
+  url: string | null
   createdAt: string
   updatedAt: string
+  _count: {
+    users: number
+    projects: number
+  }
 }
 
-interface UserEditPageProps {
+interface CompanyEditPageProps {
   params: Promise<{ id: string }>
 }
 
-const roleOptions = [
-  { value: 'ADMIN', label: 'Admin' },
-]
-
-export default function UserEditPage({ params }: UserEditPageProps) {
+export default function CompanyEditPage({ params }: CompanyEditPageProps) {
   const router = useRouter()
-  const [userId, setUserId] = useState<string | null>(null)
-  const [user, setUser] = useState<User | null>(null)
-  const [companies, setCompanies] = useState<Company[]>([])
+  const [companyId, setCompanyId] = useState<string | null>(null)
+  const [company, setCompany] = useState<Company | null>(null)
   const [loading, setLoading] = useState(true)
-  const [loadingCompanies, setLoadingCompanies] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -52,43 +40,23 @@ export default function UserEditPage({ params }: UserEditPageProps) {
 
   useEffect(() => {
     params.then(({ id }) => {
-      setUserId(id)
-      fetchUser(id)
+      setCompanyId(id)
+      fetchCompany(id)
     })
-    fetchCompanies()
   }, [params])
 
-  const fetchCompanies = async () => {
+  const fetchCompany = async (id: string) => {
     try {
-      const res = await fetch('/api/companies/dropdown')
-      if (res.ok) {
-        const data = await res.json()
-        setCompanies(data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch companies:', error)
-    } finally {
-      setLoadingCompanies(false)
-    }
-  }
-
-  const companyOptions = companies.map(c => ({
-    value: c.id,
-    label: c.name,
-  }))
-
-  const fetchUser = async (id: string) => {
-    try {
-      const res = await fetch(`/api/users/${id}`)
+      const res = await fetch(`/api/companies/${id}`)
 
       if (!res.ok) {
-        setErrors({ general: 'Failed to load user' })
+        setErrors({ general: 'Failed to load company' })
         return
       }
 
       const data = await res.json()
-      setUser(data)
-    } catch (error) {
+      setCompany(data)
+    } catch {
       setErrors({ general: 'An unexpected error occurred' })
     } finally {
       setLoading(false)
@@ -97,22 +65,19 @@ export default function UserEditPage({ params }: UserEditPageProps) {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!userId) return
+    if (!companyId) return
 
     setSaving(true)
     setErrors({})
 
     const formData = new FormData(e.currentTarget)
     const data = {
-      firstName: formData.get('firstName') as string,
-      lastName: formData.get('lastName') as string,
-      email: formData.get('email') as string,
-      role: formData.get('role') as string,
-      companyId: formData.get('companyId') as string,
+      name: formData.get('name') as string,
+      url: formData.get('url') as string,
     }
 
     try {
-      const res = await fetch(`/api/users/${userId}`, {
+      const res = await fetch(`/api/companies/${companyId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -122,18 +87,18 @@ export default function UserEditPage({ params }: UserEditPageProps) {
         const error = await res.json()
         if (Array.isArray(error.error)) {
           const errorMap: Record<string, string> = {}
-          error.error.forEach((err: any) => {
+          error.error.forEach((err: { path: string[]; message: string }) => {
             errorMap[err.path[0]] = err.message
           })
           setErrors(errorMap)
         } else {
-          setErrors({ general: error.error || 'Failed to update user' })
+          setErrors({ general: error.error || 'Failed to update company' })
         }
         return
       }
 
-      router.push('/settings/users')
-    } catch (error) {
+      router.push('/settings/companies')
+    } catch {
       setErrors({ general: 'An unexpected error occurred' })
     } finally {
       setSaving(false)
@@ -141,25 +106,25 @@ export default function UserEditPage({ params }: UserEditPageProps) {
   }
 
   const handleDelete = async () => {
-    if (!userId) return
+    if (!companyId) return
 
     setDeleting(true)
 
     try {
-      const res = await fetch(`/api/users/${userId}`, {
+      const res = await fetch(`/api/companies/${companyId}`, {
         method: 'DELETE',
       })
 
       if (!res.ok) {
         const error = await res.json()
-        setErrors({ general: error.error || 'Failed to delete user' })
+        setErrors({ general: error.error || 'Failed to delete company' })
         setDeleting(false)
         setShowDeleteConfirm(false)
         return
       }
 
-      router.push('/settings/users')
-    } catch (error) {
+      router.push('/settings/companies')
+    } catch {
       setErrors({ general: 'An unexpected error occurred' })
       setDeleting(false)
       setShowDeleteConfirm(false)
@@ -172,23 +137,23 @@ export default function UserEditPage({ params }: UserEditPageProps) {
         <Tabs tabs={settingsTabs} />
         <TabPanel>
           <div className="flex justify-center items-center py-12">
-            <p>Loading user...</p>
+            <p>Loading company...</p>
           </div>
         </TabPanel>
       </PageContainer>
     )
   }
 
-  if (!user) {
+  if (!company) {
     return (
       <PageContainer>
         <Tabs tabs={settingsTabs} />
         <TabPanel>
           <Card title="Error">
             <div className="space-y-4">
-              <p>{errors.general || 'User not found'}</p>
-              <Button onClick={() => router.push('/settings/users')}>
-                Back to Users
+              <p>{errors.general || 'Company not found'}</p>
+              <Button onClick={() => router.push('/settings/companies')}>
+                Back to Companies
               </Button>
             </div>
           </Card>
@@ -197,17 +162,13 @@ export default function UserEditPage({ params }: UserEditPageProps) {
     )
   }
 
-  const userName = user.firstName || user.lastName
-    ? `${user.firstName || ''} ${user.lastName || ''}`.trim()
-    : user.email
-
   return (
     <PageContainer>
       <Tabs tabs={settingsTabs} />
       <TabPanel>
         <TwoColumnGrid>
           <FormContainer>
-            <Card title={`Edit: ${userName}`}>
+            <Card title={`Edit: ${company.name}`}>
               <form onSubmit={handleSubmit} className="space-y-4">
                 {errors.general && (
                   <div className="bg-red/10 border border-red text-red p-3 rounded">
@@ -216,48 +177,21 @@ export default function UserEditPage({ params }: UserEditPageProps) {
                 )}
 
                 <Input
-                  label="First Name"
-                  name="firstName"
-                  placeholder="John"
+                  label="Company Name"
+                  name="name"
+                  placeholder="Acme Corporation"
                   required
-                  defaultValue={user.firstName || ''}
-                  error={errors.firstName}
+                  defaultValue={company.name}
+                  error={errors.name}
                 />
 
                 <Input
-                  label="Last Name"
-                  name="lastName"
-                  placeholder="Doe"
-                  required
-                  defaultValue={user.lastName || ''}
-                  error={errors.lastName}
-                />
-
-                <Select
-                    label="Company"
-                    name="companyId"
-                    options={companyOptions}
-                    defaultValue={user.companyId}
-                    disabled={loadingCompanies}
-                    error={errors.companyId}
-                />
-
-                <Input
-                  label="Email"
-                  name="email"
-                  type="email"
-                  placeholder="john.doe@example.com"
-                  required
-                  defaultValue={user.email}
-                  error={errors.email}
-                />
-
-                <Select
-                    label="Role"
-                    name="role"
-                    options={roleOptions}
-                    defaultValue={user.role}
-                    error={errors.role}
+                  label="Website URL"
+                  name="url"
+                  type="url"
+                  placeholder="https://example.com"
+                  defaultValue={company.url || ''}
+                  error={errors.url}
                 />
 
                 <div className="flex items-center justify-between pt-4 border-t border-medium-gray">
@@ -268,7 +202,7 @@ export default function UserEditPage({ params }: UserEditPageProps) {
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => router.push('/settings/users')}
+                      onClick={() => router.push('/settings/companies')}
                     >
                       Cancel
                     </Button>
@@ -280,7 +214,7 @@ export default function UserEditPage({ params }: UserEditPageProps) {
                     onClick={() => setShowDeleteConfirm(true)}
                     disabled={deleting}
                   >
-                    Delete User
+                    Delete Company
                   </Button>
                 </div>
               </form>
@@ -290,11 +224,15 @@ export default function UserEditPage({ params }: UserEditPageProps) {
             {showDeleteConfirm && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                 <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                  <h3>Confirm Deletion</h3>
+                  <h3 className="text-lg font-medium mb-2">Confirm Deletion</h3>
                   <p className="mb-4">
-                    Are you sure you want to delete <strong>{userName}</strong>?
-                    This action cannot be undone and will also remove their authentication account.
+                    Are you sure you want to delete <strong>{company.name}</strong>?
                   </p>
+                  {(company._count.users > 0 || company._count.projects > 0) && (
+                    <p className="mb-4 text-amber-700 bg-amber-50 p-3 rounded">
+                      This will reassign {company._count.users} user(s) and {company._count.projects} project(s) to the &quot;Unassigned&quot; company.
+                    </p>
+                  )}
                   <div className="flex items-center justify-end space-x-4">
                     <Button
                       variant="secondary"
@@ -307,7 +245,7 @@ export default function UserEditPage({ params }: UserEditPageProps) {
                       onClick={handleDelete}
                       disabled={deleting}
                     >
-                      {deleting ? 'Deleting...' : 'Delete User'}
+                      {deleting ? 'Deleting...' : 'Delete Company'}
                     </Button>
                   </div>
                 </div>

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 
+const STORAGE_KEY = 'releasepass_last_project'
+
 interface Project {
   id: string
   name: string
@@ -19,17 +21,54 @@ export default function ProjectSelectorWithAdd({ onProjectChange }: ProjectSelec
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedProject, setSelectedProject] = useState<string>('')
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
 
   useEffect(() => {
     fetchProjects()
   }, [])
 
+  // Handle initial project selection from URL or localStorage
   useEffect(() => {
+    if (loading || initialLoadDone) return
+
+    const urlProjectId = searchParams.get('project')
+
+    if (urlProjectId) {
+      // URL param takes precedence
+      setSelectedProject(urlProjectId)
+      onProjectChange?.(urlProjectId)
+    } else {
+      // Check localStorage for saved project
+      const savedProjectId = localStorage.getItem(STORAGE_KEY)
+      if (savedProjectId) {
+        // Verify the saved project still exists
+        const projectExists = projects.some(p => p.id === savedProjectId)
+        if (projectExists) {
+          setSelectedProject(savedProjectId)
+          onProjectChange?.(savedProjectId)
+          // Update URL to reflect the selection
+          const params = new URLSearchParams(searchParams.toString())
+          params.set('project', savedProjectId)
+          router.replace(`${pathname}?${params.toString()}`)
+        } else {
+          // Project no longer exists, clear localStorage
+          localStorage.removeItem(STORAGE_KEY)
+        }
+      }
+    }
+
+    setInitialLoadDone(true)
+  }, [loading, projects, searchParams, initialLoadDone, pathname, router, onProjectChange])
+
+  // Handle URL changes after initial load
+  useEffect(() => {
+    if (!initialLoadDone) return
+
     const projectId = searchParams.get('project')
     if (projectId) {
       setSelectedProject(projectId)
     }
-  }, [searchParams])
+  }, [searchParams, initialLoadDone])
 
   const fetchProjects = async () => {
     try {
@@ -57,6 +96,13 @@ export default function ProjectSelectorWithAdd({ onProjectChange }: ProjectSelec
 
     setSelectedProject(value)
     onProjectChange?.(value || null)
+
+    // Save to localStorage (or clear if deselected)
+    if (value) {
+      localStorage.setItem(STORAGE_KEY, value)
+    } else {
+      localStorage.removeItem(STORAGE_KEY)
+    }
 
     // Update URL with project query parameter
     const params = new URLSearchParams(searchParams.toString())

@@ -6,6 +6,7 @@ import Card from '@/components/ui/card/Card'
 import Button from '@/components/ui/button/Button'
 import Input from '@/components/ui/input/Input'
 import Textarea from '@/components/ui/textarea/Textarea'
+import Select from '@/components/ui/select/Select'
 import FormContainer from '@/components/layout/FormContainer'
 import Tabs from '@/components/ui/tabs/Tabs'
 import { projectTabs } from '@/lib/constants/navigation'
@@ -13,12 +14,19 @@ import TwoColumnGrid from '@/components/layout/TwoColumnGrid'
 import PageContainer from '@/components/layout/PageContainer'
 import OptionalRulesSection from '@/components/projects/OptionalRulesSection'
 
+interface Company {
+  id: string
+  name: string
+  isSystem: boolean
+}
+
 interface Project {
   id: string
   name: string
   siteUrl: string
   sitemapUrl: string
   notes: string | null
+  companyId: string
   createdAt: string
   updatedAt: string
 }
@@ -31,7 +39,9 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
   const router = useRouter()
   const [projectId, setProjectId] = useState<string | null>(null)
   const [project, setProject] = useState<Project | null>(null)
+  const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingCompanies, setLoadingCompanies] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -43,7 +53,27 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       setProjectId(id)
       fetchProject(id)
     })
+    fetchCompanies()
   }, [params])
+
+  const fetchCompanies = async () => {
+    try {
+      const res = await fetch('/api/companies/dropdown')
+      if (res.ok) {
+        const data = await res.json()
+        setCompanies(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch companies:', error)
+    } finally {
+      setLoadingCompanies(false)
+    }
+  }
+
+  const companyOptions = companies.map(c => ({
+    value: c.id,
+    label: c.name,
+  }))
 
   const fetchProject = async (id: string) => {
     try {
@@ -76,6 +106,7 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
       siteUrl: formData.get('siteUrl') as string,
       sitemapUrl: formData.get('sitemapUrl') as string,
       notes: formData.get('notes') as string,
+      companyId: formData.get('companyId') as string,
       enabledOptionalRules: enabledRules,
     }
 
@@ -178,6 +209,15 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
               )}
 
               <h3>Project Information</h3>
+
+              <Select
+                label="Company"
+                name="companyId"
+                options={companyOptions}
+                defaultValue={project.companyId}
+                disabled={loadingCompanies}
+                error={errors.companyId}
+              />
 
               <Input
                 label="Project Name"

@@ -9,6 +9,7 @@ const createUserSchema = z.object({
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Invalid email address'),
   role: z.enum(['ADMIN']),
+  companyId: z.string().uuid('Company is required'),
 })
 
 /**
@@ -28,6 +29,13 @@ export async function GET() {
         lastName: true,
         role: true,
         createdAt: true,
+        companyId: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     })
 
@@ -64,7 +72,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { firstName, lastName, email, role } = validation.data
+    const { firstName, lastName, email, role, companyId } = validation.data
 
     // Check if user already exists in our database
     const existingUser = await prisma.user.findUnique({
@@ -113,6 +121,7 @@ export async function POST(request: NextRequest) {
         firstName,
         lastName,
         role,
+        companyId,
         supabaseUserId: authUser.user.id,
       },
       select: {
@@ -121,6 +130,7 @@ export async function POST(request: NextRequest) {
         firstName: true,
         lastName: true,
         role: true,
+        companyId: true,
         createdAt: true,
       },
     })

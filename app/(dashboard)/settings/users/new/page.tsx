@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Card from '@/components/ui/card/Card'
 import Button from '@/components/ui/button/Button'
@@ -13,6 +13,12 @@ import FormContainer from '@/components/layout/FormContainer'
 import TwoColumnGrid from '@/components/layout/TwoColumnGrid'
 import { settingsTabs } from '@/lib/constants/navigation'
 
+interface Company {
+  id: string
+  name: string
+  isSystem: boolean
+}
+
 const roleOptions = [
   { value: 'ADMIN', label: 'Admin' },
 ]
@@ -21,6 +27,31 @@ export default function NewUserPage() {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [loadingCompanies, setLoadingCompanies] = useState(true)
+
+  useEffect(() => {
+    fetchCompanies()
+  }, [])
+
+  const fetchCompanies = async () => {
+    try {
+      const res = await fetch('/api/companies/dropdown')
+      if (res.ok) {
+        const data = await res.json()
+        setCompanies(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch companies:', error)
+    } finally {
+      setLoadingCompanies(false)
+    }
+  }
+
+  const companyOptions = companies.map(c => ({
+    value: c.id,
+    label: c.name,
+  }))
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -33,6 +64,7 @@ export default function NewUserPage() {
       lastName: formData.get('lastName') as string,
       email: formData.get('email') as string,
       role: formData.get('role') as string,
+      companyId: formData.get('companyId') as string,
     }
 
     try {
@@ -109,6 +141,15 @@ export default function NewUserPage() {
                   options={roleOptions}
                   defaultValue="ADMIN"
                   error={errors.role}
+                />
+
+                <Select
+                  label="Company"
+                  name="companyId"
+                  options={companyOptions}
+                  defaultValue={companies[0]?.id || ''}
+                  disabled={loadingCompanies}
+                  error={errors.companyId}
                 />
 
                 <div className="flex items-center space-x-4 pt-4 border-t border-medium-gray">

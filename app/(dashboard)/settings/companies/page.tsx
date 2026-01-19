@@ -9,55 +9,44 @@ import TabPanel from '@/components/layout/TabPanel'
 import Tabs from '@/components/ui/tabs/Tabs'
 import { settingsTabs } from '@/lib/constants/navigation'
 
-interface User {
+interface Company {
   id: string
-  email: string
-  firstName: string | null
-  lastName: string | null
-  role: string
-  companyId: string
-  company: {
-    id: string
-    name: string
-  } | null
+  name: string
+  url: string | null
   createdAt: string
+  _count: {
+    users: number
+    projects: number
+  }
 }
 
-export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>([])
+export default function CompaniesPage() {
+  const [companies, setCompanies] = useState<Company[]>([])
   const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchUsers()
+    fetchCompanies()
   }, [])
 
-  const fetchUsers = async () => {
+  const fetchCompanies = async () => {
     try {
-      const res = await fetch('/api/users')
+      const res = await fetch('/api/companies')
       if (res.ok) {
         const data = await res.json()
-        setUsers(data)
+        setCompanies(data)
       }
     } catch (error) {
-      console.error('Failed to fetch users:', error)
+      console.error('Failed to fetch companies:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const filteredUsers = users.filter(user => {
-    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase()
+  const filteredCompanies = companies.filter(company => {
     const searchTerm = filter.toLowerCase()
-    return fullName.includes(searchTerm) || user.email.toLowerCase().includes(searchTerm)
+    return company.name.toLowerCase().includes(searchTerm)
   })
-
-  const formatName = (user: User) => {
-    if (user.firstName || user.lastName) {
-      return `${user.firstName || ''} ${user.lastName || ''}`.trim()
-    }
-    return '—'
-  }
 
   return (
     <PageContainer>
@@ -71,17 +60,17 @@ export default function UsersPage() {
             onChange={(e) => setFilter(e.target.value)}
             className="px-4 py-2 border border-medium-gray rounded w-full max-w-md"
           />
-          <Link href="/settings/users/new">
-            <Button>Add User</Button>
+          <Link href="/settings/companies/new">
+            <Button>Add Company</Button>
           </Link>
         </div>
 
         <Card>
           {loading ? (
-            <p>Loading users...</p>
-          ) : filteredUsers.length === 0 ? (
+            <p>Loading companies...</p>
+          ) : filteredCompanies.length === 0 ? (
             <p>
-              {filter ? 'No users match your filter.' : 'No users yet. Add your first user to get started.'}
+              {filter ? 'No companies match your filter.' : 'No companies yet. Add your first company to get started.'}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -89,25 +78,34 @@ export default function UsersPage() {
                 <thead>
                   <tr className="border-b border-medium-gray text-left">
                     <th className="pb-3 font-medium">Name</th>
-                    <th className="pb-3 font-medium">Email</th>
-                    <th className="pb-3 font-medium">Company</th>
-                    <th className="pb-3 font-medium">Role</th>
+                    <th className="pb-3 font-medium">URL</th>
                     <th className="pb-3 font-medium">Created</th>
                     <th className="pb-3 font-medium text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.map((user) => (
-                    <tr key={user.id} className="border-b border-medium-gray/50">
-                      <td className="py-4">{formatName(user)}</td>
-                      <td className="py-4">{user.email}</td>
-                      <td className="py-4">{user.company?.name || '—'}</td>
-                      <td className="py-4">{user.role}</td>
+                  {filteredCompanies.map((company) => (
+                    <tr key={company.id} className="border-b border-medium-gray/50">
+                      <td className="py-4">{company.name}</td>
                       <td className="py-4">
-                        {new Date(user.createdAt).toLocaleDateString()}
+                        {company.url ? (
+                          <a
+                            href={company.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {company.url}
+                          </a>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="py-4">
+                        {new Date(company.createdAt).toLocaleDateString()}
                       </td>
                       <td className="py-4 text-right">
-                        <Link href={`/settings/users/${user.id}/edit`}>
+                        <Link href={`/settings/companies/${company.id}/edit`}>
                           <Button variant="secondary">Edit</Button>
                         </Link>
                       </td>

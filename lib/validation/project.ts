@@ -5,6 +5,7 @@ export const projectSchema = z.object({
   siteUrl: z.string().url('Site URL must be a valid URL'),
   sitemapUrl: z.string().url('Sitemap URL must be a valid URL'),
   notes: z.string().optional(),
+  companyId: z.string().uuid('Company is required'),
 })
 
 export type ProjectInput = z.infer<typeof projectSchema>

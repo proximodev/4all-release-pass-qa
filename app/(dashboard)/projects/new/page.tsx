@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Card from '@/components/ui/card/Card'
 import Button from '@/components/ui/button/Button'
 import Input from '@/components/ui/input/Input'
 import Textarea from '@/components/ui/textarea/Textarea'
+import Select from '@/components/ui/select/Select'
 import FormContainer from '@/components/layout/FormContainer'
 import Tabs from "@/components/ui/tabs/Tabs"
 import { projectTabs } from "@/lib/constants/navigation"
@@ -13,11 +14,42 @@ import TwoColumnGrid from "@/components/layout/TwoColumnGrid"
 import PageContainer from "@/components/layout/PageContainer"
 import OptionalRulesSection from "@/components/projects/OptionalRulesSection"
 
+interface Company {
+  id: string
+  name: string
+  isSystem: boolean
+}
+
 export default function NewProjectPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [enabledRules, setEnabledRules] = useState<string[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [loadingCompanies, setLoadingCompanies] = useState(true)
+
+  useEffect(() => {
+    fetchCompanies()
+  }, [])
+
+  const fetchCompanies = async () => {
+    try {
+      const res = await fetch('/api/companies/dropdown')
+      if (res.ok) {
+        const data = await res.json()
+        setCompanies(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch companies:', error)
+    } finally {
+      setLoadingCompanies(false)
+    }
+  }
+
+  const companyOptions = companies.map(c => ({
+    value: c.id,
+    label: c.name,
+  }))
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -30,6 +62,7 @@ export default function NewProjectPage() {
       siteUrl: formData.get('siteUrl') as string,
       sitemapUrl: formData.get('sitemapUrl') as string,
       notes: formData.get('notes') as string,
+      companyId: formData.get('companyId') as string,
       enabledOptionalRules: enabledRules,
     }
 
@@ -78,6 +111,15 @@ export default function NewProjectPage() {
               )}
 
               <h3>Project Information</h3>
+
+              <Select
+                label="Company"
+                name="companyId"
+                options={companyOptions}
+                defaultValue={companies[0]?.id || ''}
+                disabled={loadingCompanies}
+                error={errors.companyId}
+              />
 
               <Input
                 label="Project Name"

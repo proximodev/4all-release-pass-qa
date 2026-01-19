@@ -1,0 +1,227 @@
+Custom Rule: Image Title Tag Cleanup  (DRAFT)
+---------------------------------------------
+
+Requirement:
+------------
+Goal: Prevent images from showing meaningless hover tooltips caused by CMSs (especially WordPress) auto-populating the image title attribute with the uploaded filename or filename-derived text.
+
+What to Detect: On any page being tested, flag any <img> element where:
+- A title attribute exists AND
+- The title value is derived from the image filename (from the src URL), or is otherwise filename-like / auto-generated junk
+
+Extract the image filename from src (ignore path + querystring) and compare it to the title.
+
+Detection Logic (Tiered):
+-------------------------
+
+* Tier 1 — Filename-Derived Title (Primary) *
+
+Extract the image filename from src (ignore path + querystring) and compare it to the title.
+FAIL if:
+- normalize(title) == normalize(filename_from_src)
+
+Normalization rules should:
+- lowercase both values
+- remove file extensions (.jpg, .png, .webp, etc.)
+- replace separators (-, _) with spaces
+- collapse multiple spaces
+- strip punctuation/special characters
+
+Examples that should FAIL:
+- src: /uploads/team-photo-final-2.jpg + title: "team photo final 2"
+- src: /uploads/IMG_4920.jpg + title: "IMG_4920"
+- src: /uploads/screen-shot-2025-01-11-at-3-22-10-pm.png + title: "Screen shot 2025 01 11 at 3 22 10 pm"
+
+Expected Behavior / Pass Criteria
+
+An image passes this rule if:
+- It has no title attribute, OR
+- It has a title attribute with human-readable, meaningful text (not a filename)
+
+* Tier 2 — Filename-Like / Auto-Generated Title (Proposed / Phase 2) *
+Even if the title doesn’t match the src filename, flag it if it clearly looks like a filename or upload artifact.
+
+FAIL if title matches any of these signals:
+- contains a file extension (.jpg, .jpeg, .png, .gif, .webp, .svg)
+- begins with common camera patterns like IMG_, DSC_, PXL_
+- contains timestamp-style tokens (e.g., 2025-01-11, 3-22-10-pm)
+- is a generic placeholder like "image", "untitled", "photo1"
+
+Output:
+For each failure, report:
+
+- Page URL
+- Image source (src)
+- Current title value
+
+Severity: Medium (UX polish issue; not a functional blocker, but a common quality miss)
+
+
+----
+
+  Tier 1 — Filename-Derived Title
+  Verdict: Build it. This is reliable and low false-positive.
+  The normalization logic is sound. One edge case to consider:
+  - Partial filename matches - Should title="team photo" fail if src="team-photo-final-2.jpg"? Current spec requires exact match after normalization, which is safer.
+
+  Tier 2 — Filename-Like Patterns
+
+  Verdict: Worth building, but selectively.
+  ┌────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────┐
+  │                Pattern                 │                              Recommendation                               │
+  ├────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────┤
+  │ Contains file extension (.jpg, .png)   │ Yes - Very reliable signal, almost never intentional                      │
+  ├────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────┤
+  │ Camera prefixes (IMG_, DSC_, PXL_)     │ Yes - Clear auto-generated junk                                           │
+  ├────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────┤
+  │ Timestamp patterns                     │ Maybe - Risk of false positives (e.g., "Event 2025-01-11" could be valid) │
+  ├────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────┤
+  │ Generic placeholders (image, untitled) │ Yes - but keep list tight to avoid false positives                        │
+  └────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────────┘
+  Suggested Tier 2 approach: Build extension + camera prefix detection now. Hold on timestamp patterns unless you're seeing them frequently in the wild.
+
+  Questions:
+
+  1. Scope - Should this check images inside <figure> with <figcaption> differently? A filename title is less impactful when there's a visible caption.
+  2. Empty title - Should title="" pass or fail? (Current spec says pass since it's "no title")
+  3. Severity - You have MEDIUM. Should this be optional by default since it's UX polish, not SEO-critical?
+
+---
+
+Answers:
+1 - No, let's not include that
+2 - I think an empty title is fine
+3 - it will be an optional rule with severity medium (possibly high)
+
+Next steps:
+1 - Ask followup questions
+2 - Finalize rule logic
+3 - Draft a plan
+4 - Execute on approval
+
+---
+
+Questions:
+1. Tier 2 scope - Based on my analysis, do you want to include:
+- File extensions in title (.jpg, .png, etc.) - Recommended                                                                     - Camera prefixes (IMG_, DSC_, PXL_, DCIM_) - Recommended                                                                      - Timestamp patterns - Hold for now?
+- Generic placeholders (image, untitled, photo1) - Include?
+
+2. Rule code naming - Suggestions:
+- IMAGE_TITLE_FILENAME (Tier 1)
+- IMAGE_TITLE_AUTOGENERATED (Tier 2, if separate)
+- Or combine into single rule IMAGE_TITLE_JUNK?
+
+3. Provider - This will be ReleasePass (custom rule), correct?
+4. Category - Which existing category should this fall under, or create new? Looking at your current categories would help - should I check what exists?
+5. Single failure per page vs. per image - If a page has 5 images with bad titles, should we:
+- Report 1 failure with count + list of offending images in meta
+- Report 5 separate ResultItems (one per image)
+
+1 - file extension, Camera prefixes, generic placeholder
+2 - Single rule: IMAGE_TITLE_AUTOGENERATED (includes both file name and junk keyword lookup)
+3 - ReleasePass
+4 - Site Resources
+5 - Single per page with count and details (need to include all references)
+
+---
+
+Rule Code: IMAGE_TITLE_AUTOGENERATED                                                                                                                                          Provider: ReleasePass
+  Category: Site Resources
+  Severity: MEDIUM (optional rule)
+
+  Detection Logic
+
+  For each <img> with a title attribute, FAIL if ANY of these conditions match:
+
+  A) Filename-Derived (Tier 1)
+  - normalize(title) === normalize(filename_from_src)
+  - Normalization: lowercase, remove extension, replace -_ with space, collapse spaces, strip punctuation
+
+  B) Contains File Extension
+  - Title contains .jpg, .jpeg, .png, .gif, .webp, .svg, .bmp, .tiff
+
+  C) Camera Prefix Pattern
+  - Title starts with IMG_, DSC_, PXL_, DCIM_, Screenshot
+
+  D) Generic Placeholder
+  - Title matches (case-insensitive): image, untitled, photo, picture, img, or numbered variants like image1, photo-2
+
+  Pass Criteria
+
+  - No title attribute, OR
+  - title="" (empty), OR
+  - Title is meaningful human-readable text
+
+  Output (ResultItem meta)
+
+  {
+    "count": 3,
+    "images": [
+      { "src": "/uploads/IMG_4920.jpg", "title": "IMG_4920" },
+      { "src": "/uploads/team-photo.png", "title": "team photo" },
+      ...
+    ]
+  }
+
+-----
+
+ Implementation Plan: IMAGE_TITLE_AUTOGENERATED
+                                                                                                                                                                                Files to Modify                                                                                                                                                               ┌────────────────────────────────────────────┬──────────────────────────────────────┐
+  │                    File                    │               Changes                │                                                                                         ├────────────────────────────────────────────┼──────────────────────────────────────┤
+  │ worker/providers/preflight/custom-rules.ts │ Add detection logic + check function │
+  ├────────────────────────────────────────────┼──────────────────────────────────────┤
+  │ prisma/seed-release-rules.ts               │ Add rule definition                  │
+  └────────────────────────────────────────────┴──────────────────────────────────────┘
+  1. Add to custom-rules.ts
+
+  A) Configuration block (after PLACEHOLDER_CONFIG ~line 99):
+  const IMAGE_TITLE_CONFIG = {
+    // File extensions to detect in title
+    fileExtensions: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.tiff'],
+
+    // Camera/screenshot prefixes (case-insensitive)
+    cameraPrefixes: ['img_', 'dsc_', 'pxl_', 'dcim_', 'screenshot'],
+
+    // Generic placeholder titles (exact match, case-insensitive)
+    genericPlaceholders: ['image', 'untitled', 'photo', 'picture', 'img'],
+
+    // Pattern for numbered variants: image1, photo-2, picture_3
+    numberedPattern: /^(image|photo|picture|img|untitled)[-_]?\d+$/i,
+  };
+
+  B) Helper functions:
+  - normalizeForComparison(str) - lowercase, remove extension, replace -_ with space, collapse spaces
+  - getFilenameFromSrc(src) - extract filename from URL path, ignore querystring
+  - isAutogeneratedTitle(title, filename) - check all conditions (A-D from spec)
+
+  C) Check function checkImageTitleRules($, rulesMap):
+  - Select all img[title]
+  - For each: extract src, title, run detection
+  - Collect failures with src + title
+  - Return single PASS or FAIL with count + images array in meta
+
+  D) Wire up in runCustomRules():
+  // Batch 12: Image Title rules (optional)
+  results.push(...checkImageTitleRules($, rulesMap));
+
+  2. Add to seed-release-rules.ts
+
+  {
+    code: 'IMAGE_TITLE_AUTOGENERATED',
+    provider: 'ReleasePass',
+    category: 'Site Resources',
+    name: 'Auto-Generated Image Title',
+    description: 'Image has a title attribute that appears to be auto-generated from filename or is generic placeholder text.',
+    severity: 'MEDIUM',
+    impact: 'Meaningless hover tooltips degrade user experience. Often caused by CMS auto-populating from filename.',
+    fix: 'Remove the title attribute or replace with meaningful, human-readable text.',
+    sortOrder: 20,
+    isOptional: true,
+  }
+
+  3. Run seed to add rule
+
+  npx tsx prisma/seed-release-rules.ts
+
+  ---
+  Estimated scope: ~100 lines of new code in custom-rules.ts, 1 rule entry in seed file.

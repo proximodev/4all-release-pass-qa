@@ -1264,16 +1264,77 @@ function checkLinkRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToC
 // =============================================================================
 
 /**
+ * Check if an image is a placeholder/lazy-loading image that should be excluded
+ * from empty alt checks.
+ *
+ * Excludes:
+ * - Data URI SVG placeholders (empty SVGs used for lazy loading)
+ * - Images with role="presentation" (explicitly decorative)
+ * - Images with aria-hidden="true" (hidden from assistive tech)
+ */
+function isPlaceholderImage($el: Cheerio<Element>): boolean {
+  const src = $el.attr('src') || '';
+  const role = $el.attr('role');
+  const ariaHidden = $el.attr('aria-hidden');
+
+  // Check for explicit accessibility exclusions
+  if (role === 'presentation' || role === 'none') {
+    return true;
+  }
+
+  if (ariaHidden === 'true') {
+    return true;
+  }
+
+  // Check for data URI SVG placeholders
+  // These are commonly used for lazy loading (e.g., empty viewBox SVG)
+  if (src.startsWith('data:image/svg+xml')) {
+    // Decode and check if it's an empty/placeholder SVG
+    try {
+      const decoded = decodeURIComponent(src.replace('data:image/svg+xml,', ''));
+      // Empty SVG typically has no content between tags or just whitespace
+      // Pattern: <svg ...></svg> or <svg ... />
+      const svgContent = decoded.replace(/<svg[^>]*>/i, '').replace(/<\/svg>/i, '').trim();
+      if (svgContent === '' || svgContent === '/') {
+        return true;
+      }
+    } catch {
+      // If decode fails, check for common placeholder patterns in the encoded string
+      // Empty SVG viewBox pattern like: %3Csvg...viewBox...%3E%3C/svg%3E
+      if (src.includes('%3C/svg%3E') || src.includes('%3C%2Fsvg%3E')) {
+        const contentMatch = src.match(/%3E([^%]*)%3C/);
+        if (!contentMatch || !contentMatch[1] || contentMatch[1].trim() === '') {
+          return true;
+        }
+      }
+    }
+  }
+
+  // Check for 1x1 transparent GIF (another common placeholder)
+  if (src.startsWith('data:image/gif') && src.includes('R0lGODlhAQAB')) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Check alt tag rules:
  * - EMPTY_ALT_TAG: Images with empty alt attribute (alt="", alt, or whitespace-only)
  *
  * Note: Lighthouse checks for missing alt tags but not empty ones.
  * Empty alt tags may indicate incomplete content or accessibility issues.
+ *
+ * Excludes:
+ * - Data URI placeholder images (empty SVGs for lazy loading)
+ * - Images with role="presentation" or role="none"
+ * - Images with aria-hidden="true"
  */
 function checkAltTagRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
   const results: ResultItemToCreate[] = [];
 
-  const emptyAltImages: { src: string }[] = [];
+  const emptyAltImages: { img: string }[] = [];
+  let excludedPlaceholders = 0;
 
   $('img').each((_, el) => {
     const $el = $(el);
@@ -1283,8 +1344,20 @@ function checkAltTagRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemT
     // attr() returns undefined if attribute doesn't exist
     // alt="" or alt (no value) returns ''
     if (alt !== undefined && alt.trim() === '') {
-      const src = $el.attr('src') || '(no src)';
-      emptyAltImages.push({ src });
+      // Exclude legitimate placeholder/decorative images
+      if (isPlaceholderImage($el)) {
+        excludedPlaceholders++;
+        return;
+      }
+
+      // Get outer HTML of the img element
+      let imgHtml = $.html($el);
+
+      // Truncate data URI src values to keep output readable
+      // Data URIs are placeholders for lazy-loaded images and aren't useful for identification
+      imgHtml = imgHtml.replace(/src="data:[^"]*"/i, 'src="(data-uri)"');
+
+      emptyAltImages.push({ img: imgHtml });
     }
   });
 
@@ -1298,12 +1371,15 @@ function checkAltTagRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemT
         {
           count: emptyAltImages.length,
           images: emptyAltImages.slice(0, 10), // Limit to first 10
+          excludedPlaceholders,
         }
       )
     );
   } else {
     results.push(
-      createPass('EMPTY_ALT_TAG', 'No images with empty alt attributes', {})
+      createPass('EMPTY_ALT_TAG', 'No images with empty alt attributes', {
+        excludedPlaceholders,
+      })
     );
   }
 
@@ -1515,7 +1591,7 @@ const TITLE_LENGTH_CONFIG: LengthBoundsConfig = {
   tooLongCode: 'PREFLIGHT_TITLE_TOO_LONG',
   tooShortCode: 'PREFLIGHT_TITLE_TOO_SHORT',
   min: 30,
-  max: 55,
+  max: 60,
   minSeverity: IssueSeverity.HIGH,
   maxSeverity: IssueSeverity.HIGH,
   fieldName: 'Title',
@@ -1526,7 +1602,7 @@ const META_DESC_LENGTH_CONFIG: LengthBoundsConfig = {
   tooLongCode: 'PREFLIGHT_META_DESC_TOO_LONG',
   tooShortCode: 'PREFLIGHT_META_DESC_TOO_SHORT',
   min: 70,
-  max: 155,
+  max: 160,
   minSeverity: IssueSeverity.MEDIUM,
   maxSeverity: IssueSeverity.MEDIUM,
   fieldName: 'Meta description',

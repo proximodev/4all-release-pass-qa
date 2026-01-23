@@ -1264,16 +1264,17 @@ function checkLinkRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToC
 // =============================================================================
 
 /**
- * Check if an image is a placeholder/lazy-loading image that should be excluded
+ * Check if an image is explicitly decorative and should be excluded
  * from empty alt checks.
  *
  * Excludes:
- * - Data URI SVG placeholders (empty SVGs used for lazy loading)
- * - Images with role="presentation" (explicitly decorative)
+ * - Images with role="presentation" or role="none" (explicitly decorative)
  * - Images with aria-hidden="true" (hidden from assistive tech)
+ *
+ * Note: Images with placeholder src (data URI SVG, 1x1 GIF) are NOT excluded
+ * because lazy-loaded images still need alt text for the real image that loads.
  */
-function isPlaceholderImage($el: Cheerio<Element>): boolean {
-  const src = $el.attr('src') || '';
+function isDecorativeImage($el: Cheerio<Element>): boolean {
   const role = $el.attr('role');
   const ariaHidden = $el.attr('aria-hidden');
 
@@ -1283,35 +1284,6 @@ function isPlaceholderImage($el: Cheerio<Element>): boolean {
   }
 
   if (ariaHidden === 'true') {
-    return true;
-  }
-
-  // Check for data URI SVG placeholders
-  // These are commonly used for lazy loading (e.g., empty viewBox SVG)
-  if (src.startsWith('data:image/svg+xml')) {
-    // Decode and check if it's an empty/placeholder SVG
-    try {
-      const decoded = decodeURIComponent(src.replace('data:image/svg+xml,', ''));
-      // Empty SVG typically has no content between tags or just whitespace
-      // Pattern: <svg ...></svg> or <svg ... />
-      const svgContent = decoded.replace(/<svg[^>]*>/i, '').replace(/<\/svg>/i, '').trim();
-      if (svgContent === '' || svgContent === '/') {
-        return true;
-      }
-    } catch {
-      // If decode fails, check for common placeholder patterns in the encoded string
-      // Empty SVG viewBox pattern like: %3Csvg...viewBox...%3E%3C/svg%3E
-      if (src.includes('%3C/svg%3E') || src.includes('%3C%2Fsvg%3E')) {
-        const contentMatch = src.match(/%3E([^%]*)%3C/);
-        if (!contentMatch || !contentMatch[1] || contentMatch[1].trim() === '') {
-          return true;
-        }
-      }
-    }
-  }
-
-  // Check for 1x1 transparent GIF (another common placeholder)
-  if (src.startsWith('data:image/gif') && src.includes('R0lGODlhAQAB')) {
     return true;
   }
 
@@ -1326,15 +1298,17 @@ function isPlaceholderImage($el: Cheerio<Element>): boolean {
  * Empty alt tags may indicate incomplete content or accessibility issues.
  *
  * Excludes:
- * - Data URI placeholder images (empty SVGs for lazy loading)
- * - Images with role="presentation" or role="none"
- * - Images with aria-hidden="true"
+ * - Images with role="presentation" or role="none" (explicitly decorative)
+ * - Images with aria-hidden="true" (hidden from assistive tech)
+ *
+ * Does NOT exclude lazy-loading placeholder images (data URI SVG, 1x1 GIF)
+ * because the real image that loads still needs alt text.
  */
 function checkAltTagRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
   const results: ResultItemToCreate[] = [];
 
   const emptyAltImages: { img: string }[] = [];
-  let excludedPlaceholders = 0;
+  let excludedDecorative = 0;
 
   $('img').each((_, el) => {
     const $el = $(el);
@@ -1344,9 +1318,9 @@ function checkAltTagRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemT
     // attr() returns undefined if attribute doesn't exist
     // alt="" or alt (no value) returns ''
     if (alt !== undefined && alt.trim() === '') {
-      // Exclude legitimate placeholder/decorative images
-      if (isPlaceholderImage($el)) {
-        excludedPlaceholders++;
+      // Exclude explicitly decorative images (role="presentation" or aria-hidden="true")
+      if (isDecorativeImage($el)) {
+        excludedDecorative++;
         return;
       }
 
@@ -1371,14 +1345,14 @@ function checkAltTagRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemT
         {
           count: emptyAltImages.length,
           images: emptyAltImages.slice(0, 10), // Limit to first 10
-          excludedPlaceholders,
+          excludedDecorative,
         }
       )
     );
   } else {
     results.push(
       createPass('EMPTY_ALT_TAG', 'No images with empty alt attributes', {
-        excludedPlaceholders,
+        excludedDecorative,
       })
     );
   }

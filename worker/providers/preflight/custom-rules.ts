@@ -1822,6 +1822,11 @@ interface InlineStyleIssue {
  * This commonly occurs when copying text from Google Docs or Word
  * to CMS editors like Elementor, which embeds formatting as inline styles.
  *
+ * Excludes elements inside header/footer regions, as these typically have
+ * intentional styling and are not prone to copy-paste formatting issues:
+ * - <header> and elements with role="banner"
+ * - <footer> and elements with role="contentinfo"
+ *
  * This is an OPTIONAL rule (off by default per project)
  */
 function checkInlineStyleRules(
@@ -1830,6 +1835,7 @@ function checkInlineStyleRules(
 ): ResultItemToCreate[] {
   const results: ResultItemToCreate[] = [];
   const issues: InlineStyleIssue[] = [];
+  let excludedInHeaderFooter = 0;
 
   $(CONTENT_ELEMENTS_SELECTOR).each((_, el) => {
     const $el = $(el);
@@ -1837,6 +1843,14 @@ function checkInlineStyleRules(
 
     // Only flag elements that have a style attribute
     if (style && style.trim().length > 0) {
+      // Exclude elements inside header/footer regions - these typically have
+      // intentional styling and are not prone to copy-paste formatting issues
+      const inHeaderFooter = $el.closest('header, footer, [role="banner"], [role="contentinfo"]').length > 0;
+      if (inHeaderFooter) {
+        excludedInHeaderFooter++;
+        return;
+      }
+
       const tagName = ($el.prop('tagName') as string || 'unknown').toLowerCase();
       const text = $el.text().trim().substring(0, 50) || '(no text)';
       const stylePreview = style.substring(0, 80) + (style.length > 80 ? '...' : '');
@@ -1859,6 +1873,7 @@ function checkInlineStyleRules(
         {
           count: issues.length,
           elements: issues.slice(0, 10), // First 10 samples
+          excludedInHeaderFooter,
         }
       )
     );
@@ -1867,7 +1882,7 @@ function checkInlineStyleRules(
       createPass(
         'PREFLIGHT_INLINE_CSS',
         'No inline styles found on content elements',
-        {}
+        { excludedInHeaderFooter }
       )
     );
   }

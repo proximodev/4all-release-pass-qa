@@ -35,8 +35,12 @@ function renderMetaFields(meta: Record<string, unknown>, depth = 0): React.React
           <span className="font-medium">{key}:</span>
           <ul className="ml-4 list-disc">
             {value.slice(0, 10).map((item, i) => (
-              <li key={i}>
-                {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+              <li key={i} className={typeof item === 'object' && item !== null ? 'list-none' : ''}>
+                {typeof item === 'object' && item !== null ? (
+                  <ul className="list-disc">
+                    {renderMetaFields(item as Record<string, unknown>, depth + 1)}
+                  </ul>
+                ) : String(item)}
               </li>
             ))}
             {value.length > 10 && <li className="text-black/60">...and {value.length - 10} more</li>}
@@ -193,7 +197,7 @@ function PreflightResults({
                              item.meta && Object.keys(item.meta).length > 0 && (
                               <div className="mt-3 pt-3 border-t border-dark-gray/20">
                                 <span className="font-medium">Error Details:</span>
-                                <ul className="mt-1 ml-4 list-disc text-black/80 text-sm">
+                                <ul className="mt-1 ml-4 list-disc text-black/80 text-m">
                                   {renderMetaFields(item.meta)}
                                 </ul>
                               </div>

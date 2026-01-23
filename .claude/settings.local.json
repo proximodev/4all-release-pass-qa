@@ -56,7 +56,8 @@
       "WebFetch(domain:4all.digital)",
       "Bash(chmod:*)",
       "WebFetch(domain:publicapi.dev)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(npm pkg:*)"
     ]
   }
 }

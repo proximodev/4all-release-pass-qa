@@ -1816,6 +1816,27 @@ interface InlineStyleIssue {
 }
 
 /**
+ * Check if a style attribute contains ONLY CSS custom properties (variables)
+ * CSS variables are intentional developer code, not copy-paste garbage from Word/Docs
+ *
+ * Examples that return true:
+ * - "--r:1; --c:1;"
+ * - "--color: red; --size: 2rem;"
+ *
+ * Examples that return false:
+ * - "font-family: Arial;"
+ * - "--color: red; font-family: Arial;" (mixed)
+ */
+function isOnlyCssVariables(style: string): boolean {
+  // Remove all CSS variable declarations: --name: value;
+  // Variable names can contain letters, numbers, hyphens, underscores
+  // Values can be anything until the semicolon (or end of string)
+  const withoutVars = style.replace(/--[\w-]+\s*:\s*[^;]+;?\s*/g, '').trim();
+  // If nothing remains, it was all variables
+  return withoutVars === '';
+}
+
+/**
  * Check inline style rules:
  * - PREFLIGHT_INLINE_CSS: Detect inline style attributes on content elements
  *
@@ -1836,6 +1857,7 @@ function checkInlineStyleRules(
   const results: ResultItemToCreate[] = [];
   const issues: InlineStyleIssue[] = [];
   let excludedInHeaderFooter = 0;
+  let excludedCssVariablesOnly = 0;
 
   $(CONTENT_ELEMENTS_SELECTOR).each((_, el) => {
     const $el = $(el);
@@ -1848,6 +1870,13 @@ function checkInlineStyleRules(
       const inHeaderFooter = $el.closest('header, footer, [role="banner"], [role="contentinfo"]').length > 0;
       if (inHeaderFooter) {
         excludedInHeaderFooter++;
+        return;
+      }
+
+      // Exclude styles that only contain CSS custom properties (variables)
+      // These are intentional developer code, not copy-paste garbage from Word/Docs
+      if (isOnlyCssVariables(style)) {
+        excludedCssVariablesOnly++;
         return;
       }
 
@@ -1874,6 +1903,7 @@ function checkInlineStyleRules(
           count: issues.length,
           elements: issues.slice(0, 10), // First 10 samples
           excludedInHeaderFooter,
+          excludedCssVariablesOnly,
         }
       )
     );
@@ -1882,7 +1912,7 @@ function checkInlineStyleRules(
       createPass(
         'PREFLIGHT_INLINE_CSS',
         'No inline styles found on content elements',
-        { excludedInHeaderFooter }
+        { excludedInHeaderFooter, excludedCssVariablesOnly }
       )
     );
   }

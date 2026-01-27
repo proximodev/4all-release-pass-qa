@@ -1,0 +1,12 @@
+Issue:
+Language Tool is throwing a large number of "Add a space between sentences." errors, which I am guessing happens after cheerio grabs the page and we parse the content from html and send to Language Tool.
+
+Here is one instance:
+"Consultation How We Work Human Insight.Automated Speed. We merge experienced developers" and with the HTML below we have a separation between "Human Insight" and "Automated Speed":
+
+<h2 class="workflow__title" data-reveal="heading" data-reveal-delay="100"><span class="text-yellow">Human Insight.</span><br>Automated Speed.</h2>
+
+I suspect this is the dominant pattern, and we may need to sub "<br>" for " ".
+
+Review worker code and provide an analysis:
+worker/providers/spelling

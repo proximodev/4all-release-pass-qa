@@ -468,6 +468,12 @@ function extractVisibleText($: CheerioAPI): string {
   $('.cookie-notice, .cookie-banner, #cookie-consent').remove();
   $('.newsletter-signup, .popup, .modal').remove();
 
+  // Replace <br> and <hr> with spaces to prevent word concatenation
+  // Cheerio's .text() ignores these tags, causing "Word1.<br>Word2" to become "Word1.Word2"
+  // which triggers false "Add a space between sentences" errors in LanguageTool
+  $('br').replaceWith(' ');
+  $('hr').replaceWith(' ');
+
   // Get the main content area - prioritize selectors to avoid nested duplicates
   // Check each selector in order and use the first match
   const contentSelectors = ['main', 'article', '[role="main"]', '.content', '#content'];

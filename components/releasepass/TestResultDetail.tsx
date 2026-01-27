@@ -251,10 +251,10 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
   }, [releaseRun, urlResult?.url, testId, router])
 
   const handleRerunTest = useCallback(async () => {
-    if (!releaseRun || !testRun) return
+    if (!releaseRun || !testRun || !urlResult) return
 
     const confirmed = window.confirm(
-      `Are you sure you want to rerun the ${title} test? This will replace the existing results.`
+      `Are you sure you want to rerun the ${title} test for this page? This will replace the existing results for this URL.`
     )
     if (!confirmed) return
 
@@ -263,7 +263,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
       const res = await fetch(`/api/release-runs/${releaseRun.id}/rerun`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testType }),
+        body: JSON.stringify({ testType, url: urlResult.url }),
       })
 
       if (!res.ok) {
@@ -276,7 +276,7 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
       setError(err.message)
       setRerunning(false)
     }
-  }, [releaseRun, testRun, title, testType, router])
+  }, [releaseRun, testRun, urlResult, title, testType, router])
 
   const handleIgnoreToggle = useCallback(async (itemId: string, ignored: boolean): Promise<IgnoreToggleResult | null> => {
     try {

@@ -1,0 +1,326 @@
+On the details page (components/releasepass/TestResultDetail.tsx), we can rerun tests. This triggers a rerun for an entire test type (all pages) (calls rerun api)
+
+  app/api/release-runs/[id]/rerun/route.ts
+
+  How would we rerun only for the current page and test type (now, it reruns all pages for a test type)?
+
+----
+
+ 1. UI Trigger Location
+  - Where should "Rerun this page" appear?
+  - Next to the existing "Rerun Test" button (two buttons)?
+  - Replace "Rerun Test" when viewing a single page detail?
+  - Dropdown with both options?
+
+  2. Performance Test Viewports
+  For PERFORMANCE, each URL has mobile + desktop UrlResults. Should single-page rerun:
+  - Always rerun both viewports (simpler)
+  - Let user choose which viewport to rerun?
+
+  3. Status During Rerun
+  When a single-page rerun is queued, the TestRun status becomes QUEUED. This might make the entire test appear "processing" in the UI. Options:
+  - Accept this (simple, temporary state)
+  - Add a new status like PARTIAL_RERUN
+  - Keep status as SUCCESS and add a separate pendingUrls field?
+
+  4. API Design
+  - Extend existing /rerun with optional url param?
+  - Create separate /rerun-url endpoint?
+
+  5. Worker Behavior
+  When processing a partial rerun, should the worker:
+  - A: Check TestRunConfig.urls and ONLY process those (current behavior works)
+  - B: Detect existing UrlResults and skip them (more complex)
+
+  Option A seems cleaner - the API sets config.urls to just the single URL, worker processes only that.
+
+================================================================================
+DECISIONS
+================================================================================
+
+1. UI: No change to button. Same "Rerun Test" button, scoped to current URL only.
+2. Performance viewports: Always rerun both (mobile + desktop).
+3. Status: Accept QUEUED status during rerun (temporary).
+4. API: Replace current behavior - reruns are ALWAYS scoped to a single page.
+5. Worker: Process URLs from config.urls (works as-is), but change scoring to
+   always query ALL UrlResults from DB for aggregate score calculation.
+
+================================================================================
+IMPLEMENTATION PLAN: Rerun Test Scoped to URL
+================================================================================
+
+OVERVIEW
+--------
+Change the "Rerun Test" functionality to always be scoped to a single URL instead
+of rerunning all URLs for a test type. The worker scoring logic changes to always
+calculate aggregate scores from all UrlResults in the database.
+
+--------------------------------------------------------------------------------
+PHASE 1: API Changes
+--------------------------------------------------------------------------------
+
+File: app/api/release-runs/[id]/rerun/route.ts
+
+Current behavior:
+- Accepts { testType }
+- Deletes entire TestRun for that type
+- Creates new TestRun with QUEUED status
+
+New behavior:
+- Accepts { testType, url } - url is REQUIRED
+- Validates url exists in releaseRun.urls
+- Deletes only UrlResult(s) for that URL (not entire TestRun)
+- Creates or updates TestRunConfig with urls: [url]
+- Sets TestRun status to QUEUED (if not already)
+
+Changes:
+
+1. Update schema validation:
+   ```typescript
+   const rerunSchema = z.object({
+     testType: z.enum(['PAGE_PREFLIGHT', 'PERFORMANCE', 'SPELLING', 'SCREENSHOTS']),
+     url: z.string().url(),  // NEW - required
+   })
+   ```
+
+2. Validate URL is part of the release run:
+   ```typescript
+   const releaseRunUrls = releaseRun.urls as string[]
+   if (!releaseRunUrls.includes(url)) {
+     return NextResponse.json(
+       { error: 'URL not found in this release run' },
+       { status: 400 }
+     )
+   }
+   ```
+
+3. Change transaction logic:
+   ```typescript
+   await prisma.$transaction(async (tx) => {
+     // Find existing TestRun for this type
+     const existingTestRun = releaseRun.testRuns[0]  // Already fetched
+
+     if (existingTestRun) {
+       // Delete only UrlResult(s) for this URL (cascades to ResultItems)
+       await tx.urlResult.deleteMany({
+         where: {
+           testRunId: existingTestRun.id,
+           url: url,
+         }
+       })
+
+       // Update or create TestRunConfig
+       await tx.testRunConfig.upsert({
+         where: { testRunId: existingTestRun.id },
+         create: {
+           testRunId: existingTestRun.id,
+           scope: 'CUSTOM_URLS',
+           urls: [url],
+         },
+         update: {
+           urls: [url],
+         }
+       })
+
+       // Set status to QUEUED
+       await tx.testRun.update({
+         where: { id: existingTestRun.id },
+         data: {
+           status: 'QUEUED',
+           startedAt: null,
+           finishedAt: null,
+           error: null,
+         }
+       })
+
+       return existingTestRun
+     } else {
+       // No existing TestRun - create new one with config
+       const newTestRun = await tx.testRun.create({
+         data: {
+           releaseRunId: id,
+           projectId: releaseRun.projectId,
+           type: testType,
+           status: 'QUEUED',
+           config: {
+             create: {
+               scope: 'CUSTOM_URLS',
+               urls: [url],
+             }
+           }
+         }
+       })
+       return newTestRun
+     }
+   })
+   ```
+
+4. Update release run status to PENDING:
+   ```typescript
+   await tx.releaseRun.update({
+     where: { id },
+     data: { status: 'PENDING' }
+   })
+   ```
+
+--------------------------------------------------------------------------------
+PHASE 2: Worker Changes - Scoring Logic
+--------------------------------------------------------------------------------
+
+All providers need to change how they calculate the aggregate TestRun score.
+
+Current: Calculate score from in-memory results of URLs processed in this run.
+New: Query ALL UrlResults for this TestRun from DB, calculate aggregate score.
+
+Files to modify:
+- worker/providers/preflight/index.ts
+- worker/providers/pagespeed/performance.ts
+- worker/providers/spelling/index.ts
+
+Pattern for each provider:
+
+1. Add helper function to calculate score from DB:
+   ```typescript
+   async function calculateAggregateScore(testRunId: string): Promise<number> {
+     const urlResults = await prisma.urlResult.findMany({
+       where: { testRunId },
+       select: { score: true }
+     })
+
+     if (urlResults.length === 0) return 0
+
+     // Average of all URL scores (same logic as current, but from DB)
+     const validScores = urlResults
+       .map(ur => ur.score)
+       .filter((s): s is number => s !== null)
+
+     if (validScores.length === 0) return 0
+
+     return Math.round(
+       validScores.reduce((sum, s) => sum + s, 0) / validScores.length
+     )
+   }
+   ```
+
+2. Modify the main process function to use DB-based scoring:
+
+   Before (example from preflight):
+   ```typescript
+   // Calculate aggregate score from in-memory successfulOutcomes
+   const avgScore = successfulOutcomes.reduce(...) / successfulOutcomes.length
+   return { score: avgScore, failedUrls: 0, totalUrls: ... }
+   ```
+
+   After:
+   ```typescript
+   // Save results first (existing code)
+   // ...
+
+   // Calculate aggregate score from ALL UrlResults in DB
+   const aggregateScore = await calculateAggregateScore(testRun.id)
+   return { score: aggregateScore, failedUrls: 0, totalUrls: ... }
+   ```
+
+Detailed changes per provider:
+
+A. worker/providers/preflight/index.ts
+   - Find the score aggregation at end of processPagePreflight()
+   - Replace in-memory calculation with calculateAggregateScore(testRun.id)
+   - Ensure UrlResults are saved to DB before calling calculateAggregateScore
+
+B. worker/providers/pagespeed/performance.ts
+   - Same pattern
+   - Note: Performance has mobile + desktop scores per URL
+   - Aggregate should average all UrlResult scores (both viewports)
+
+C. worker/providers/spelling/index.ts
+   - Same pattern
+
+--------------------------------------------------------------------------------
+PHASE 3: UI Changes
+--------------------------------------------------------------------------------
+
+File: components/releasepass/TestResultDetail.tsx
+
+Current handleRerunTest:
+```typescript
+const handleRerunTest = useCallback(async () => {
+  // ...
+  body: JSON.stringify({ testType }),
+  // ...
+}, [releaseRun, testRun, title, testType, router])
+```
+
+Change to include current URL:
+```typescript
+const handleRerunTest = useCallback(async () => {
+  if (!releaseRun || !testRun || !urlResult) return
+
+  const confirmed = window.confirm(
+    `Are you sure you want to rerun the ${title} test for this page? This will replace the existing results.`
+  )
+  if (!confirmed) return
+
+  setRerunning(true)
+  try {
+    const res = await fetch(`/api/release-runs/${releaseRun.id}/rerun`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        testType,
+        url: urlResult.url,  // NEW - pass current URL
+      }),
+    })
+    // ... rest unchanged
+  }
+}, [releaseRun, testRun, urlResult, title, testType, router])  // Add urlResult dependency
+```
+
+Also update the confirmation message to clarify it's page-scoped.
+
+--------------------------------------------------------------------------------
+PHASE 4: Testing
+--------------------------------------------------------------------------------
+
+Test scenarios:
+
+1. Rerun single page for PAGE_PREFLIGHT
+   - Verify only that URL's UrlResult is deleted
+   - Verify TestRunConfig.urls is set to [url]
+   - Verify worker processes only that URL
+   - Verify aggregate score includes all URLs (existing + new)
+
+2. Rerun single page for PERFORMANCE
+   - Verify both mobile + desktop UrlResults for that URL are deleted
+   - Verify both viewports are reprocessed
+   - Verify aggregate score is correct
+
+3. Rerun single page for SPELLING
+   - Same as PAGE_PREFLIGHT
+
+4. Error cases:
+   - URL not in release run → 400 error
+   - Invalid URL format → 400 error
+   - Release run not found → 404 error
+
+5. Edge cases:
+   - Rerun the only URL in a release run (should work same as multi-URL)
+   - Rerun while another rerun is QUEUED (should update config, re-queue)
+   - Worker failure mid-run (URL has no result, user can retry)
+
+--------------------------------------------------------------------------------
+FILE SUMMARY
+--------------------------------------------------------------------------------
+
+Files to modify:
+1. app/api/release-runs/[id]/rerun/route.ts - API logic
+2. worker/providers/preflight/index.ts - Scoring logic
+3. worker/providers/pagespeed/performance.ts - Scoring logic
+4. worker/providers/spelling/index.ts - Scoring logic
+5. components/releasepass/TestResultDetail.tsx - Pass URL to API
+
+Estimated complexity: Medium
+- API changes are straightforward
+- Worker scoring changes are similar across providers
+- UI change is minimal
+

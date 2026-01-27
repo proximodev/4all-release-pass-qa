@@ -16,7 +16,7 @@ import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { runPageSpeed, SeoAudit, PageSpeedResult } from '../pagespeed/client';
 import { checkLinks, LinkCheckResult, LinkCheckSummary } from '../linkinator/client';
 import { runCustomRules } from './custom-rules';
-import { SCORING_CONFIG, getScoreStatus, isWhitelistedCdn, isExcludedEndpoint } from '../../lib/scoring';
+import { SCORING_CONFIG, getScoreStatus, isWhitelistedCdn, isExcludedEndpoint, calculateAggregateScoreFromDb } from '../../lib/scoring';
 import { createLimiter, CONCURRENCY } from '../../lib/concurrency';
 
 /**
@@ -336,13 +336,12 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
     };
   }
 
-  // All URLs succeeded - calculate average score
-  const urlScores = successResults.map(r => r.score);
-  const averageScore = urlScores.length > 0
-    ? Math.round(urlScores.reduce((sum, s) => sum + s, 0) / urlScores.length)
-    : 100;
+  // Calculate aggregate score from ALL UrlResults in DB
+  // This ensures partial reruns (single-page) include existing results
+  const averageScore = await calculateAggregateScoreFromDb(testRun.id, prisma);
 
-  // Log summary
+  // Log summary (use in-memory data for detailed logging)
+  const urlScores = successResults.map(r => r.score);
   const failedItems = successResults.flatMap(r => r.resultItems.filter(i => i.status === ResultStatus.FAIL));
   const blockerCount = failedItems.filter(i => i.severity === IssueSeverity.BLOCKER).length;
   const criticalCount = failedItems.filter(i => i.severity === IssueSeverity.CRITICAL).length;
@@ -350,8 +349,8 @@ export async function processPagePreflight(testRun: TestRunWithRelations): Promi
   const mediumCount = failedItems.filter(i => i.severity === IssueSeverity.MEDIUM).length;
   const lowCount = failedItems.filter(i => i.severity === IssueSeverity.LOW).length;
 
-  console.log(`[PAGE_PREFLIGHT] Completed. Average score: ${averageScore} (${getScoreStatus(averageScore)})`);
-  console.log(`[PAGE_PREFLIGHT] Per-URL scores: ${urlScores.join(', ')}`);
+  console.log(`[PAGE_PREFLIGHT] Completed. Aggregate score: ${averageScore} (${getScoreStatus(averageScore)})`);
+  console.log(`[PAGE_PREFLIGHT] This run processed ${urlScores.length} URL(s) with scores: ${urlScores.join(', ')}`);
   console.log(`[PAGE_PREFLIGHT] Failed by severity: ${blockerCount} blocker, ${criticalCount} critical, ${highCount} high, ${mediumCount} medium, ${lowCount} low`);
 
   return {

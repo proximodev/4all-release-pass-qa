@@ -13,6 +13,7 @@
 
 import { prisma } from '../../lib/prisma';
 import { runPageSpeed, PageSpeedResult } from './client';
+import { calculateAggregateScoreFromDb } from '../../lib/scoring';
 
 interface TestRunWithRelations {
   id: string;
@@ -181,10 +182,11 @@ export async function processPerformance(testRun: TestRunWithRelations): Promise
     };
   }
 
-  // Calculate average score
-  const averageScore = scoredCount > 0 ? Math.round(totalScore / scoredCount) : 0;
+  // Calculate aggregate score from ALL UrlResults in DB
+  // This ensures partial reruns (single-page) include existing results
+  const averageScore = await calculateAggregateScoreFromDb(testRun.id, prisma);
 
-  console.log(`[PERFORMANCE] Completed. Average score: ${averageScore} (from ${scoredCount} measurements)`);
+  console.log(`[PERFORMANCE] Completed. Aggregate score: ${averageScore} (this run: ${scoredCount} measurements)`);
 
   // Log any pages with poor scores
   for (const result of successResults) {

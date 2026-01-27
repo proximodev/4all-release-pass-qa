@@ -90,3 +90,38 @@ export function calculateScoreFromItems(
 
   return Math.max(0, Math.min(100, Math.round(score)))
 }
+
+/**
+ * Calculate aggregate score for a TestRun from ALL UrlResults in the database.
+ *
+ * This queries all UrlResults for the given TestRun and averages their scores.
+ * Used for both full runs and partial reruns (single-page) to ensure the
+ * aggregate score always reflects all URLs, not just those processed in the
+ * current run.
+ *
+ * @param testRunId - The TestRun ID to calculate score for
+ * @param prisma - Prisma client instance
+ * @returns Average score (0-100), or 0 if no valid scores exist
+ */
+export async function calculateAggregateScoreFromDb(
+  testRunId: string,
+  prisma: { urlResult: { findMany: (args: any) => Promise<Array<{ score: number | null }>> } }
+): Promise<number> {
+  const urlResults = await prisma.urlResult.findMany({
+    where: { testRunId },
+    select: { score: true },
+  })
+
+  if (urlResults.length === 0) return 0
+
+  // Filter to valid scores (non-null)
+  const validScores = urlResults
+    .map(ur => ur.score)
+    .filter((s): s is number => s !== null)
+
+  if (validScores.length === 0) return 0
+
+  return Math.round(
+    validScores.reduce((sum, s) => sum + s, 0) / validScores.length
+  )
+}

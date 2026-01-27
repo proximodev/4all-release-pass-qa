@@ -19,7 +19,7 @@ import { IssueProvider, IssueSeverity, ResultStatus } from '@prisma/client';
 import { fetchWithTimeout } from '../../lib/fetch';
 import { retryWithBackoff } from '../../lib/retry';
 import { checkSpelling, isConfigured, getConfigInfo, SpellingMatch } from './languagetool-client';
-import { calculateScoreFromItems } from '../../lib/scoring';
+import { calculateScoreFromItems, calculateAggregateScoreFromDb } from '../../lib/scoring';
 import { createLimiter, CONCURRENCY } from '../../lib/concurrency';
 
 interface TestRunWithRelations {
@@ -265,14 +265,14 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<Sp
     };
   }
 
-  // All URLs succeeded - calculate average score
-  const urlScores = successResults.map(r => r.score);
-  const averageScore = urlScores.length > 0
-    ? Math.round(urlScores.reduce((sum, s) => sum + s, 0) / urlScores.length)
-    : 100;
+  // Calculate aggregate score from ALL UrlResults in DB
+  // This ensures partial reruns (single-page) include existing results
+  const averageScore = await calculateAggregateScoreFromDb(testRun.id, prisma);
 
+  // Log summary (use in-memory data for detailed logging)
+  const urlScores = successResults.map(r => r.score);
   console.log(`[SPELLING] Completed. ${totalUrls} URLs checked, ${totalIssueCount} total issues`);
-  console.log(`[SPELLING] Average score: ${averageScore}, per-URL scores: ${urlScores.join(', ')}`);
+  console.log(`[SPELLING] Aggregate score: ${averageScore}, this run scores: ${urlScores.join(', ')}`);
 
   return {
     score: averageScore,

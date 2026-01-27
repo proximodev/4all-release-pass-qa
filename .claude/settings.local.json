@@ -57,7 +57,10 @@
       "Bash(chmod:*)",
       "WebFetch(domain:publicapi.dev)",
       "Bash(npx tsx:*)",
-      "Bash(npm pkg:*)"
+      "Bash(npm pkg:*)",
+      "WebFetch(domain:forum.languagetool.org)",
+      "WebFetch(domain:dev.languagetool.org)",
+      "WebFetch(domain:hub.docker.com)"
     ]
   }
 }

@@ -557,6 +557,18 @@ const releaseRules = [
     sortOrder: 87,
     isOptional: true,
   },
+  {
+    code: 'PREFLIGHT_CONTENT_DOUBLE_SPACES',
+    provider: 'ReleasePass',
+    category: 'Site Resources',
+    name: 'Double Spaces in Content',
+    description: 'Content contains double spaces (consecutive non-breaking spaces or mixed space patterns), often from copy-pasting from Word or other editors.',
+    severity: 'MEDIUM',
+    impact: 'Double spaces are typographically incorrect and can cause inconsistent text appearance.',
+    fix: 'Remove extra spaces from the content. When pasting from Word or Google Docs, use "Paste as Plain Text" or review content for formatting issues.',
+    sortOrder: 88,
+    isOptional: true,
+  },
 
   // =========================================================================
   // INTERNAL / ERROR CODES (4 rules)

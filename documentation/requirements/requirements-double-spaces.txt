@@ -1,0 +1,110 @@
+Requirement:
+I would like to create a new rule called DOUBLE_SPACES or CONTENT_DOUBLE_SPACES that detects double spaces in paragraphs - specifically "&nbsp; ". This should be applied page content and exclude header and footer.
+
+Create the rule record and make it optional.
+
+Next steps:
+1 - review request and potential edge cases
+2 - ask questions
+3 - draft plan
+
+---
+Questions:
+
+1. Pattern scope - Should we detect only &nbsp;  or also:
+-  &nbsp; (regular space + non-breaking space)
+- &nbsp;&nbsp; (two non-breaking spaces)
+-    (two regular spaces in raw HTML - though browsers collapse these)
+2. Check location - Should this check:
+- Raw HTML source (can see &nbsp; entities)
+- Rendered/extracted text (sees actual characters)
+- Both?
+3. Element scope - Within content, should we check:
+- All text content?
+- Only paragraph-like elements (<p>, headings, <li>, etc.)?
+- Exclude <pre>, <code> blocks (where spacing is intentional)?
+4. Severity - What severity level? I'd suggest MEDIUM or LOW since double spaces are a content quality issue but not a blocker.
+5. Rule code naming - Preference between:
+- PREFLIGHT_DOUBLE_SPACES
+- PREFLIGHT_CONTENT_DOUBLE_SPACES
+- CONTENT_DOUBLE_SPACES
+
+--
+
+1 - Both "&nbsp;&nbsp;" and "&nbsp; "
+2 - Wouldn't we just want Raw HTML source? Recommend
+3 - Was thinking all, but excluding <pre> <code> makes sense. let's examine other cases - maybe it's just <p>, <li>, and h1-h5 tags. Let's review and see what makes sense (rather not over complicate)
+4. LOW
+5. PREFLIGHT_CONTENT_DOUBLE_SPACES
+
+Review and ask followups
+---
+
+Element scope recommendation:
+
+For simplicity, I'd suggest: p, li, h1, h2, h3, h4, h5, h6
+  Other candidates we could add later if needed:
+  - td, th (table cells)
+  - blockquote (quotes)
+  - figcaption (image captions)
+
+  Does starting with p, li, h1-h6 work for you?
+
+  Reporting format:
+
+  Should we report:
+  - A) Single result with count + examples: "Found 5 double-space occurrences" with meta showing locations
+  - B) One result per occurrence: Each double-space is its own ResultItem
+
+  I recommend A - cleaner UI, single item to ignore if needed.
+
+  Pattern matching:
+
+  In raw HTML, the patterns would appear as:
+  - &nbsp;&nbsp; (literal entity)
+  - &nbsp;  (entity + space)
+  -  &nbsp; (space + entity) - should we include this too?
+
+  Or the decoded Unicode equivalents (\u00A0). We should handle both representations.
+
+---
+
+For \u00A0 - you're right, it's an edge case. But it's trivial to include in the regex pattern with no performance cost. I'd include it for completeness, but your call.
+                                                                                                                                                                                Final spec confirmed:                                                                                                                                                         ┌───────────┬─────────────────────────────────────────────────────┐
+  │ Attribute │                        Value                        │                                                                                                           ├───────────┼─────────────────────────────────────────────────────┤
+  │ Code      │ PREFLIGHT_CONTENT_DOUBLE_SPACES                     │
+  ├───────────┼─────────────────────────────────────────────────────┤
+  │ Severity  │ MEDIUM                                              │
+  ├───────────┼─────────────────────────────────────────────────────┤
+  │ Optional  │ Yes                                                 │
+  ├───────────┼─────────────────────────────────────────────────────┤
+  │ Scope     │ All content excluding header, footer, <pre>, <code> │
+  ├───────────┼─────────────────────────────────────────────────────┤
+  │ Patterns  │ &nbsp;&nbsp;, &nbsp; ,  &nbsp;                      │
+  ├───────────┼─────────────────────────────────────────────────────┤
+  │ Output    │ Single result with count + examples                 │
+  └───────────┴─────────────────────────────────────────────────────┘
+  ---
+  Implementation Plan
+
+  Files to modify:
+
+  1. worker/providers/preflight/custom-rules.ts
+    - Add checkDoubleSpaceRules() function
+    - Call it from runCustomRules()
+  2. prisma/seed.ts (or migration)
+    - Add PREFLIGHT_CONTENT_DOUBLE_SPACES to ReleaseRule table
+    - Set isOptional: true, severity: MEDIUM
+
+  Implementation details:
+
+  function checkDoubleSpaceRules($: CheerioAPI, rulesMap: ReleaseRulesMap): ResultItemToCreate[] {
+    // 1. Clone $ to avoid mutating original
+    // 2. Remove header, footer, pre, code elements
+    // 3. Get remaining HTML content
+    // 4. Search for patterns: /&nbsp;&nbsp;|&nbsp; | &nbsp;/g
+    // 5. Return PASS or FAIL with count + examples
+  }
+
+  Pattern regex:
+  const DOUBLE_SPACE_PATTERN = /&nbsp;&nbsp;|&nbsp; | &nbsp;/g;

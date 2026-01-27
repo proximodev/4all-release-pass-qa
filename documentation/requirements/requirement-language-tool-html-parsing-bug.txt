@@ -10,3 +10,14 @@ I suspect this is the dominant pattern, and we may need to sub "<br>" for " ".
 
 Review worker code and provide an analysis:
 worker/providers/spelling
+
+--
+
+This fixed most issues, but oddly, i'm seeing this:
+
+Space error:
+"...lds Ready to Build Something that Lasts?Let's build your growth, not just your webs..."
+
+HTML:
+<h2 data-reveal="heading" class="small content-container">Ready to <strong>Build Something that Lasts</strong>?</h2>
+<p data-reveal="heading" class="subhead content-container">Let's build your growth, not just your website.</p>

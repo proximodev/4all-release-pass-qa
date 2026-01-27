@@ -474,6 +474,10 @@ function extractVisibleText($: CheerioAPI): string {
   $('br').replaceWith(' ');
   $('hr').replaceWith(' ');
 
+  // Append space to block-level elements to prevent concatenation
+  // Without this, "<h2>Title?</h2><p>Text</p>" becomes "Title?Text" with no space
+  $('h1, h2, h3, h4, h5, h6, p, li, blockquote, td, th, dt, dd, figcaption').append(' ');
+
   // Get the main content area - prioritize selectors to avoid nested duplicates
   // Check each selector in order and use the first match
   const contentSelectors = ['main', 'article', '[role="main"]', '.content', '#content'];

@@ -83,7 +83,7 @@ function ViewportColumn({ viewport, urlResult }: ViewportColumnProps) {
       {/* Lab Data Section */}
       <div className="mb-6">
         <h5>Lab Data</h5>
-        <div className="bg-light-gray/50 rounded-lg p-4">
+        <div className="bg-light-gray rounded-lg p-4">
           {LAB_METRICS.map((metric) => (
             <MetricRow
               key={metric}
@@ -98,7 +98,7 @@ function ViewportColumn({ viewport, urlResult }: ViewportColumnProps) {
       {hasFieldData && fieldData && (
         <div>
           <h5>Field Data (CrUX)</h5>
-          <div className="bg-light-gray/50 rounded-lg p-4">
+          <div className="bg-light-gray rounded-lg p-4">
             {FIELD_METRICS.map((metric) => (
               <MetricRow
                 key={metric}

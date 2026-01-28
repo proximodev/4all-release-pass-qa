@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { isValidUuid } from '@/lib/validation/common'
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             startedAt: null,
             finishedAt: null,
             lastHeartbeat: null,
-            rawPayload: null,
+            rawPayload: Prisma.DbNull,
             error: null,
           },
         })

@@ -89,15 +89,9 @@ enum ManualStatusLabel {
   FAIL
 }
 
-enum DictionaryWordStatus {
-  REVIEW      // Pending approval - word NOT filtered
-  WHITELISTED // Active - word IS filtered from results
-}
-
 enum DictionaryWordSource {
-  MANUAL // Added via Settings > Dictionary
+  MANUAL // Added via Settings > Custom Dictionary
   RESULT // Added via Ignore on spelling result
-  SEED   // Initial bulk import
 }
 
 enum ReleaseRunStatus {
@@ -426,13 +420,13 @@ model ProjectOptionalRule {
 }
 
 /// Global dictionary for whitelisting words in spelling checks
-/// Words with WHITELISTED status are filtered out of LanguageTool results
+/// Words with isActive=true are filtered out of LanguageTool results
 model DictionaryWord {
-  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  word        String               @unique // Lowercase for matching (2-45 chars)
-  displayWord String               // Original casing for display
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  word        String  @unique // Lowercase for matching (2-45 chars)
+  displayWord String  // Original casing for display
 
-  status DictionaryWordStatus @default(REVIEW)
+  isActive Boolean @default(true) // true = filtered from spelling results
 
   // Origin tracking (stored, not displayed in MVP)
   source    DictionaryWordSource @default(MANUAL)
@@ -445,6 +439,6 @@ model DictionaryWord {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([status])
+  @@index([isActive])
   @@index([word])
 }

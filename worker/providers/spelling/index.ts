@@ -62,12 +62,12 @@ async function getWhitelist(): Promise<Set<string>> {
   const now = Date.now();
   if (!whitelistCache || (now - whitelistLoadedAt) > WHITELIST_CACHE_TTL_MS) {
     const words = await prisma.dictionaryWord.findMany({
-      where: { status: 'WHITELISTED' },
+      where: { isActive: true },
       select: { word: true },
     });
     whitelistCache = new Set(words.map(w => w.word));
     whitelistLoadedAt = now;
-    console.log(`[SPELLING] Loaded ${whitelistCache.size} whitelisted word(s)`);
+    console.log(`[SPELLING] Loaded ${whitelistCache.size} active dictionary word(s)`);
   }
   return whitelistCache;
 }

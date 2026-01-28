@@ -11,7 +11,7 @@ interface RouteParams {
 
 const updateWordSchema = z.object({
   word: z.string().optional(),
-  status: z.enum(['REVIEW', 'WHITELISTED']).optional(),
+  isActive: z.boolean().optional(),
 })
 
 /**
@@ -81,13 +81,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Word not found' }, { status: 404 })
     }
 
-    const { word: newWord, status } = validation.data
+    const { word: newWord, isActive } = validation.data
 
     // Prepare update data
     const updateData: {
       word?: string
       displayWord?: string
-      status?: 'REVIEW' | 'WHITELISTED'
+      isActive?: boolean
     } = {}
 
     // If word is changing, validate and check for duplicates
@@ -117,8 +117,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       updateData.displayWord = wordValidation.displayWord!
     }
 
-    if (status !== undefined) {
-      updateData.status = status
+    if (isActive !== undefined) {
+      updateData.isActive = isActive
     }
 
     // Only update if there are changes

@@ -13,8 +13,8 @@ interface DictionaryWord {
   id: string
   word: string
   displayWord: string
-  status: 'REVIEW' | 'WHITELISTED'
-  source: 'MANUAL' | 'RESULT' | 'SEED'
+  isActive: boolean
+  source: 'MANUAL' | 'RESULT'
   createdAt: string
   createdBy: { email: string } | null
 }
@@ -31,7 +31,7 @@ export default function DictionaryPage() {
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 0 })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'' | 'REVIEW' | 'WHITELISTED'>('')
+  const [activeFilter, setActiveFilter] = useState<'' | 'true' | 'false'>('')
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false)
@@ -40,9 +40,9 @@ export default function DictionaryPage() {
 
   // Form states
   const [addWordsText, setAddWordsText] = useState('')
-  const [addStatus, setAddStatus] = useState<'REVIEW' | 'WHITELISTED'>('WHITELISTED')
+  const [addIsActive, setAddIsActive] = useState(true)
   const [editWordText, setEditWordText] = useState('')
-  const [editStatus, setEditStatus] = useState<'REVIEW' | 'WHITELISTED'>('WHITELISTED')
+  const [editIsActive, setEditIsActive] = useState(true)
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -54,7 +54,7 @@ export default function DictionaryPage() {
       params.set('page', pagination.page.toString())
       params.set('limit', '50')
       if (search) params.set('search', search)
-      if (statusFilter) params.set('status', statusFilter)
+      if (activeFilter) params.set('isActive', activeFilter)
 
       const res = await fetch(`/api/dictionary?${params}`)
       if (res.ok) {
@@ -67,7 +67,7 @@ export default function DictionaryPage() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.page, search, statusFilter])
+  }, [pagination.page, search, activeFilter])
 
   useEffect(() => {
     fetchWords()
@@ -101,7 +101,7 @@ export default function DictionaryPage() {
       const res = await fetch('/api/dictionary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ words: wordsArray, status: addStatus }),
+        body: JSON.stringify({ words: wordsArray, isActive: addIsActive }),
       })
 
       const data = await res.json()
@@ -146,7 +146,7 @@ export default function DictionaryPage() {
       const res = await fetch(`/api/dictionary/${editingWord.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ word: editWordText, status: editStatus }),
+        body: JSON.stringify({ word: editWordText, isActive: editIsActive }),
       })
 
       const data = await res.json()
@@ -193,7 +193,7 @@ export default function DictionaryPage() {
   const openEditModal = (word: DictionaryWord) => {
     setEditingWord(word)
     setEditWordText(word.displayWord)
-    setEditStatus(word.status)
+    setEditIsActive(word.isActive)
     setFormError('')
     setShowEditModal(true)
   }
@@ -210,11 +210,10 @@ export default function DictionaryPage() {
     return `${month} ${day}, ${year} ${hour12}:${minute}${ampm}`
   }
 
-  const formatSource = (source: 'MANUAL' | 'RESULT' | 'SEED') => {
+  const formatSource = (source: 'MANUAL' | 'RESULT') => {
     switch (source) {
       case 'MANUAL': return 'Manual'
       case 'RESULT': return 'Spelling Ignore'
-      case 'SEED': return 'Seed'
     }
   }
 
@@ -233,23 +232,23 @@ export default function DictionaryPage() {
               className="px-4 py-2 border border-medium-gray rounded w-full max-w-md"
             />
             <select
-              value={statusFilter}
+              value={activeFilter}
               onChange={(e) => {
-                setStatusFilter(e.target.value as '' | 'REVIEW' | 'WHITELISTED')
+                setActiveFilter(e.target.value as '' | 'true' | 'false')
                 setPagination(p => ({ ...p, page: 1 }))
               }}
               className="px-4 py-2 border border-medium-gray rounded"
             >
-              <option value="">All Status</option>
-              <option value="WHITELISTED">Whitelisted</option>
-              <option value="REVIEW">Review</option>
+              <option value="">All</option>
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
             </select>
           </div>
-          <div className="flex gap-3 min-w-120px">
+          <div className="flex gap-3 shrink-0">
             <Button onClick={() => {
               setShowAddModal(true)
               setAddWordsText('')
-              setAddStatus('WHITELISTED')
+              setAddIsActive(true)
               setFormError('')
               setFormSuccess('')
             }}>
@@ -272,7 +271,7 @@ export default function DictionaryPage() {
             <p>Loading dictionary...</p>
           ) : words.length === 0 ? (
             <p>
-              {search || statusFilter
+              {search || activeFilter
                 ? 'No words match your filters.'
                 : 'Dictionary is empty. Add words to whitelist them from spelling checks.'}
             </p>
@@ -281,10 +280,10 @@ export default function DictionaryPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-medium-gray text-left">
-                    <th className="pb-3 w-1/6" >Word</th>
+                    <th className="pb-3 w-1/6">Word</th>
                     <th className="pb-3 w-1/6">Source</th>
                     <th className="pb-3 w-1/6">Added By</th>
-                    <th className="pb-3">Status</th>
+                    <th className="pb-3">Active</th>
                     <th className="pb-3">Date Added</th>
                     <th className="pb-3 text-right">Actions</th>
                   </tr>
@@ -297,11 +296,11 @@ export default function DictionaryPage() {
                       <td className="py-3 text-gray-600">{word.createdBy?.email || 'System'}</td>
                       <td className="py-3">
                         <span className={`px-2 py-1 rounded text-sm ${
-                          word.status === 'WHITELISTED'
+                          word.isActive
                             ? 'bg-green-100 text-green-800'
-                            : 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-600'
                         }`}>
-                          {word.status === 'WHITELISTED' ? 'Whitelisted' : 'Review'}
+                          {word.isActive ? 'Yes' : 'No'}
                         </span>
                       </td>
                       <td className="py-3 text-gray-600">{formatDate(word.createdAt)}</td>
@@ -375,15 +374,18 @@ export default function DictionaryPage() {
             </p>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">Status:</label>
-            <select
-              value={addStatus}
-              onChange={(e) => setAddStatus(e.target.value as 'REVIEW' | 'WHITELISTED')}
-              className="w-full px-3 py-2 border border-medium-gray rounded"
-            >
-              <option value="WHITELISTED">Whitelisted (active filtering)</option>
-              <option value="REVIEW">Review (pending approval)</option>
-            </select>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={addIsActive}
+                onChange={(e) => setAddIsActive(e.target.checked)}
+                className="w-4 h-4 rounded border-medium-gray"
+              />
+              <span className="text-sm font-medium">Active</span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Active words are filtered from spelling results.
+            </p>
           </div>
           {formError && (
             <p className="text-red-600 text-sm">{formError}</p>
@@ -401,6 +403,14 @@ export default function DictionaryPage() {
         title="Edit Dictionary Word"
         footer={
           <div className="flex justify-between">
+            <div className="flex gap-3">
+              <Button onClick={handleEditWord} disabled={submitting}>
+                {submitting ? 'Saving...' : 'Save'}
+              </Button>
+              <Button variant="secondary" onClick={() => setShowEditModal(false)}>
+                Cancel
+              </Button>
+            </div>
             <Button
               variant="secondary"
               onClick={handleDeleteWord}
@@ -409,14 +419,6 @@ export default function DictionaryPage() {
             >
               Delete
             </Button>
-            <div className="flex gap-3">
-              <Button variant="secondary" onClick={() => setShowEditModal(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleEditWord} disabled={submitting}>
-                {submitting ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </div>
           </div>
         }
       >
@@ -431,15 +433,18 @@ export default function DictionaryPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">Status:</label>
-            <select
-              value={editStatus}
-              onChange={(e) => setEditStatus(e.target.value as 'REVIEW' | 'WHITELISTED')}
-              className="w-full px-3 py-2 border border-medium-gray rounded"
-            >
-              <option value="WHITELISTED">Whitelisted (active filtering)</option>
-              <option value="REVIEW">Review (pending approval)</option>
-            </select>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={editIsActive}
+                onChange={(e) => setEditIsActive(e.target.checked)}
+                className="w-4 h-4 rounded border-medium-gray"
+              />
+              <span className="text-sm font-medium">Active</span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Active words are filtered from spelling results.
+            </p>
           </div>
           {formError && (
             <p className="text-red-600 text-sm">{formError}</p>

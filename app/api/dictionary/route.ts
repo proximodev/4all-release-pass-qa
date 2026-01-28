@@ -6,14 +6,14 @@ import { z } from 'zod'
 
 const createWordsSchema = z.object({
   words: z.array(z.string()).min(1, 'At least one word is required'),
-  status: z.enum(['REVIEW', 'WHITELISTED']).default('WHITELISTED'),
+  isActive: z.boolean().default(true),
 })
 
 /**
  * GET /api/dictionary - List dictionary words with pagination and filtering
  *
  * Query params:
- * - status: 'REVIEW' | 'WHITELISTED' (optional, filter by status)
+ * - isActive: 'true' | 'false' (optional, filter by active state)
  * - search: string (optional, partial match on word)
  * - page: number (default 1)
  * - limit: number (default 50)
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     if (error) return error
 
     const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status') as 'REVIEW' | 'WHITELISTED' | null
+    const isActiveParam = searchParams.get('isActive')
     const search = searchParams.get('search')
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)))
@@ -32,12 +32,14 @@ export async function GET(request: NextRequest) {
 
     // Build where clause
     const where: {
-      status?: 'REVIEW' | 'WHITELISTED'
+      isActive?: boolean
       word?: { contains: string; mode: 'insensitive' }
     } = {}
 
-    if (status && (status === 'REVIEW' || status === 'WHITELISTED')) {
-      where.status = status
+    if (isActiveParam === 'true') {
+      where.isActive = true
+    } else if (isActiveParam === 'false') {
+      where.isActive = false
     }
 
     if (search) {
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
           id: true,
           word: true,
           displayWord: true,
-          status: true,
+          isActive: true,
           source: true,
           createdAt: true,
           createdBy: {
@@ -93,7 +95,7 @@ export async function GET(request: NextRequest) {
  *
  * Request body:
  * - words: string[] - Array of words to add
- * - status: 'REVIEW' | 'WHITELISTED' (default: WHITELISTED)
+ * - isActive: boolean (default: true)
  *
  * Response:
  * - added: number - Count of words successfully added
@@ -116,7 +118,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { words: inputWords, status } = validation.data
+    const { words: inputWords, isActive } = validation.data
 
     // Parse and flatten input (handles multi-word inputs)
     const rawWords = inputWords.flatMap(w => parseWordInput(w))
@@ -147,7 +149,7 @@ export async function POST(request: NextRequest) {
       data: newWords.map(({ word, displayWord }) => ({
         word,
         displayWord,
-        status,
+        isActive,
         source: 'MANUAL' as const,
         createdByUserId: user?.id,
       })),
@@ -161,7 +163,7 @@ export async function POST(request: NextRequest) {
         id: true,
         word: true,
         displayWord: true,
-        status: true,
+        isActive: true,
         source: true,
         createdAt: true,
       },

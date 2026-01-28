@@ -33,8 +33,14 @@ const updateResultItemSchema = z.object({
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const { error, user } = await requireAuth()
+    const { error, user: supabaseUser } = await requireAuth()
     if (error) return error
+
+    // Look up internal user by Supabase Auth ID
+    const internalUser = await prisma.user.findUnique({
+      where: { supabaseUserId: supabaseUser.id },
+      select: { id: true },
+    })
 
     const { id } = await params
 
@@ -91,7 +97,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       // Silently add misspelling words to dictionary for review
       // This seeds the dictionary with commonly ignored words
-      await addSpellingWordToDictionary(resultItem, context.url, user?.id)
+      await addSpellingWordToDictionary(resultItem, context.url, internalUser?.id)
     } else {
       // Delete IgnoredRule if it exists
       await prisma.ignoredRule.deleteMany({
@@ -184,16 +190,15 @@ async function addSpellingWordToDictionary(
     })
 
     if (existing) {
-      // Word already in dictionary, skip silently
       return
     }
 
-    // Add word to dictionary with REVIEW status
+    // Add word to dictionary as inactive (requires manual activation)
     await prisma.dictionaryWord.create({
       data: {
         word,
         displayWord,
-        status: 'REVIEW',
+        isActive: false,
         source: 'RESULT',
         sourceUrl,
         createdByUserId: userId,

@@ -82,43 +82,44 @@ export default function PreflightRulesPage() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-medium-gray text-left">
-                    <th className="pb-3">Code</th>
-                    <th className="pb-3">Provider</th>
-                    <th className="pb-3">Category</th>
-                    <th className="pb-3">Name</th>
-                    <th className="pb-3">Severity</th>
-                    <th className="pb-3">Status</th>
-                    <th className="pb-3">Optional</th>
-                    <th className="pb-3 text-right">Actions</th>
-                  </tr>
+                <tr className="border-b border-medium-gray text-left">
+                  <th className="pb-3 pr-8">Code</th>
+                  <th className="pb-3 pr-8">Name</th>
+                  <th className="pb-3 pr-8">Provider</th>
+                  <th className="pb-3 pr-8">Category</th>
+                  <th className="pb-3 pr-8">Severity</th>
+                  <th className="pb-3 pr-8">Status</th>
+                  <th className="pb-3 pr-8">Optional</th>
+                  <th className="pb-3 text-right">Actions</th>
+                </tr>
                 </thead>
                 <tbody>
-                  {filteredRules.map((rule) => (
-                    <tr key={rule.id} className="border-b border-medium-gray/50">
-                      <td className="py-4 font-mono text-sm">{rule.code}</td>
-                      <td className="py-4">{rule.provider}</td>
-                      <td className="py-4">{rule.category.name}</td>
-                      <td className="py-4">{rule.name}</td>
-                      <td className="py-4">{rule.severity}</td>
-                      <td className="py-4">
-                        <span className={`px-2 py-1 rounded text-sm ${rule.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                {filteredRules.map((rule) => (
+                      <tr key={rule.id} className="border-b border-medium-gray/50">
+                        <td className="py-4 font-mono text-sm">{rule.code}</td>
+                        <td className="py-4">{rule.name}</td>
+                        <td className="py-4">{rule.provider}</td>
+                        <td className="py-4">{rule.category.name}</td>
+                        <td className="py-4">{rule.severity}</td>
+                        <td className="py-4">
+                        <span
+                            className={`px-2 py-1 rounded text-sm ${rule.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                           {rule.isActive ? 'Active' : 'Inactive'}
                         </span>
-                      </td>
-                      <td className="py-4">
-                        {rule.isOptional && (
-                          <span className="px-2 py-1 rounded text-sm bg-blue-100 text-blue-800">
+                        </td>
+                        <td className="py-4">
+                          {rule.isOptional && (
+                              <span className="px-2 py-1 rounded text-sm bg-blue-100 text-blue-800">
                             Optional
                           </span>
-                        )}
-                      </td>
-                      <td className="py-4 text-right">
-                        <Link href={`/settings/preflight-rules/${rule.code}/edit`}>
-                          <Button variant="secondary">Edit</Button>
-                        </Link>
-                      </td>
-                    </tr>
+                          )}
+                        </td>
+                        <td className="py-4 text-right">
+                          <Link href={`/settings/preflight-rules/${rule.code}/edit`}>
+                            <Button variant="secondary">Edit</Button>
+                          </Link>
+                        </td>
+                      </tr>
                   ))}
                 </tbody>
               </table>

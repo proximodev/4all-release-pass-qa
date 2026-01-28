@@ -61,7 +61,8 @@
       "WebFetch(domain:forum.languagetool.org)",
       "WebFetch(domain:dev.languagetool.org)",
       "WebFetch(domain:hub.docker.com)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(del \"C:\\\\Users\\\\doug\\\\WebstormProjects\\\\4all-release-pass-qa\\\\prisma\\\\seed-dictionary.ts\")"
     ]
   }
 }

@@ -392,12 +392,12 @@ function TestResultsSummary({ testId, mode = 'releaseRun', onNameUpdate }: TestR
         {/* Header with progress dots */}
         <div className="flex items-center justify-between mb-0.5">
           <h2>Test Status</h2>
-          <div
-            className="w-[40px] aspect-[4] mr-2 animate-progress-dots"
-            style={{
-              background: 'radial-gradient(circle closest-side, currentColor 80%, transparent) 0/calc(100%/3) 100% space',
-            }}
-          />
+          <div className="mr-2 animate-progress-squares">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
         </div>
 
         {/* Created Date */}

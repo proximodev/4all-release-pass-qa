@@ -7,10 +7,13 @@ export default async function Home() {
 
     if (user) {
         redirect('/dashboard')
+    } else {
+        redirect('/login')
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center">
+
+        <div className="none min-h-screen flex items-center justify-center">
             <div className="text-center">
                 <h1>ReleasePass QA Platform</h1>
                 <p>Automated pre- and post-deployment QA</p>

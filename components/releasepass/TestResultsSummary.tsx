@@ -33,6 +33,7 @@ function TestResultsSummary({ testId, mode = 'releaseRun', onNameUpdate }: TestR
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [rerunningAll, setRerunningAll] = useState(false)
   const [expandedUrls, setExpandedUrls] = useState<Set<string>>(new Set())
   const [isEditingName, setIsEditingName] = useState(false)
   const [editedName, setEditedName] = useState('')
@@ -166,6 +167,35 @@ function TestResultsSummary({ testId, mode = 'releaseRun', onNameUpdate }: TestR
       setDeleting(false)
     }
   }, [releaseRun])
+
+  const handleRerunAll = useCallback(async () => {
+    if (!releaseRun) return
+
+    const confirmed = window.confirm(
+      'Rerun all tests? This will replace all existing results.'
+    )
+
+    if (!confirmed) return
+
+    setRerunningAll(true)
+    try {
+      const res = await fetch(`/api/release-runs/${releaseRun.id}/rerun-all`, {
+        method: 'POST',
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to rerun tests')
+      }
+
+      // Refresh the data - will show in-progress view
+      await fetchReleaseRun(releaseRun.id)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setRerunningAll(false)
+    }
+  }, [releaseRun, fetchReleaseRun])
 
   const toggleUrlExpanded = useCallback((url: string) => {
     setExpandedUrls(prev => {
@@ -615,9 +645,16 @@ function TestResultsSummary({ testId, mode = 'releaseRun', onNameUpdate }: TestR
         })}
       </div>
 
-      {/* Delete Button - Show if test failed or completed */}
+      {/* Action Buttons - Show if test failed or completed */}
       {(failed || !inProgress) && (
-        <div className="pt-4">
+        <div className="pt-4 flex justify-between items-center">
+          <button
+            onClick={handleRerunAll}
+            disabled={rerunningAll}
+            className="text-sm text-white bg-black hover:bg-black/80 disabled:opacity-50"
+          >
+            {rerunningAll ? 'Rerunning...' : 'Rerun All'}
+          </button>
           <button
             onClick={handleDelete}
             disabled={deleting}

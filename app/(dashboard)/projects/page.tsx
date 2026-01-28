@@ -17,6 +17,10 @@ interface Project {
   siteUrl: string
   sitemapUrl: string | null
   createdAt: string
+  company: {
+    id: string
+    name: string
+  } | null
 }
 
 export default function ProjectsPage() {
@@ -71,10 +75,11 @@ export default function ProjectsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-medium-gray text-left">
-                  <th className="pb-3 font-medium">Name</th>
-                  <th className="pb-3 font-medium">URL</th>
-                  <th className="pb-3 font-medium">Created</th>
-                  <th className="pb-3 font-medium text-right">Actions</th>
+                  <th className="pb-3">Name</th>
+                  <th className="pb-3">URL</th>
+                  <th className="pb-3">Company</th>
+                  <th className="pb-3">Date Added</th>
+                  <th className="pb-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -87,7 +92,17 @@ export default function ProjectsPage() {
                       </a>
                     </td>
                     <td className="py-4">
-                      {new Date(project.createdAt).toLocaleDateString()}
+                      {project.company?.name || '—'}
+                    </td>
+                    <td className="py-4">
+                      {new Date(project.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      })}
                     </td>
                     <td className="py-4 text-right space-x-2">
                       <Link href={`/projects/${project.id}`}>

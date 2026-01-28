@@ -18,6 +18,10 @@ interface Project {
   notes: string | null
   createdAt: string
   updatedAt: string
+  company: {
+    id: string
+    name: string
+  } | null
 }
 
 interface ProjectViewPageProps {
@@ -103,13 +107,20 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
 
             <div>
               <label className="block text-sm font-medium mb-1">
+                Company
+              </label>
+              <p>{project.company?.name || '—'}</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
                 Site URL
               </label>
               <a
-                href={project.siteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-brand-cyan hover:underline"
+                  href={project.siteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-cyan hover:underline"
               >
                 {project.siteUrl}
               </a>
@@ -120,22 +131,22 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
                 Sitemap URL
               </label>
               <a
-                href={project.sitemapUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-brand-cyan hover:underline"
+                  href={project.sitemapUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-cyan hover:underline"
               >
                 {project.sitemapUrl}
               </a>
             </div>
 
             {project.notes && (
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Notes
-                </label>
-                <p>{project.notes}</p>
-              </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Notes
+                  </label>
+                  <p>{project.notes}</p>
+                </div>
             )}
 
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-medium-gray">
@@ -160,15 +171,15 @@ export default function ProjectViewPage({ params }: ProjectViewPageProps) {
 
           {/* Actions */}
           <div className="flex items-center space-x-4 pt-4 border-t border-medium-gray">
-            <Link href={`/projects/${projectId}/edit`}>
-              <Button>Edit Project</Button>
-            </Link>
             <Button
-              variant="secondary"
-              onClick={() => router.push('/projects')}
+                variant="secondary"
+                onClick={() => router.push('/projects')}
             >
               Back to Projects
             </Button>
+            <Link href={`/projects/${projectId}/edit`}>
+              <Button>Edit Project</Button>
+            </Link>\
           </div>
         </div>
       </Card>

@@ -26,7 +26,10 @@ interface Project {
   siteUrl: string
   sitemapUrl: string
   notes: string | null
-  companyId: string
+  company: {
+    id: string
+    name: string
+  } | null
   createdAt: string
   updatedAt: string
 }
@@ -210,15 +213,6 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
 
               <h3>Project Information</h3>
 
-              <Select
-                label="Company"
-                name="companyId"
-                options={companyOptions}
-                defaultValue={project.companyId}
-                disabled={loadingCompanies}
-                error={errors.companyId}
-              />
-
               <Input
                 label="Project Name"
                 name="name"
@@ -226,6 +220,15 @@ export default function ProjectEditPage({ params }: ProjectEditPageProps) {
                 required
                 defaultValue={project.name}
                 error={errors.name}
+              />
+
+              <Select
+                  label="Company"
+                  name="companyId"
+                  options={companyOptions}
+                  defaultValue={project.company?.id || ''}
+                  disabled={loadingCompanies}
+                  error={errors.companyId}
               />
 
               <Input

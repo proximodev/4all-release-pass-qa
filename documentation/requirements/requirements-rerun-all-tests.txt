@@ -1,0 +1,279 @@
+================================================================================
+FEATURE: Rerun All Tests for Release Run
+================================================================================
+
+OVERVIEW
+--------
+Add a "Rerun All" button to the Test Summary page that reruns all tests for all
+URLs in a release run. This complements the existing single-test/single-URL
+rerun functionality.
+
+CURRENT STATE
+-------------
+- Single rerun: POST /api/release-runs/{id}/rerun with { testType, url }
+- Scoped to one test type for one URL
+- Called from TestResultDetail.tsx "Rerun Test" button
+
+NEW FEATURE
+-----------
+- Rerun All: POST /api/release-runs/{id}/rerun-all (no body)
+- Reruns ALL selected test types for ALL URLs in the release run
+- Called from TestResultsSummary.tsx "Rerun All" button
+
+================================================================================
+DECISIONS
+================================================================================
+
+1. BUTTON PLACEMENT: Next to Delete button in footer area of results view
+
+2. MANUAL STATUSES: Preserve ManualTestStatus records (Screenshots)
+   - Since screenshots will be regenerated, user may want to keep existing
+     review decisions or will naturally re-review new results
+
+3. SCOPE: Full rerun only (no "Rerun Failed" option in this release)
+
+4. CONFIRMATION: Required before rerunning
+   - Message: "Rerun all tests? This will replace all existing results."
+
+================================================================================
+API ENDPOINT
+================================================================================
+
+POST /api/release-runs/[id]/rerun-all
+-------------------------------------
+
+Request: No body required
+
+Response (success):
+{
+  "message": "All tests queued for rerun",
+  "testTypes": ["PAGE_PREFLIGHT", "PERFORMANCE", "SCREENSHOTS", "SPELLING"]
+}
+
+Response (error):
+{
+  "error": "Release run not found" | "No tests to rerun" | etc.
+}
+
+Processing:
+1. Validate release run exists and belongs to user's project
+2. Get selectedTests from release run
+3. In Prisma transaction:
+   a. For each TestRun in the release run:
+      - Delete all UrlResult records (cascades to ResultItem)
+      - Reset TestRun: status=QUEUED, startedAt=null, finishedAt=null, error=null
+      - Update TestRunConfig.urls to full URL list (or create if missing)
+   b. Set ReleaseRun.status = PENDING
+4. Return success with list of test types being rerun
+
+Note: ManualTestStatus records are NOT deleted (preserves Screenshots status)
+
+================================================================================
+UI SPECIFICATION
+================================================================================
+
+Location: TestResultsSummary.tsx, Results view, footer area
+
+Buttons:
+- "Rerun All": Left side, primary variant (black)
+- "Delete": Right side, secondary with red styling (existing)
+- Only visible when: Results view is showing (not in-progress, not failed)
+
+Layout:
++----------------------------------------------------------+
+|                                                          |
+| [Rerun All]                                    [Delete]  |
+|  (black)                                        (red)    |
+|                                                          |
++----------------------------------------------------------+
+
+Behavior:
+1. User clicks "Rerun All"
+2. Confirmation dialog: "Rerun all tests? This will replace all existing results."
+3. On confirm:
+   - Show loading state on button
+   - POST to /api/release-runs/{id}/rerun-all
+   - On success: Page automatically shows in-progress view (existing polling)
+   - On error: Show error message
+4. On cancel: Do nothing
+
+================================================================================
+IMPLEMENTATION
+================================================================================
+
+Files to Create:
+----------------
+app/api/release-runs/[id]/rerun-all/route.ts
+
+Files to Modify:
+----------------
+components/releasepass/TestResultsSummary.tsx
+  - Add state: rerunningAll
+  - Add handler: handleRerunAll()
+  - Add button in footer area
+
+================================================================================
+API IMPLEMENTATION DETAIL
+================================================================================
+
+// app/api/release-runs/[id]/rerun-all/route.ts
+
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  // 1. Auth check
+  const { error, user } = await requireAuth()
+  if (error) return error
+
+  // 2. Validate release run ID
+  const { id } = await params
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: 'Invalid release run ID' }, { status: 400 })
+  }
+
+  // 3. Fetch release run with test runs
+  const releaseRun = await prisma.releaseRun.findUnique({
+    where: { id },
+    include: {
+      project: { select: { id: true, companyId: true } },
+      testRuns: { select: { id: true, type: true } },
+    },
+  })
+
+  if (!releaseRun) {
+    return NextResponse.json({ error: 'Release run not found' }, { status: 404 })
+  }
+
+  // 4. Get URLs and selected tests
+  const urls = releaseRun.urls as string[]
+  const selectedTests = releaseRun.selectedTests as string[]
+
+  if (releaseRun.testRuns.length === 0) {
+    return NextResponse.json({ error: 'No tests to rerun' }, { status: 400 })
+  }
+
+  // 5. Rerun all tests in transaction
+  await prisma.$transaction(async (tx) => {
+    for (const testRun of releaseRun.testRuns) {
+      // Delete all UrlResults for this test run
+      await tx.urlResult.deleteMany({
+        where: { testRunId: testRun.id },
+      })
+
+      // Reset test run to queued
+      await tx.testRun.update({
+        where: { id: testRun.id },
+        data: {
+          status: 'QUEUED',
+          score: null,
+          startedAt: null,
+          finishedAt: null,
+          lastHeartbeat: null,
+          rawPayload: null,
+          error: null,
+        },
+      })
+
+      // Update or create TestRunConfig with all URLs
+      await tx.testRunConfig.upsert({
+        where: { testRunId: testRun.id },
+        create: {
+          testRunId: testRun.id,
+          scope: 'CUSTOM_URLS',
+          urls: urls,
+        },
+        update: {
+          scope: 'CUSTOM_URLS',
+          urls: urls,
+        },
+      })
+    }
+
+    // Set release run back to pending
+    await tx.releaseRun.update({
+      where: { id },
+      data: { status: 'PENDING' },
+    })
+  })
+
+  return NextResponse.json({
+    message: 'All tests queued for rerun',
+    testTypes: releaseRun.testRuns.map(t => t.type),
+  })
+}
+
+================================================================================
+UI IMPLEMENTATION DETAIL
+================================================================================
+
+// In TestResultsSummary.tsx
+
+// Add state
+const [rerunningAll, setRerunningAll] = useState(false)
+
+// Add handler
+const handleRerunAll = useCallback(async () => {
+  if (!releaseRun) return
+
+  const confirmed = window.confirm(
+    'Rerun all tests? This will replace all existing results.'
+  )
+  if (!confirmed) return
+
+  setRerunningAll(true)
+  try {
+    const res = await fetch(`/api/release-runs/${releaseRun.id}/rerun-all`, {
+      method: 'POST',
+    })
+
+    if (!res.ok) {
+      const data = await res.json()
+      throw new Error(data.error || 'Failed to rerun tests')
+    }
+
+    // Refresh release run data - will show in-progress view
+    await fetchReleaseRun(releaseRun.id)
+  } catch (err: any) {
+    setError(err.message)
+  } finally {
+    setRerunningAll(false)
+  }
+}, [releaseRun, fetchReleaseRun])
+
+// Add button in footer (left side, Delete stays on right)
+<Button
+  onClick={handleRerunAll}
+  disabled={rerunningAll}
+>
+  {rerunningAll ? 'Rerunning...' : 'Rerun All'}
+</Button>
+
+================================================================================
+TESTING
+================================================================================
+
+Manual Testing:
+1. Create a release run with multiple test types and URLs
+2. Wait for tests to complete
+3. Click "Rerun All" - verify confirmation dialog
+4. Cancel - verify nothing happens
+5. Confirm - verify:
+   - All tests go to QUEUED status
+   - In-progress view shows
+   - Worker picks up and runs all tests
+   - Results appear for all URLs
+6. Verify ManualTestStatus (Screenshots) is preserved
+
+Edge Cases:
+- Release run with only one test type
+- Release run with only one URL
+- Release run already in progress (button should not be visible)
+- Network error during rerun (error handling)
+
+================================================================================
+ESTIMATED EFFORT
+================================================================================
+
+- API endpoint: ~50 lines
+- UI changes: ~30 lines
+- Testing: ~30 minutes
+
+Total: ~2 hours

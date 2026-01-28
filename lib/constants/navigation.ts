@@ -11,6 +11,7 @@ export const projectTabs = [
 export const settingsTabs = [
   { label: 'Preflight Rules', href: '/settings/preflight-rules' },
   { label: 'Preflight Categories', href: '/settings/preflight-categories' },
+  { label: 'Custom Dictionary', href: '/settings/dictionary' },
   { label: 'Companies', href: '/settings/companies' },
   { label: 'Users', href: '/settings/users' },
 ]

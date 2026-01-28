@@ -89,6 +89,17 @@ enum ManualStatusLabel {
   FAIL
 }
 
+enum DictionaryWordStatus {
+  REVIEW      // Pending approval - word NOT filtered
+  WHITELISTED // Active - word IS filtered from results
+}
+
+enum DictionaryWordSource {
+  MANUAL // Added via Settings > Dictionary
+  RESULT // Added via Ignore on spelling result
+  SEED   // Initial bulk import
+}
+
 enum ReleaseRunStatus {
   PENDING
   READY
@@ -156,6 +167,7 @@ model User {
 
   company            Company            @relation(fields: [companyId], references: [id])
   manualTestStatuses ManualTestStatus[] @relation("ManualStatusUpdatedBy")
+  dictionaryWords    DictionaryWord[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -411,4 +423,28 @@ model ProjectOptionalRule {
 
   @@unique([projectId, ruleCode])
   @@index([projectId])
+}
+
+/// Global dictionary for whitelisting words in spelling checks
+/// Words with WHITELISTED status are filtered out of LanguageTool results
+model DictionaryWord {
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  word        String               @unique // Lowercase for matching (2-45 chars)
+  displayWord String               // Original casing for display
+
+  status DictionaryWordStatus @default(REVIEW)
+
+  // Origin tracking (stored, not displayed in MVP)
+  source    DictionaryWordSource @default(MANUAL)
+  sourceUrl String?              // URL where first flagged (if source=RESULT)
+
+  // Audit (stored, not displayed in MVP)
+  createdByUserId String? @db.Uuid
+  createdBy       User?   @relation(fields: [createdByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([word])
 }

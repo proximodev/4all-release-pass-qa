@@ -218,6 +218,30 @@
 </div>
 
 <!-- ============================================== -->
+<!-- OPTIONAL CONTENT RULES TESTS -->
+<!-- ============================================== -->
+
+<div class="test-section">
+  <h2>Content Quality Tests (Optional Rules)</h2>
+
+  <div class="test-item">
+    <code>PREFLIGHT_INLINE_CSS</code> <span class="severity high">HIGH</span> (Optional)
+    <p>Elements with inline style attributes (common from Word/Google Docs paste):</p>
+    <p style="font-family: Arial, sans-serif; font-size: 14px; color: #333333;">This paragraph has inline styles from copy-paste.</p>
+    <span style="background-color: yellow; font-weight: bold;">Highlighted text with inline styles.</span>
+    <div style="margin: 10px; padding: 5px; border: 1px solid #ccc;">A div with inline layout styles.</div>
+  </div>
+
+  <div class="test-item">
+    <code>PREFLIGHT_CONTENT_DOUBLE_SPACES</code> <span class="severity medium">MEDIUM</span> (Optional)
+    <p>Content with double spaces (common from Word/Google Docs paste):</p>
+    <p>This sentence has&nbsp;&nbsp;two non-breaking spaces in it.</p>
+    <p>This one has&nbsp; a non-breaking space followed by regular space.</p>
+    <p>And this has a regular space followed by&nbsp;non-breaking space.</p>
+  </div>
+</div>
+
+<!-- ============================================== -->
 <!-- ALT TAG TESTS -->
 <!-- ============================================== -->
 
@@ -425,6 +449,10 @@
     <tr>
       <td style="padding:8px;border-top:1px solid #86efac;">Empty Links</td>
       <td style="padding:8px;border-top:1px solid #86efac;">PREFLIGHT_EMPTY_LINK</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;border-top:1px solid #86efac;">Content Quality (Optional)</td>
+      <td style="padding:8px;border-top:1px solid #86efac;">PREFLIGHT_INLINE_CSS, PREFLIGHT_CONTENT_DOUBLE_SPACES</td>
     </tr>
     <tr>
       <td style="padding:8px;border-top:1px solid #86efac;">Alt Tags</td>

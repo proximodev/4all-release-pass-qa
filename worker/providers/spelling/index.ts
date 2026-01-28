@@ -45,6 +45,43 @@ interface FilteredProperNoun {
   reason: string;
 }
 
+// ============================================================================
+// WHITELIST CACHE
+// ============================================================================
+
+// Cache whitelisted words for efficient filtering
+let whitelistCache: Set<string> | null = null;
+let whitelistLoadedAt: number = 0;
+const WHITELIST_CACHE_TTL_MS = 60_000; // 1 minute
+
+/**
+ * Get the current whitelist of words to filter from spelling results.
+ * Cached with 60-second TTL to avoid repeated database queries.
+ */
+async function getWhitelist(): Promise<Set<string>> {
+  const now = Date.now();
+  if (!whitelistCache || (now - whitelistLoadedAt) > WHITELIST_CACHE_TTL_MS) {
+    const words = await prisma.dictionaryWord.findMany({
+      where: { status: 'WHITELISTED' },
+      select: { word: true },
+    });
+    whitelistCache = new Set(words.map(w => w.word));
+    whitelistLoadedAt = now;
+    console.log(`[SPELLING] Loaded ${whitelistCache.size} whitelisted word(s)`);
+  }
+  return whitelistCache;
+}
+
+/**
+ * Extract the flagged word from a LanguageTool match
+ */
+function extractMatchWord(match: SpellingMatch): string {
+  return match.context.text.substring(
+    match.context.offset,
+    match.context.offset + match.context.length
+  );
+}
+
 /**
  * Entity suffixes that indicate the preceding word is likely a proper noun.
  * Case-sensitive matching - suffixes must appear exactly as listed.
@@ -74,6 +111,7 @@ interface UrlSpellingResult {
   language: string;
   score: number;  // Calculated score (0-100)
   filteredProperNouns: FilteredProperNoun[];
+  filteredWhitelistWords: string[];  // Words filtered by dictionary whitelist
 }
 
 interface UrlSpellingError {
@@ -152,13 +190,14 @@ export async function processSpelling(testRun: TestRunWithRelations): Promise<Sp
           resultItems.filter(i => !i.ignored)
         );
 
-        // Store raw response for debugging (includes filtered proper nouns for tuning)
+        // Store raw response for debugging (includes filtered proper nouns and whitelist words)
         rawPayload.languagetool.push({
           url,
           issueCount: checkResult.issueCount,
           wordCount: checkResult.wordCount,
           language: checkResult.language,
           filteredProperNouns: checkResult.filteredProperNouns,
+          filteredWhitelistWords: checkResult.filteredWhitelistWords,
         });
 
         console.log(
@@ -377,6 +416,7 @@ async function checkUrlSpelling(url: string): Promise<Omit<UrlSpellingResult, 's
       language: 'unknown',
       score: 100,  // No issues = perfect score
       filteredProperNouns: [],
+      filteredWhitelistWords: [],
     };
   }
 
@@ -404,18 +444,37 @@ async function checkUrlSpelling(url: string): Promise<Omit<UrlSpellingResult, 's
   if (ignoredMatches.length > 0) {
     console.log(`[SPELLING] Filtered ${ignoredMatches.length} likely proper noun(s):`);
     for (const { match, reason } of ignoredMatches) {
-      const word = match.context.text.substring(
-        match.context.offset,
-        match.context.offset + match.context.length
-      );
+      const word = extractMatchWord(match);
       console.log(`  - "${word}" (${reason})`);
+    }
+  }
+
+  // Filter against dictionary whitelist
+  const whitelist = await getWhitelist();
+  const whitelistFilteredMatches: SpellingMatch[] = [];
+  const whitelistedWords: string[] = [];
+
+  for (const match of filteredMatches) {
+    const word = extractMatchWord(match).toLowerCase();
+    if (whitelist.has(word)) {
+      whitelistedWords.push(extractMatchWord(match));
+    } else {
+      whitelistFilteredMatches.push(match);
+    }
+  }
+
+  // Log whitelisted words for debugging
+  if (whitelistedWords.length > 0) {
+    console.log(`[SPELLING] Filtered ${whitelistedWords.length} whitelisted word(s):`);
+    for (const word of whitelistedWords) {
+      console.log(`  - "${word}"`);
     }
   }
 
   const resultItems: ResultItemToCreate[] = [];
 
   // If no issues found after filtering, create a PASS item
-  if (filteredMatches.length === 0) {
+  if (whitelistFilteredMatches.length === 0) {
     resultItems.push({
       provider: IssueProvider.LANGUAGETOOL,
       code: 'SPELLING_CHECK_PASSED',
@@ -425,11 +484,12 @@ async function checkUrlSpelling(url: string): Promise<Omit<UrlSpellingResult, 's
         wordCount,
         language: spellingResult.language.code,
         filteredCount: ignoredMatches.length,
+        whitelistFilteredCount: whitelistedWords.length,
       },
     });
   } else {
     // Create a ResultItem for each remaining issue
-    for (const match of filteredMatches) {
+    for (const match of whitelistFilteredMatches) {
       resultItems.push(mapMatchToResultItem(match));
     }
   }
@@ -446,11 +506,12 @@ async function checkUrlSpelling(url: string): Promise<Omit<UrlSpellingResult, 's
   return {
     url,
     resultItems,
-    issueCount: filteredMatches.length,
+    issueCount: whitelistFilteredMatches.length,
     wordCount,
     language: spellingResult.language.code,
     score: calculateScoreFromItems(resultItems),  // Calculate initial score
     filteredProperNouns,
+    filteredWhitelistWords: whitelistedWords,
   };
 }
 

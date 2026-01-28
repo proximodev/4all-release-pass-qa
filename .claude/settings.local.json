@@ -60,7 +60,8 @@
       "Bash(npm pkg:*)",
       "WebFetch(domain:forum.languagetool.org)",
       "WebFetch(domain:dev.languagetool.org)",
-      "WebFetch(domain:hub.docker.com)"
+      "WebFetch(domain:hub.docker.com)",
+      "Bash(node -e:*)"
     ]
   }
 }

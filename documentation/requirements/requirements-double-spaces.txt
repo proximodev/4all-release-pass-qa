@@ -71,7 +71,8 @@ For simplicity, I'd suggest: p, li, h1, h2, h3, h4, h5, h6
 
 For \u00A0 - you're right, it's an edge case. But it's trivial to include in the regex pattern with no performance cost. I'd include it for completeness, but your call.
                                                                                                                                                                                 Final spec confirmed:                                                                                                                                                         ┌───────────┬─────────────────────────────────────────────────────┐
-  │ Attribute │                        Value                        │                                                                                                           ├───────────┼─────────────────────────────────────────────────────┤
+  │ Attribute │                        Value                        │
+  ├───────────┼─────────────────────────────────────────────────────┤
   │ Code      │ PREFLIGHT_CONTENT_DOUBLE_SPACES                     │
   ├───────────┼─────────────────────────────────────────────────────┤
   │ Severity  │ MEDIUM                                              │

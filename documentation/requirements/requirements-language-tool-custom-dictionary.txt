@@ -1,0 +1,518 @@
+================================================================================
+FEATURE: Global Dictionary for Spelling Whitelist
+================================================================================
+
+OVERVIEW
+--------
+Add a global dictionary feature to whitelist words that LanguageTool incorrectly
+flags as spelling errors. Common use cases: proper nouns, brand names, technical
+terms, geographic names.
+
+PROBLEM
+-------
+LanguageTool flags legitimate words as spelling errors (e.g., "Coconino",
+"ReleasePass", client brand names). Currently no way to suppress these globally.
+Existing IgnoredRule only works per-URL.
+
+SOLUTION
+--------
+Application-side filtering with a database-backed whitelist. Words marked as
+WHITELISTED are filtered out of spelling results before storing ResultItems.
+
+Why application-side (not LanguageTool config):
+- Fully dynamic - add/remove words instantly without container restart
+- Manageable via web UI
+- No Docker image rebuilds
+- Negligible performance impact (~20ms vs 1-5s LanguageTool API call)
+
+================================================================================
+DECISIONS
+================================================================================
+
+1. SCOPE: Global dictionary (not project-scoped)
+   - Proper nouns are universal
+   - Simpler to manage
+   - Can add project/company override later if needed
+
+2. STATUS: Two states
+   - REVIEW: Word added, pending approval (not yet filtering)
+   - WHITELISTED: Active, word is filtered from results
+
+3. ENTRY POINTS:
+   - Settings > Dictionary: Manual add (defaults to WHITELISTED)
+   - Spelling result "Ignore": Silent add to dictionary as REVIEW + IgnoredRule
+
+4. UI LOCATION: Settings > Dictionary (new tab after Preflight Categories)
+   - Admin only (when roles are introduced)
+
+5. DUPLICATES: Show error "Word already exists" with link to edit
+   - Bulk add: Skip duplicates silently, show summary
+
+6. SEED WORDS: Pre-populate with common proper nouns as WHITELISTED
+   - Idempotent: Skip existing words on re-run (don't overwrite status)
+
+7. WORD VALIDATION:
+   - Minimum: 2 characters
+   - Maximum: 45 characters
+   - Allowed: Unicode letters (including accented: é, ü, ñ), numbers, hyphens, apostrophes
+   - Apostrophes: Normalize curly (') to straight (') on input
+   - No spaces: Input with spaces is split into multiple words
+
+8. MATCHING: Exact lowercase match (no normalization of special characters)
+
+9. SEARCH: Contains match (e.g., "con" matches "Coconino")
+
+10. RETROACTIVE: Whitelisting is prospective only. Existing ResultItems are not
+   updated. Users must rerun spelling tests to apply new whitelist entries.
+
+================================================================================
+DATA SCHEMA
+================================================================================
+
+model DictionaryWord {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  word            String   @unique  // Lowercase for matching (2-45 chars)
+  displayWord     String   // Original casing for display
+
+  status          DictionaryWordStatus @default(REVIEW)
+
+  // Origin tracking (stored, not displayed in MVP)
+  source          DictionaryWordSource @default(MANUAL)
+  sourceUrl       String?  // URL where first flagged (if source=RESULT)
+
+  // Audit (stored, not displayed in MVP)
+  createdByUserId String?  @db.Uuid
+  createdBy       User?    @relation(fields: [createdByUserId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([word])  // For search
+}
+
+enum DictionaryWordStatus {
+  REVIEW       // Pending approval - word NOT filtered
+  WHITELISTED  // Active - word IS filtered from results
+}
+
+enum DictionaryWordSource {
+  MANUAL  // Added via Settings > Dictionary
+  RESULT  // Added via Ignore on spelling result
+  SEED    // Initial bulk import
+}
+
+================================================================================
+UI SPECIFICATION
+================================================================================
+
+--------------------------------------------------------------------------------
+SETTINGS > DICTIONARY (List View)
+--------------------------------------------------------------------------------
+
+Location: Settings navigation, new tab after "Preflight Categories"
+Route: /settings/dictionary
+
+Table Columns:
++------------+------------+-------------+---------+
+| Word       | Date Added | Status      | Actions |
++------------+------------+-------------+---------+
+| Coconino   | Jan 15     | Whitelisted | [Edit]  |
+| Acme       | Jan 14     | Review      | [Edit]  |
+| iPhone     | Jan 1      | Whitelisted | [Edit]  |
++------------+------------+-------------+---------+
+
+Features:
+- Filter: Status dropdown (All / Whitelisted / Review)
+- Search: Server-side search, partial match on word field
+- Sort: Alphabetical by word (default)
+- Pagination: 50 items per page, server-side
+- Show count: "47 words" or "Showing 1-50 of 234 words"
+- Bulk actions: Checkbox selection for batch whitelist
+
+Add Word Button: Opens modal
+
+--------------------------------------------------------------------------------
+ADD WORD MODAL
+--------------------------------------------------------------------------------
+
++--------------------------------------------------+
+| Add Dictionary Words                             |
++--------------------------------------------------+
+| Enter words (one per line):                      |
+|                                                  |
+| +----------------------------------------------+ |
+| | Coconino                                     | |
+| | ReleasePass                                  | |
+| | Acme                                         | |
+| |                                              | |
+| +----------------------------------------------+ |
+|                                                  |
+| Status: [Whitelisted v]                          |
+|                                                  |
+|              [Cancel]  [Add Words]               |
++--------------------------------------------------+
+
+Behavior:
+- Textarea accepts multiple words, one per line
+- Words containing spaces are split into multiple entries
+- Status defaults to WHITELISTED
+- On submit:
+  - Trim whitespace, filter empty lines
+  - Split any words containing spaces
+  - Validate each word (2-45 chars, allowed characters only)
+  - Store word as lowercase, displayWord as original
+  - Skip duplicates silently
+  - Show summary: "Added 12 words. 3 already existed (skipped)."
+- Single word that already exists: Show error with link to edit
+- Validation errors: Show which words failed and why
+
+--------------------------------------------------------------------------------
+EDIT WORD MODAL
+--------------------------------------------------------------------------------
+
++--------------------------------------------------+
+| Edit Dictionary Word                             |
++--------------------------------------------------+
+| Word: [Coconino________________]                 |
+|                                                  |
+| Status: [Whitelisted v]                          |
+|                                                  |
+|   [Delete]         [Cancel]  [Save Changes]      |
++--------------------------------------------------+
+
+Fields:
+- Word: Text input (editable, validated same as add)
+- Status: Dropdown (Review / Whitelisted)
+- Delete button with confirmation
+
+--------------------------------------------------------------------------------
+SPELLING RESULT - IGNORE ACTION (Enhancement)
+--------------------------------------------------------------------------------
+
+Current behavior when clicking "Ignore" on a spelling error:
+- Creates IgnoredRule for that URL + rule code
+
+New behavior (handled server-side in existing Ignore API):
+1. Creates IgnoredRule (existing behavior, unchanged)
+2. For misspelling-type errors only, SILENTLY creates DictionaryWord with:
+   - word: extracted from ResultItem.meta (lowercase)
+   - displayWord: original casing
+   - status: REVIEW
+   - source: RESULT
+   - sourceUrl: current URL
+   - createdByUserId: current user
+3. If word already exists in dictionary: Skip silently (still create IgnoredRule)
+4. If dictionary add fails: Log warning, don't fail the Ignore action
+
+Identification of misspelling errors:
+- provider === 'LANGUAGETOOL'
+- meta.issueType === 'misspelling' OR meta.category === 'TYPOS'
+
+Word extraction from ResultItem.meta:
+- meta.context.substring(meta.contextOffset, meta.contextOffset + meta.contextLength)
+
+UI shows: "Ignored" confirmation (no mention of dictionary - silent seeding)
+
+================================================================================
+WORKER IMPLEMENTATION
+================================================================================
+
+File: worker/providers/spelling/index.ts
+
+--------------------------------------------------------------------------------
+WHITELIST CACHING
+--------------------------------------------------------------------------------
+
+// Cache at module level, refresh periodically
+let whitelistCache: Set<string> | null = null;
+let whitelistLoadedAt: number = 0;
+const WHITELIST_CACHE_TTL_MS = 60_000; // 1 minute
+
+async function getWhitelist(): Promise<Set<string>> {
+  const now = Date.now();
+  if (!whitelistCache || (now - whitelistLoadedAt) > WHITELIST_CACHE_TTL_MS) {
+    const words = await prisma.dictionaryWord.findMany({
+      where: { status: 'WHITELISTED' },
+      select: { word: true }
+    });
+    whitelistCache = new Set(words.map(w => w.word));
+    whitelistLoadedAt = now;
+    console.log(`[SPELLING] Loaded ${whitelistCache.size} whitelisted words`);
+  }
+  return whitelistCache;
+}
+
+--------------------------------------------------------------------------------
+FILTERING LOGIC
+--------------------------------------------------------------------------------
+
+In checkUrlSpelling() after getting LanguageTool results and before creating
+ResultItems, add whitelist filtering:
+
+// Get whitelist
+const whitelist = await getWhitelist();
+
+// Filter matches against whitelist
+const whitelistedMatches: SpellingMatch[] = [];
+const remainingMatches: SpellingMatch[] = [];
+
+for (const match of filteredMatches) {
+  const word = extractMatchWord(match).toLowerCase();
+  if (whitelist.has(word)) {
+    whitelistedMatches.push(match);
+  } else {
+    remainingMatches.push(match);
+  }
+}
+
+// Log filtered words
+if (whitelistedMatches.length > 0) {
+  console.log(`[SPELLING] Filtered ${whitelistedMatches.length} whitelisted word(s):`);
+  for (const match of whitelistedMatches) {
+    console.log(`  - "${extractMatchWord(match)}"`);
+  }
+}
+
+// Continue with remainingMatches instead of filteredMatches
+
+--------------------------------------------------------------------------------
+HELPER FUNCTION
+--------------------------------------------------------------------------------
+
+function extractMatchWord(match: SpellingMatch): string {
+  return match.context.text.substring(
+    match.context.offset,
+    match.context.offset + match.context.length
+  );
+}
+
+--------------------------------------------------------------------------------
+RAW PAYLOAD TRACKING
+--------------------------------------------------------------------------------
+
+Add filtered whitelist words to rawPayload for debugging:
+
+rawPayload.languagetool.push({
+  url,
+  issueCount: remainingMatches.length,
+  wordCount: checkResult.wordCount,
+  language: checkResult.language,
+  filteredProperNouns: checkResult.filteredProperNouns,
+  filteredWhitelistWords: whitelistedMatches.map(m => extractMatchWord(m)),  // NEW
+});
+
+================================================================================
+API ENDPOINTS
+================================================================================
+
+--------------------------------------------------------------------------------
+GET /api/dictionary
+--------------------------------------------------------------------------------
+
+Query params:
+- status: 'REVIEW' | 'WHITELISTED' | undefined (all)
+- search: string (partial match on word, server-side)
+- page: number (default 1)
+- limit: number (default 50)
+
+Response:
+{
+  words: DictionaryWord[],
+  pagination: { page, limit, total, totalPages }
+}
+
+--------------------------------------------------------------------------------
+POST /api/dictionary
+--------------------------------------------------------------------------------
+
+Request body:
+{
+  words: string[],           // Array of words to add
+  status?: 'REVIEW' | 'WHITELISTED'  // Default: WHITELISTED
+}
+
+Processing:
+- Split any words containing spaces
+- Validate each: 2-45 chars, allowed characters
+- Skip invalid words (return in errors array)
+- Skip duplicates silently
+
+Response:
+{
+  added: number,
+  skipped: number,           // Already existed
+  errors: string[],          // Invalid words with reason
+  words: DictionaryWord[]    // Newly created words
+}
+
+--------------------------------------------------------------------------------
+GET /api/dictionary/[id]
+--------------------------------------------------------------------------------
+
+Response: DictionaryWord
+
+--------------------------------------------------------------------------------
+PUT /api/dictionary/[id]
+--------------------------------------------------------------------------------
+
+Request body:
+{
+  word?: string,
+  status?: 'REVIEW' | 'WHITELISTED'
+}
+
+Response: DictionaryWord
+
+Validation:
+- Word must pass validation rules (2-45 chars, etc.)
+- If word changed, check for duplicates
+
+--------------------------------------------------------------------------------
+DELETE /api/dictionary/[id]
+--------------------------------------------------------------------------------
+
+Response: { success: true }
+
+--------------------------------------------------------------------------------
+POST /api/dictionary/bulk
+--------------------------------------------------------------------------------
+
+For bulk whitelist only:
+
+Request body:
+{
+  ids: string[],
+  action: 'WHITELIST'
+}
+
+Response:
+{
+  updated: number
+}
+
+================================================================================
+SEED DATA
+================================================================================
+
+File: prisma/seed-dictionary.ts (or in main seed.ts)
+
+const SEED_WORDS = [
+  // Tech brands/products
+  'iPhone', 'iPad', 'macOS', 'iOS', 'Gmail', 'YouTube', 'LinkedIn',
+  'WordPress', 'Shopify', 'Mailchimp', 'HubSpot', 'Salesforce',
+  'Facebook', 'Instagram', 'TikTok', 'Spotify', 'Netflix',
+  'Google', 'Microsoft', 'Amazon', 'GitHub', 'Slack', 'Zoom',
+  'Figma', 'Notion', 'Airtable', 'Webflow', 'Squarespace',
+
+  // Common tech terms often flagged
+  'ecommerce', 'eCommerce', 'webinar', 'podcast', 'blog',
+  'homepage', 'website', 'signup', 'login', 'dropdown',
+  'popup', 'tooltip', 'navbar', 'sidebar', 'checkbox',
+
+  // ReleasePass brand
+  'ReleasePass',O
+
+  // Common abbreviations (that might slip past filters)
+  'API', 'APIs', 'URL', 'URLs', 'HTML', 'CSS', 'JSON',
+  'SEO', 'CMS', 'CRM', 'SaaS', 'PaaS', 'OAuth',
+];
+
+Seeding behavior:
+- Use skipDuplicates or check-before-insert pattern
+- If word exists: Skip (preserve existing status)
+- If word doesn't exist: Create with status=WHITELISTED, source=SEED
+- Idempotent: Safe to run multiple times
+
+================================================================================
+IMPLEMENTATION PHASES
+================================================================================
+
+PHASE 1: Database Schema
+------------------------
+- Add DictionaryWord model to schema.prisma
+- Add enums DictionaryWordStatus, DictionaryWordSource
+- Run migration
+- Add seed data script (idempotent)
+
+PHASE 2: API Routes
+-------------------
+- GET /api/dictionary (list with server-side search + pagination)
+- POST /api/dictionary (add words with validation)
+- GET /api/dictionary/[id]
+- PUT /api/dictionary/[id]
+- DELETE /api/dictionary/[id]
+- POST /api/dictionary/bulk (whitelist only)
+
+PHASE 3: Settings UI
+--------------------
+- Add Dictionary tab to Settings navigation
+- List view with table, filters, server-side search, pagination
+- Add Word modal (textarea, status, validation feedback)
+- Edit Word modal
+- Bulk selection for whitelist action
+
+PHASE 4: Worker Integration
+---------------------------
+- Add whitelist caching
+- Add filtering logic after LanguageTool results
+- Add logging for filtered words
+- Add to rawPayload for debugging
+
+PHASE 5: Ignore Enhancement
+---------------------------
+- Extend existing Ignore API route
+- Extract word from ResultItem.meta
+- Add silent DictionaryWord creation for misspelling errors
+- Graceful failure handling (log, don't block Ignore)
+
+PHASE 6: Testing
+----------------
+- Unit tests for API routes
+- Unit tests for word validation
+- Test whitelist filtering in worker
+- Test duplicate handling
+- Test bulk operations
+- Test Ignore + dictionary add flow
+
+================================================================================
+FILE SUMMARY
+================================================================================
+
+New files:
+- prisma/migrations/xxx_add_dictionary_word.sql
+- app/api/dictionary/route.ts
+- app/api/dictionary/[id]/route.ts
+- app/api/dictionary/bulk/route.ts
+- app/(authenticated)/settings/dictionary/page.tsx
+- components/settings/DictionaryWordList.tsx
+- components/settings/AddWordModal.tsx
+- components/settings/EditWordModal.tsx
+- lib/dictionary-validation.ts (shared validation logic)
+
+Modified files:
+- prisma/schema.prisma (add model + enums)
+- prisma/seed.ts (add dictionary seed)
+- worker/providers/spelling/index.ts (whitelist filtering + rawPayload)
+- app/api/result-items/[id]/ignore/route.ts (silent dictionary add)
+- app/(authenticated)/settings/layout.tsx (add Dictionary nav item)
+
+================================================================================
+PERFORMANCE NOTES
+================================================================================
+
+- Whitelist cached for 60 seconds in worker
+- Single DB query per cache refresh (~5-20ms)
+- String set lookup for each match (<1ms total)
+- Total overhead: ~20ms per spelling run (negligible vs 1-5s LT call)
+
+================================================================================
+FUTURE ENHANCEMENTS
+================================================================================
+
+- Project or Company scoped dictionaries (override global)
+- Bulk delete with confirmation
+- Import/export dictionary as CSV
+- Suggested words from common false positives
+- Integration with LanguageTool's native dictionary (if API support added)

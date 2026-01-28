@@ -1,0 +1,205 @@
+After careful review, I found several gaps and potential issues:
+
+
+  Issues & Unanswered Questions
+
+  1. Word Extraction from Ignore Action (Critical)
+
+  The spec says "silently create DictionaryWord" when user clicks Ignore, but doesn't specify how to extract the word from the ResultItem.
+
+  Currently ResultItem stores:
+  meta: {
+    context: "...located in Coconino County...",
+    contextOffset: 15,
+    contextLength: 8,
+    ...
+  }
+
+  Question: Does the frontend have access to meta to extract the word? Need to confirm the Ignore API can extract context.substring(contextOffset, contextOffset +
+  contextLength).
+
+
+  ---
+  2. Multi-Word Phrases
+
+  What happens if someone adds "New York" or "San Francisco"?
+
+  - Current design assumes single words (one per line)
+  - LanguageTool might flag "York" separately, not matching "New York"
+
+  Recommendation: Explicitly state single words only. Add validation to reject entries with spaces.
+
+  ---
+  3. Word Validation Rules (Missing)
+
+  No validation specified for word input:
+
+  - Minimum length? (prevent empty or single character)
+  - Maximum length?
+  - Allowed characters? (letters, hyphens, apostrophes?)
+  - Reject spaces?
+
+  Recommendation: Add:
+  - Minimum 2 characters
+  - Maximum 50 characters
+  - Letters, numbers, hyphens, apostrophes allowed
+  - No spaces (single words only)
+  ---
+  4. Punctuation & Special Characters
+
+  How to handle:
+  - Häagen-Dazs (special characters)
+  - don't (apostrophe)
+  - AT&T (ampersand)
+
+  Question: Should we normalize these for matching? Or exact lowercase match?
+
+  ---
+  5. Seed Idempotency
+
+  If seed script runs multiple times (e.g., during deployments), what happens?
+
+  Recommendation: Use upsert or skip existing. Add note to seed section:
+  // Use createMany with skipDuplicates: true
+  // Or upsert pattern for idempotent seeding
+
+  ---
+  6. Foreign Key ON DELETE Behavior
+
+  If a Project is deleted, what happens to sourceProjectId?
+
+  Recommendation: Add to schema:
+  sourceProject   Project? @relation(fields: [sourceProjectId], references: [id], onDelete: SetNull)
+
+
+  ---
+  7. UI Pagination
+
+  API spec includes pagination, but UI spec doesn't mention it. If dictionary grows to 500+ words, list becomes unwieldy.
+
+  Recommendation: Add to UI spec:
+  - Pagination: 50 per page (or infinite scroll)
+  - Show total count: "Showing 1-50 of 234 words"
+
+  ---
+  8. Existing ResultItems Not Updated
+
+  When a word is whitelisted, existing ResultItems (from past test runs) still show the error.
+
+  Recommendation: Add clarifying note:
+  Note: Whitelisting is prospective only. Existing ResultItems are not
+  retroactively updated. Users can rerun spelling tests to apply new whitelist.
+  ---
+  9. rawPayload Tracking
+
+  Current proper noun filtering adds to rawPayload.filteredProperNouns. Should whitelisted words also be tracked?
+
+  Recommendation: Yes, add to rawPayload:
+  {
+    "languagetool": [{
+      "url": "...",
+      "filteredProperNouns": [...],
+      "filteredWhitelistWords": ["Coconino", "ReleasePass"]  // NEW
+    }]
+  }
+
+
+  10. Bulk Delete Confirmation
+
+  Edit modal has delete confirmation. Bulk delete doesn't mention it.
+
+  Recommendation: Add confirmation dialog for bulk delete:
+  "Delete 5 selected words? This cannot be undone."
+
+  ---
+  Summary Table
+  ┌─────────────────────────────┬──────────┬─────────────────────────┐
+  │            Issue            │ Severity │      Action Needed      │
+  ├─────────────────────────────┼──────────┼─────────────────────────┤
+  │ Word extraction from Ignore │ High     │ Clarify implementation  │
+  ├─────────────────────────────┼──────────┼─────────────────────────┤
+  │ Word validation rules       │ Medium   │ Add to spec             │
+  ├─────────────────────────────┼──────────┼─────────────────────────┤
+  │ Multi-word handling         │ Medium   │ State single words only │
+  ├─────────────────────────────┼──────────┼─────────────────────────┤
+  │ Seed idempotency            │ Medium   │ Add upsert note         │
+  ├─────────────────────────────┼──────────┼─────────────────────────┤
+  │ Foreign key ON DELETE       │ Low      │ Add to schema           │
+  ├─────────────────────────────┼──────────┼─────────────────────────┤
+  │ Pagination in UI            │ Low      │ Add to UI spec          │
+  ├─────────────────────────────┼──────────┼─────────────────────────┤
+  │ Existing ResultItems note   │ Low      │ Add clarifying note     │
+  ├─────────────────────────────┼──────────┼─────────────────────────┤
+  │ rawPayload tracking         │ Low      │ Add to worker spec      │
+  ├─────────────────────────────┼──────────┼─────────────────────────┤
+  │ Bulk delete confirmation    │ Low      │ Add to UI spec          │
+  ├─────────────────────────────┼──────────┼─────────────────────────┤
+  │ Special character handling  │ Low      │ Clarify or defer        │
+  └─────────────────────────────┴──────────┴─────────────────────────┘
+  ---
+  Want me to update the spec with these clarifications?
+
+----
+
+1. Ignore Flow Clarification
+
+  To confirm the approach:
+
+  User clicks Ignore on spelling error
+      ↓
+  Frontend calls existing Ignore API (creates IgnoredRule)
+      ↓
+  Ignore API ALSO extracts word from meta and calls dictionary add logic
+      ↓
+  Dictionary add creates DictionaryWord (status: REVIEW, source: RESULT)
+
+  So the dictionary add happens server-side within the existing Ignore API route, not as a separate frontend call. Correct?
+
+  ---
+  2. sourceProjectId - Keep or Remove?
+
+  You said "defer" on foreign key handling. Two options:
+
+  A) Keep field, just don't display it
+  - Schema has sourceProjectId String? @db.Uuid (no relation/constraint)
+  - Still captured for future use
+  - No ON DELETE issue if no FK constraint
+
+  B) Remove field entirely
+  - Simpler schema
+  - Add it back later when needed
+
+  Which approach?
+
+  ---
+  3. Pagination Recommendation
+
+  For Settings > Dictionary with server-side search + pagination:
+
+  Recommendation:
+  - Server-side search (API already spec'd this way)
+  - Paginated table (not infinite scroll) - simpler, matches other Settings pages
+  - 50 items per page
+  - Search triggers on 2+ characters or debounced input
+  - Show count: "47 words" or "Showing 1-50 of 234"
+
+  Sound right?
+
+  ---
+  4. Bulk Actions - Confirm
+
+  Remove bulk delete. Bulk actions are:
+  - Whitelist Selected - Change status from REVIEW to WHITELISTED
+
+  No bulk delete, no bulk "set to review". Correct?
+
+
+  ---
+  5. Seed Words - Idempotent Behavior
+
+
+  On re-run of seed, should it:
+  - A) Skip existing - Word "iPhone" already exists → skip (status unchanged)
+  - B) Upsert to WHITELISTED - Word "iPhone" exists as REVIEW → update to WHITELISTED
+
+  I'd recommend A (skip) so manual status changes aren't overwritten.

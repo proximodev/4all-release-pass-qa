@@ -475,7 +475,7 @@ function TestResultsSummary({ testId, mode = 'releaseRun', onNameUpdate }: TestR
     )
   }
 
-  // RESULTS VIEW (Design 4)
+  // RESULTS VIEW
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -515,7 +515,7 @@ function TestResultsSummary({ testId, mode = 'releaseRun', onNameUpdate }: TestR
       </p>
 
       {/* URL Results with Expandable Sections */}
-      <div className="space-y-2 border-t border-medium-gray pt-4 pb-2 mb-0">
+      <div className="space-y-2 border-t border-medium-gray pt-4 pb-2 mb-2">
         {releaseRun.urls.map((url) => {
           const isExpanded = expandedUrls.has(url)
 
@@ -651,14 +651,14 @@ function TestResultsSummary({ testId, mode = 'releaseRun', onNameUpdate }: TestR
           <button
             onClick={handleRerunAll}
             disabled={rerunningAll}
-            className="text-sm text-white bg-black hover:bg-black/80 disabled:opacity-50"
+            className="px-4 py-2 text-sm text-white bg-black hover:bg-black/80 disabled:opacity-50"
           >
             {rerunningAll ? 'Rerunning...' : 'Rerun All'}
           </button>
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="text-sm text-white bg-red hover:bg-red/80 disabled:opacity-50"
+            className="px-4 py-2 text-sm text-white bg-red hover:bg-red/80 disabled:opacity-50"
           >
             {deleting ? 'Deleting...' : 'Delete Test'}
           </button>

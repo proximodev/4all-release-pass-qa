@@ -1,4 +1,4 @@
-import type { ResultItem } from '@/lib/types/releasepass'
+import type { ResultItem, UrlResultData } from '@/lib/types/releasepass'
 
 export interface CategoryGroup {
   name: string
@@ -21,4 +21,7 @@ export interface ResultsProps {
   loadingItems: boolean
   onIgnoreToggle?: (itemId: string, ignored: boolean) => Promise<IgnoreToggleResult | null>
   url?: string
+  // Performance-specific props
+  urlResults?: UrlResultData[]
+  currentUrl?: string
 }

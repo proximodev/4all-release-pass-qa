@@ -69,6 +69,13 @@ export interface UrlResultData {
   additionalMetrics?: Record<string, any>
   resultItems?: ResultItem[]
   score?: number | null
+  // Core Web Vitals (Performance tests only)
+  lcp?: number | null  // Largest Contentful Paint (seconds)
+  cls?: number | null  // Cumulative Layout Shift (score)
+  inp?: number | null  // Interaction to Next Paint (ms) - field data only
+  fcp?: number | null  // First Contentful Paint (seconds)
+  tbt?: number | null  // Total Blocking Time (ms)
+  tti?: number | null  // Time to Interactive (seconds)
 }
 
 /**

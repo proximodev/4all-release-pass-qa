@@ -439,23 +439,8 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
                   </span>
                 </div>
 
-                {/* Score(s) - different display for Performance vs other tests */}
-                {testType === 'PERFORMANCE' ? (
-                  <div className="flex flex-row gap-4">
-                    <div className="flex gap-2">
-                      <span>Mobile Score</span>
-                      <span className={`px-2 py-0.5 text-s font-medium ${summary.mobileScore !== null ? getScoreBadgeClasses(summary.mobileScore) : 'bg-medium-gray text-black'}`}>
-                        {summary.mobileScore !== null ? summary.mobileScore : 'N/A'}
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span>Desktop Score</span>
-                      <span className={`px-2 py-0.5 text-s font-medium ${summary.desktopScore !== null ? getScoreBadgeClasses(summary.desktopScore) : 'bg-medium-gray text-black'}`}>
-                        {summary.desktopScore !== null ? summary.desktopScore : 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
+                {/* Score - skip for Performance since it shows scores in the results component */}
+                {testType !== 'PERFORMANCE' && (
                   <div className="flex gap-2">
                     <span>Score</span>
                     <span className={`px-2 py-0.5 text-s font-medium ${getScoreBadgeClasses(summary.score)}`}>
@@ -522,6 +507,8 @@ function TestResultDetail({ testType, title }: TestResultDetailProps) {
                 expandedItemId={expandedItemId}
                 setExpandedItemId={setExpandedItemId}
                 loadingItems={loadingItems}
+                urlResults={urlResults}
+                currentUrl={urlResult?.url}
               />
             )}
             {testType === 'SCREENSHOTS' && (

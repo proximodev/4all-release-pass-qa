@@ -50,6 +50,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 issueCount: true,
                 score: true,
                 additionalMetrics: true,
+                // Core Web Vitals (Performance tests)
+                lcp: true,
+                cls: true,
+                inp: true,
+                fcp: true,
+                tbt: true,
+                tti: true,
                 // resultItems excluded - fetch via /url-results/[id] endpoint
                 _count: {
                   select: { resultItems: true },

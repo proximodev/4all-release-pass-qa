@@ -1155,23 +1155,35 @@ function getAncestorPath($: CheerioAPI, $el: Cheerio<Element>, maxDepth = 5): st
 }
 
 /**
- * Detect if an empty link is a navigation dropdown trigger.
- * These are intentional patterns where href="#" is used to trigger a submenu.
+ * Detect if an empty link is a navigation dropdown trigger or menu label.
+ * These are intentional patterns where href="#" is used for menu structure.
  *
  * Detection criteria:
- * 1. Must be inside a navigation context (nav, header nav, [role="navigation"])
+ * 1. Must be inside a navigation context:
+ *    - Inside <nav> or [role="navigation"]
+ *    - Inside <header> AND inside a container with "menu" in class/id
+ *      (handles WordPress mega menus and similar patterns)
  * 2. AND one of:
  *    - Has aria-haspopup="true" or aria-expanded attribute (ARIA dropdown)
  *    - Parent <li> contains a nested <ul> or <ol> (classic dropdown)
  *    - Has sibling <ul> or [role="menu"] element (adjacent submenu)
+ *    - Is inside a header menu container (lenient for mega menu labels)
  */
 function isNavDropdownTrigger($: CheerioAPI, $el: Cheerio<Element>): {
   isDropdown: boolean;
   detectionMethod?: string;
 } {
-  // Must be inside navigation context
-  const inNav = $el.closest('nav, header nav, [role="navigation"]').length > 0;
-  if (!inNav) {
+  // Check for semantic navigation context
+  const inNav = $el.closest('nav, [role="navigation"]').length > 0;
+
+  // Check for header + menu container pattern (WordPress mega menus, etc.)
+  // These often use <div> with "menu" in class/id instead of semantic <nav>
+  const inHeader = $el.closest('header').length > 0;
+  const inMenuContainer = $el.closest('[class*="menu"], [id*="menu"]').length > 0;
+  const inHeaderMenu = inHeader && inMenuContainer;
+
+  // Must be inside at least one navigation context
+  if (!inNav && !inHeaderMenu) {
     return { isDropdown: false };
   }
 
@@ -1191,6 +1203,12 @@ function isNavDropdownTrigger($: CheerioAPI, $el: Cheerio<Element>): {
   // Check for sibling submenu element
   if ($el.siblings('ul, [role="menu"]').length > 0) {
     return { isDropdown: true, detectionMethod: 'sibling-menu' };
+  }
+
+  // For header menu containers without semantic nav, be lenient
+  // These are typically intentional menu labels/headers (e.g., "By Role", "By Industry")
+  if (inHeaderMenu && !inNav) {
+    return { isDropdown: true, detectionMethod: 'header-menu-container' };
   }
 
   return { isDropdown: false };
